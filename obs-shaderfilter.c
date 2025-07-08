@@ -2109,13 +2109,6 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_set_param(props, filter, NULL);
 
-	if (!filter || !filter->transition) {
-		obs_properties_add_int(props, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_top", obs_module_text("ShaderFilter.ExpandTop"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_bottom", obs_module_text("ShaderFilter.ExpandBottom"), 0, 9999, 1);
-	}
-
 	obs_properties_add_bool(props, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
 
 	obs_property_t *from_file = obs_properties_add_bool(props, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
@@ -2366,6 +2359,13 @@ static obs_properties_t *shader_filter_properties(void *data)
 		dstr_free(&display_name);
 	}
 	da_free(groups);
+
+	if (!filter || !filter->transition) {
+		obs_properties_add_int(props, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999, 1);
+		obs_properties_add_int(props, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999, 1);
+		obs_properties_add_int(props, "expand_top", obs_module_text("ShaderFilter.ExpandTop"), 0, 9999, 1);
+		obs_properties_add_int(props, "expand_bottom", obs_module_text("ShaderFilter.ExpandBottom"), 0, 9999, 1);
+	}
 
 	obs_properties_add_text(
 		props, "plugin_info",

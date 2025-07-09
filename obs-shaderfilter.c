@@ -247,6 +247,22 @@ struct shader_filter_data {
 	float rand_activation_f;
 
 	DARRAY(struct effect_param_data) stored_param_list;
+
+	// --- Multi-pass specific data ---
+#define MAX_SHADER_PASSES 3
+	struct shader_pass_info {
+		gs_effect_t *effect;
+		struct dstr effect_file_path;
+		bool enabled;
+		DARRAY(struct effect_param_data) stored_param_list;
+		// TODO: Consider if each pass needs its own uv_offset, scale, etc. or if global is fine.
+		// For now, assume global settings from shader_filter_data are used.
+	} passes[MAX_SHADER_PASSES];
+	int num_active_passes;
+
+	gs_texrender_t *intermediate_texrender_A;
+	gs_texrender_t *intermediate_texrender_B;
+	// --- End Multi-pass specific data ---
 };
 
 static unsigned int rand_interval(unsigned int min, unsigned int max)
@@ -694,6 +710,18 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 
 	da_init(filter->stored_param_list);
 	load_output_effect(filter);
+
+	// Initialize multi-pass fields
+	filter->num_active_passes = 0;
+	filter->intermediate_texrender_A = NULL;
+	filter->intermediate_texrender_B = NULL;
+	for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+		filter->passes[i].effect = NULL;
+		dstr_init(&filter->passes[i].effect_file_path);
+		filter->passes[i].enabled = false;
+		da_init(filter->passes[i].stored_param_list);
+	}
+
 	obs_source_update(source, settings);
 
 	return filter;
@@ -702,7 +730,53 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 static void shader_filter_destroy(void *data)
 {
 	struct shader_filter_data *filter = data;
-	shader_filter_clear_params(filter);
+	shader_filter_clear_params(filter); // This clears the main stored_param_list
+
+	// Clear multi-pass resources
+	for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+		if (filter->passes[i].effect) {
+			obs_enter_graphics();
+			gs_effect_destroy(filter->passes[i].effect);
+			obs_leave_graphics();
+			filter->passes[i].effect = NULL;
+		}
+		dstr_free(&filter->passes[i].effect_file_path);
+		// Clear params for each pass (similar to shader_filter_clear_params but targeted)
+		size_t pass_param_count = filter->passes[i].stored_param_list.num;
+		for (size_t j = 0; j < pass_param_count; ++j) {
+			struct effect_param_data *param = (filter->passes[i].stored_param_list.array + j);
+			if (param->image) {
+				obs_enter_graphics();
+				gs_image_file_free(param->image);
+				obs_leave_graphics();
+				bfree(param->image);
+			}
+			if (param->source) {
+				obs_source_t *source_ptr = obs_weak_source_get_source(param->source);
+				if (source_ptr) {
+					// Active/showing decrements would happen in hide/deactivate or based on enabled status
+					obs_source_release(source_ptr);
+				}
+				obs_weak_source_release(param->source);
+			}
+			if (param->render) {
+				obs_enter_graphics();
+				gs_texrender_destroy(param->render);
+				obs_leave_graphics();
+			}
+			dstr_free(&param->name);
+			dstr_free(&param->display_name);
+			dstr_free(&param->widget_type);
+			dstr_free(&param->group);
+			dstr_free(&param->path);
+			da_free(param->option_values);
+			for (size_t k = 0; k < param->option_labels.num; ++k) {
+				dstr_free(&param->option_labels.array[k]);
+			}
+			da_free(param->option_labels);
+		}
+		da_free(filter->passes[i].stored_param_list);
+	}
 
 	obs_enter_graphics();
 	if (filter->effect)
@@ -717,6 +791,10 @@ static void shader_filter_destroy(void *data)
 		gs_texrender_destroy(filter->previous_input_texrender);
 	if (filter->previous_output_texrender)
 		gs_texrender_destroy(filter->previous_output_texrender);
+	if (filter->intermediate_texrender_A)
+		gs_texrender_destroy(filter->intermediate_texrender_A);
+	if (filter->intermediate_texrender_B)
+		gs_texrender_destroy(filter->intermediate_texrender_B);
 
 	obs_leave_graphics();
 
@@ -2124,10 +2202,53 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_add_button(props, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
 				  shader_filter_reload_effect_clicked);
 
+	// --- UI for Multi-Pass Shaders ---
+	if (filter) { // Ensure filter data exists
+		char pass_prop_name[64];
+		char pass_group_id[64];
+		char pass_display_name[128];
+
+		for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+			snprintf(pass_group_id, sizeof(pass_group_id), "pass_%d_group", i);
+			snprintf(pass_display_name, sizeof(pass_display_name), "%s %d", obs_module_text("ShaderFilter.Pass"), i + 1);
+			obs_properties_t *pass_props = obs_properties_create();
+			obs_properties_add_group(props, pass_group_id, pass_display_name, OBS_GROUP_NORMAL, pass_props);
+
+			snprintf(pass_prop_name, sizeof(pass_prop_name), "pass_%d_enabled", i);
+			obs_properties_add_bool(pass_props, pass_prop_name, obs_module_text("ShaderFilter.EnablePass"));
+
+			snprintf(pass_prop_name, sizeof(pass_prop_name), "pass_%d_effect_file", i);
+			// It's good to provide the examples_path for file dialogs
+			struct dstr examples_path_ui = {0};
+			dstr_init(&examples_path_ui);
+			dstr_cat(&examples_path_ui, obs_get_module_data_path(obs_current_module()));
+			dstr_cat(&examples_path_ui, "/examples");
+			char *abs_examples_path_ui = os_get_abs_path_ptr(examples_path_ui.array);
+
+			obs_properties_add_path(pass_props, pass_prop_name, obs_module_text("ShaderFilter.EffectFile"),
+						OBS_PATH_FILE, NULL, abs_examples_path_ui ? abs_examples_path_ui : examples_path_ui.array);
+
+			if (abs_examples_path_ui) bfree(abs_examples_path_ui);
+			dstr_free(&examples_path_ui);
+
+			// TODO: Add button here to "Load/Reload Pass Effect" to trigger dynamic parameter display later
+			// TODO: Dynamically add parameters for filter->passes[i].effect if loaded
+		}
+	}
+	// --- End UI for Multi-Pass Shaders ---
+
+	// UI for original single shader (can be kept for backward compatibility or as a 'final pass' if desired)
+	// For now, we'll assume the multi-pass system replaces this if any pass is enabled.
+	// This section for individual params might be dynamically shown/hidden based on whether multi-pass is active.
+	obs_properties_add_text(props, "main_shader_parameters_label", obs_module_text("ShaderFilter.MainShaderParameters"), OBS_TEXT_INFO);
+
 	DARRAY(obs_property_t *) groups;
 	da_init(groups);
 
-	size_t param_count = filter->stored_param_list.num;
+	// This part will eventually be for the *currently selected* pass, or the main effect if no passes are used.
+	// For now, it lists params of filter->effect (the original single effect).
+	// This will need significant changes when dynamic param loading per pass is implemented.
+	size_t param_count = filter && filter->effect ? filter->stored_param_list.num : 0;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
 		//gs_eparam_t *annot = gs_param_get_annotation_by_idx(param->param, param_index);
@@ -2370,10 +2491,70 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 
 	if (filter->reload_effect) {
 		filter->reload_effect = false;
-		shader_filter_reload_effect(filter);
-		obs_source_update_properties(filter->context);
+		shader_filter_reload_effect(filter); // Reloads the main filter->effect
+		// We might need a similar mechanism for individual passes later, or a full multi-pass reload.
+		// obs_source_update_properties(filter->context); // This is problematic if called too often or during updates.
 	}
 
+	// --- Update Multi-Pass Settings ---
+	filter->num_active_passes = 0;
+	char prop_name[64];
+	bool pass_settings_changed = false;
+
+	for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+		snprintf(prop_name, sizeof(prop_name), "pass_%d_enabled", i);
+		bool new_enabled_state = obs_data_get_bool(settings, prop_name);
+		if (filter->passes[i].enabled != new_enabled_state) {
+			filter->passes[i].enabled = new_enabled_state;
+			pass_settings_changed = true;
+		}
+
+		snprintf(prop_name, sizeof(prop_name), "pass_%d_effect_file", i);
+		const char *new_effect_file = obs_data_get_string(settings, prop_name);
+
+		if (dstr_cmp(&filter->passes[i].effect_file_path, new_effect_file) != 0) {
+			dstr_copy(&filter->passes[i].effect_file_path, new_effect_file);
+			// TODO: Here we would set a flag to reload this specific pass's effect, e.g., filter->passes[i].reload_requested = true;
+			// And then shader_filter_reload_pass_effect(filter, i, new_effect_file) would be called.
+			// For now, just storing the path. We are not loading pass effects yet.
+			pass_settings_changed = true;
+			// If an effect is cleared, we should also clear its parameters and effect object.
+			if (strlen(new_effect_file) == 0 && filter->passes[i].effect) {
+				obs_enter_graphics();
+				gs_effect_destroy(filter->passes[i].effect);
+				obs_leave_graphics();
+				filter->passes[i].effect = NULL;
+				// Clear stored params for this pass
+								size_t pass_param_count = filter->passes[i].stored_param_list.num;
+				for (size_t j = 0; j < pass_param_count; ++j) {
+					struct effect_param_data *param_to_clear = (filter->passes[i].stored_param_list.array + j);
+					// Simplified clearing, actual resource freeing is in destroy or full reload
+					dstr_free(&param_to_clear->name);
+					dstr_free(&param_to_clear->display_name);
+					// ... etc. for all dstr and da members
+				}
+				da_free(filter->passes[i].stored_param_list); // Clears and frees the array itself
+				da_init(filter->passes[i].stored_param_list); // Reinitialize for future use
+			}
+		}
+
+		if (filter->passes[i].enabled && filter->passes[i].effect_file_path.len > 0) {
+			// In a full implementation, if filter->passes[i].effect is NULL here and path is set,
+			// it means it needs to be loaded.
+			filter->num_active_passes++;
+		}
+	}
+
+	if (pass_settings_changed) {
+		// If any pass setting changed, properties might need to be updated (e.g. to show/hide params)
+		// For now, this is a placeholder. Dynamic param UI will require this.
+		obs_source_update_properties(filter->context);
+	}
+	// --- End Update Multi-Pass Settings ---
+
+
+	// This is for the original single effect's parameters.
+	// This section will need to be adapted or removed when multi-pass parameter handling is complete.
 	size_t param_count = filter->stored_param_list.num;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
@@ -3101,6 +3282,16 @@ static uint32_t shader_filter_getheight(void *data)
 static void shader_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "shader_text", effect_template_default_image_shader);
+
+	// Defaults for multi-pass UI
+	char prop_name[64];
+	for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+		snprintf(prop_name, sizeof(prop_name), "pass_%d_enabled", i);
+		obs_data_set_default_bool(settings, prop_name, false);
+
+		snprintf(prop_name, sizeof(prop_name), "pass_%d_effect_file", i);
+		obs_data_set_default_string(settings, prop_name, "");
+	}
 }
 
 static enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces)

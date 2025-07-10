@@ -853,18 +853,18 @@ static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info)
 }
 
 // Helper function to add effect parameters to a properties group
-static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list, 
                                     const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
 {
 	if (!param_list) return;
 
-	char prefixed_setting_name[256];
-	char source_setting_name[300];
+	char prefixed_setting_name[256]; 
+	char source_setting_name[300];   
 
 	size_t param_count = param_list->num;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (param_list->array + param_index);
-
+		
 		if (setting_prefix && strlen(setting_prefix) > 0) {
 			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s%s", setting_prefix, param->name.array);
 		} else {
@@ -873,7 +873,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 
 		const char *label = param->display_name.len > 0 ? param->display_name.array : param->name.array;
 		const char *widget_type = param->widget_type.array;
-		const char *group_name = param->group.array;
+		const char *group_name = param->group.array; 
 		const int *options_values = param->option_values.array;
 		const struct dstr *options_labels = param->option_labels.array;
 
@@ -882,13 +882,13 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			dstr_copy_dstr(&display_name_final, &param->display_name);
 		} else {
 			dstr_copy(&display_name_final, param->name.array);
-			dstr_replace(&display_name_final, "_", " ");
+			dstr_replace(&display_name_final, "_", " "); 
 		}
 
 		obs_properties_t *actual_group_to_add_to = props_group;
 		if (group_name && strlen(group_name)) {
 			bool found_group = false;
-			for (size_t i = 0; i < created_groups_list.num; i++) {
+			for (size_t i = 0; i < created_groups_list.num; i++) { 
 				const char *n = obs_property_name(created_groups_list.array[i]);
 				char full_group_id[128];
 				if (setting_prefix && strlen(setting_prefix) > 0) {
@@ -912,7 +912,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				}
 				obs_properties_t *new_ui_group = obs_properties_create();
 				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
-				da_push_back(created_groups_list, &p_group_prop);
+				da_push_back(created_groups_list, &p_group_prop); 
 				actual_group_to_add_to = new_ui_group;
 			}
 		}
@@ -925,7 +925,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			double range_min = param->minimum.f;
 			double range_max = param->maximum.f;
 			double step = param->step.f;
-			if (range_min == range_max && step == 0.0) {
+			if (range_min == range_max && step == 0.0) { 
 				range_min = -1000.0; range_max = 1000.0; step = 0.01;
 			}
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
@@ -939,7 +939,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			int r_min = (int)param->minimum.i;
 			int r_max = (int)param->maximum.i;
 			int r_step = (int)param->step.i;
-			if (r_min == r_max && r_step == 0) {
+			if (r_min == r_max && r_step == 0) { 
 				r_min = -1000; r_max = 1000; r_step = 1;
 			}
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
@@ -956,10 +956,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			}
 			break;
 		}
-		case GS_SHADER_PARAM_VEC2:
+		case GS_SHADER_PARAM_VEC2: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
-				const char* comp_labels[] = {"X", "Y"};
+				const char* comp_labels[] = {"X", "Y"}; 
 				for (int k=0; k<2; ++k) {
 					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
 					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
@@ -972,9 +972,9 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			}
+			} 
 			break;
-		case GS_SHADER_PARAM_VEC3:
+		case GS_SHADER_PARAM_VEC3: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z"};
@@ -989,11 +989,11 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
-		case GS_SHADER_PARAM_VEC4:
+		case GS_SHADER_PARAM_VEC4: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z", "W"};
@@ -1008,7 +1008,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
@@ -1018,13 +1018,13 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
 				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
 							shader_filter_texture_file_filter, NULL);
-			} else {
+			} else { 
 				struct dstr file_label;
 				dstr_init_copy_dstr(&file_label, &display_name_final);
 				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
@@ -1038,7 +1038,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 				dstr_free(&source_label);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			}
@@ -1050,7 +1050,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
 			}
 			break;
-		default:;
+		default:; 
 		}
 		dstr_free(&display_name_final);
 	}
@@ -1080,7 +1080,7 @@ static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, 
 		// No file path, so no effect to load. Considered a success in terms of clearing.
 		// This will also trigger a UI update if called from shader_filter_update,
 		// which can then remove old parameters from the UI.
-		return true;
+		return true; 
 	}
 
 	// Load text and build the effect
@@ -1097,11 +1097,11 @@ static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, 
 	bool override_effect = obs_data_get_bool(settings, "override_entire_effect");
 	size_t path_len = strlen(effect_file_path);
 	if (path_len > 7 && strcmp(effect_file_path + path_len - 7, ".effect") == 0) {
-		override_effect = true;
+		override_effect = true; 
 	} else if (path_len > 7 && strcmp(effect_file_path + path_len - 7, ".shader") == 0) {
 		override_effect = false;
 	}
-
+	
 	struct dstr effect_text = {0};
 	if (!override_effect) { // Use template
 		dstr_cat(&effect_text, effect_template_begin);
@@ -1235,7 +1235,7 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 				const enum gs_color_space preferred_spaces[] = {GS_CS_SRGB, GS_CS_SRGB_16F, GS_CS_709_EXTENDED};
 				const enum gs_color_space space = obs_source_get_color_space(source_for_tex, OBS_COUNTOF(preferred_spaces), preferred_spaces);
 				const enum gs_color_format format = gs_get_format_from_space(space);
-
+				
 				if (!param_info->render || gs_texrender_get_format(param_info->render) != format) {
 					if(param_info->render) gs_texrender_destroy(param_info->render);
 					param_info->render = gs_texrender_create(format, GS_ZS_NONE);
@@ -1249,7 +1249,7 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 				if (base_width > 0 && base_height > 0 && gs_texrender_begin_with_color_space(param_info->render, base_width, base_height, space)) {
 					gs_blend_state_push();
 					gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Typically non-premultiplied for shader inputs
-
+					
 					struct vec4 clear_color; vec4_zero(&clear_color);
 					gs_clear(GS_CLEAR_COLOR, &clear_color, 0.0f, 0);
 					gs_ortho(0.0f, (float)base_width, 0.0f, (float)base_height, -100.0f, 100.0f);
@@ -1259,7 +1259,7 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 						obs_source_default_render(source_for_tex);
 					else
 						obs_source_video_render(source_for_tex);
-
+					
 					gs_texrender_end(param_info->render);
 					gs_blend_state_pop();
 					gs_effect_set_texture(param_info->param, gs_texrender_get_texture(param_info->render));
@@ -1271,7 +1271,7 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 				gs_effect_set_texture(param_info->param, param_info->image->texture);
 			} else {
 				// No source, no image file, set texture to NULL or a default placeholder if available
-				gs_effect_set_texture(param_info->param, NULL);
+				gs_effect_set_texture(param_info->param, NULL); 
 			}
 			break;
 		case GS_SHADER_PARAM_STRING:
@@ -1286,18 +1286,18 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 
 
 // Helper function to add effect parameters to a properties group
-static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list, 
                                     const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
 {
 	if (!param_list) return;
 
-	char prefixed_setting_name[256];
-	char source_setting_name[300];
+	char prefixed_setting_name[256]; 
+	char source_setting_name[300];   
 
 	size_t param_count = param_list->num;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (param_list->array + param_index);
-
+		
 		if (setting_prefix && strlen(setting_prefix) > 0) {
 			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s%s", setting_prefix, param->name.array);
 		} else {
@@ -1306,7 +1306,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 
 		const char *label = param->display_name.len > 0 ? param->display_name.array : param->name.array;
 		const char *widget_type = param->widget_type.array;
-		const char *group_name = param->group.array;
+		const char *group_name = param->group.array; 
 		const int *options_values = param->option_values.array;
 		const struct dstr *options_labels = param->option_labels.array;
 
@@ -1315,13 +1315,13 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			dstr_copy_dstr(&display_name_final, &param->display_name);
 		} else {
 			dstr_copy(&display_name_final, param->name.array);
-			dstr_replace(&display_name_final, "_", " ");
+			dstr_replace(&display_name_final, "_", " "); 
 		}
 
 		obs_properties_t *actual_group_to_add_to = props_group;
 		if (group_name && strlen(group_name)) {
 			bool found_group = false;
-			for (size_t i = 0; i < created_groups_list.num; i++) {
+			for (size_t i = 0; i < created_groups_list.num; i++) { 
 				const char *n = obs_property_name(created_groups_list.array[i]);
 				char full_group_id[128];
 				if (setting_prefix && strlen(setting_prefix) > 0) {
@@ -1345,7 +1345,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				}
 				obs_properties_t *new_ui_group = obs_properties_create();
 				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
-				da_push_back(created_groups_list, &p_group_prop);
+				da_push_back(created_groups_list, &p_group_prop); 
 				actual_group_to_add_to = new_ui_group;
 			}
 		}
@@ -1358,7 +1358,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			double range_min = param->minimum.f;
 			double range_max = param->maximum.f;
 			double step = param->step.f;
-			if (range_min == range_max && step == 0.0) {
+			if (range_min == range_max && step == 0.0) { 
 				range_min = -1000.0; range_max = 1000.0; step = 0.01;
 			}
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
@@ -1372,7 +1372,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			int r_min = (int)param->minimum.i;
 			int r_max = (int)param->maximum.i;
 			int r_step = (int)param->step.i;
-			if (r_min == r_max && r_step == 0) {
+			if (r_min == r_max && r_step == 0) { 
 				r_min = -1000; r_max = 1000; r_step = 1;
 			}
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
@@ -1389,10 +1389,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			}
 			break;
 		}
-		case GS_SHADER_PARAM_VEC2:
+		case GS_SHADER_PARAM_VEC2: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
-				const char* comp_labels[] = {"X", "Y"};
+				const char* comp_labels[] = {"X", "Y"}; 
 				for (int k=0; k<2; ++k) {
 					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
 					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
@@ -1405,9 +1405,9 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			}
+			} 
 			break;
-		case GS_SHADER_PARAM_VEC3:
+		case GS_SHADER_PARAM_VEC3: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z"};
@@ -1422,11 +1422,11 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
-		case GS_SHADER_PARAM_VEC4:
+		case GS_SHADER_PARAM_VEC4: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z", "W"};
@@ -1441,7 +1441,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
@@ -1451,13 +1451,13 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
 				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
 							shader_filter_texture_file_filter, NULL);
-			} else {
+			} else { 
 				struct dstr file_label;
 				dstr_init_copy_dstr(&file_label, &display_name_final);
 				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
@@ -1471,7 +1471,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 				dstr_free(&source_label);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			}
@@ -1483,7 +1483,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
 			}
 			break;
-		default:;
+		default:; 
 		}
 		dstr_free(&display_name_final);
 	}
@@ -2913,7 +2913,7 @@ static obs_properties_t *shader_filter_properties(void *data)
 
 			obs_properties_add_path(pass_props, pass_prop_name, obs_module_text("ShaderFilter.EffectFile"),
 						OBS_PATH_FILE, NULL, abs_examples_path_ui ? abs_examples_path_ui : examples_path_ui.array);
-
+			
 			if (abs_examples_path_ui) bfree(abs_examples_path_ui);
 			dstr_free(&examples_path_ui);
 
@@ -2931,7 +2931,7 @@ static obs_properties_t *shader_filter_properties(void *data)
 
 // Helper function to add effect parameters to a properties group
 // Changed created_groups_list to be passed by value (it's a small struct)
-static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list, 
                                     const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
 {
 	if (!param_list) return;
@@ -2942,7 +2942,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 	size_t param_count = param_list->num;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (param_list->array + param_index);
-
+		
 		// Construct the actual setting name used in obs_data_t
 		if (setting_prefix && strlen(setting_prefix) > 0) {
 			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s%s", setting_prefix, param->name.array);
@@ -2968,7 +2968,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 		if (group_name && strlen(group_name)) {
 			bool found_group = false;
 			// Iterate through the darray directly
-			for (size_t i = 0; i < created_groups_list.num; i++) {
+			for (size_t i = 0; i < created_groups_list.num; i++) { 
 				const char *n = obs_property_name(created_groups_list.array[i]);
 				char full_group_id[128];
 				if (setting_prefix && strlen(setting_prefix) > 0) {
@@ -2994,7 +2994,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
 				// da_push_back expects the darray variable itself, not a pointer to it.
 				// Since created_groups_list is now passed by value (it's the struct), this is correct.
-				da_push_back(created_groups_list, &p_group_prop);
+				da_push_back(created_groups_list, &p_group_prop); 
 				actual_group_to_add_to = new_ui_group;
 			}
 		}
@@ -3038,10 +3038,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			}
 			break;
 		}
-		case GS_SHADER_PARAM_VEC2:
+		case GS_SHADER_PARAM_VEC2: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
-				const char* comp_labels[] = {"X", "Y"};
+				const char* comp_labels[] = {"X", "Y"}; 
 				for (int k=0; k<2; ++k) {
 					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
 					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
@@ -3054,9 +3054,9 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			}
+			} 
 			break;
-		case GS_SHADER_PARAM_VEC3:
+		case GS_SHADER_PARAM_VEC3: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z"};
@@ -3071,11 +3071,11 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
-		case GS_SHADER_PARAM_VEC4:
+		case GS_SHADER_PARAM_VEC4: 
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z", "W"};
@@ -3090,7 +3090,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
+			} else { 
 				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
@@ -3100,13 +3100,13 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
 				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
 							shader_filter_texture_file_filter, NULL);
-			} else {
+			} else { 
 				struct dstr file_label;
 				dstr_init_copy_dstr(&file_label, &display_name_final);
 				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
@@ -3120,7 +3120,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 				dstr_free(&source_label);
-				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_property_list_insert_string(p_source, 0, "", ""); 
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			}
@@ -3132,7 +3132,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
 			}
 			break;
-		default:;
+		default:; 
 		}
 		dstr_free(&display_name_final);
 	}
@@ -3141,7 +3141,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 obs_properties_t *shader_filter_properties(void *data)
 {
 	struct shader_filter_data *filter = data;
-	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL;
+	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL; 
 
 	struct dstr examples_path = {0};
 	dstr_init(&examples_path);
@@ -3184,7 +3184,7 @@ obs_properties_t *shader_filter_properties(void *data)
 				  shader_filter_reload_effect_clicked);
 
 	// --- UI for Multi-Pass Shaders ---
-	if (filter) {
+	if (filter) { 
 		char pass_prop_name[64];
 		char pass_group_id[64];
 		char pass_display_name[128];
@@ -3210,7 +3210,7 @@ obs_properties_t *shader_filter_properties(void *data)
 
 			obs_properties_add_path(pass_props_content, pass_prop_name, obs_module_text("ShaderFilter.EffectFile"),
 						OBS_PATH_FILE, NULL, abs_examples_path_ui ? abs_examples_path_ui : examples_path_ui.array);
-
+			
 			if (abs_examples_path_ui) bfree(abs_examples_path_ui);
 			dstr_free(&examples_path_ui);
 
@@ -3227,19 +3227,19 @@ obs_properties_t *shader_filter_properties(void *data)
 		// Important: pass_ui_groups itself is a DARRAY, its elements (obs_property_t*) are not owned by it directly,
 		// but the darray's internal buffer for these pointers is freed by da_free.
 		// The obs_property_t objects themselves are owned by the obs_properties_t they were added to.
-		da_free(pass_ui_groups);
+		da_free(pass_ui_groups); 
 	}
 	// --- End UI for Multi-Pass Shaders ---
 
 	obs_properties_add_text(props, "main_shader_parameters_label", obs_module_text("ShaderFilter.MainShaderParameters"), OBS_TEXT_INFO);
 
-	DARRAY(obs_property_t *) main_created_groups;
+	DARRAY(obs_property_t *) main_created_groups; 
 	da_init(main_created_groups);
 
-	if (filter && filter->effect) {
+	if (filter && filter->effect) { 
 		add_effect_params_to_ui(props, &filter->stored_param_list, "", settings, main_created_groups);
 	}
-
+	
 	da_free(main_created_groups);
 
 
@@ -3319,7 +3319,7 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 					for (size_t j = 0; j < pass_param_count; ++j) {
 						struct effect_param_data *param_info = &filter->passes[i].stored_param_list.array[j];
 						snprintf(prefixed_param_name, sizeof(prefixed_param_name), "pass_%d_%s", i, param_info->name.array);
-
+						
 						void *default_val = gs_effect_get_default_val(param_info->param);
 						if (default_val) {
 							switch (param_info->type) {
@@ -3351,11 +3351,11 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 				// Optionally, update the settings back to reflect this forced disable
 				// char current_pass_enabled_prop[64];
 				// snprintf(current_pass_enabled_prop, sizeof(current_pass_enabled_prop), "pass_%d_enabled", i);
-				// obs_data_set_bool(settings, current_pass_enabled_prop, false);
+				// obs_data_set_bool(settings, current_pass_enabled_prop, false); 
 				pass_settings_changed = true;
 			}
 		}
-
+		
 		if (filter->passes[i].enabled && filter->passes[i].effect) {
 			filter->num_active_passes++;
 		}
@@ -3596,7 +3596,7 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 			}
 			if (!main_source_ptr)
 				main_source_ptr = (sn && strlen(sn)) ? obs_get_source_by_name(sn) : NULL;
-
+			
 			if (main_source_ptr) {
 				if (!obs_weak_source_references_source(main_param->source, main_source_ptr)) {
 					if ((!filter->transition || filter->prev_transitioning) && obs_source_active(filter->context))
@@ -3625,7 +3625,7 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 			} else {
 				const char *path_from_settings = obs_data_get_string(settings, main_param_name); // Renamed for clarity
 				const char *path_default_from_effect = main_default_value; // Default value for texture is path string
-
+				
 				if (!obs_data_has_user_value(settings, main_param_name) && path_default_from_effect && strlen(path_default_from_effect)) {
 					// This block for setting default path from effect to settings was complex and might be simplified
 					// For now, let's assume if not user_value, we use path_from_settings which could be this default.
@@ -4154,7 +4154,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 		obs_source_skip_video_filter(filter->context);
 		return;
 	}
-
+	
 	filter->rendering = true;
 
 	// Prepare the initial input texture
@@ -4169,7 +4169,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 	// Determine format based on input or a preferred high-quality intermediate format
 	// For now, using GS_RGBA like other texrenders in this filter.
 	// This might need to be more sophisticated, e.g. matching source_space from get_input_source
-	enum gs_color_format intermediate_format = GS_RGBA;
+	enum gs_color_format intermediate_format = GS_RGBA; 
 	// If input_texrender has a specific format, try to match it or use a known good default like GS_RGBA_UNORM
 	if(gs_texrender_get_texture(filter->input_texrender)) {
 		intermediate_format = gs_texture_get_color_format(gs_texrender_get_texture(filter->input_texrender));
@@ -4178,11 +4178,11 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 
 	if (filter->num_active_passes > 0) { // Only create if we have passes that might use them
 		obs_enter_graphics(); // Ensure graphics context for creation/reset
-		if (!filter->intermediate_texrender_A ||
+		if (!filter->intermediate_texrender_A || 
 			gs_texrender_get_width(filter->intermediate_texrender_A) != filter->total_width ||
 			gs_texrender_get_height(filter->intermediate_texrender_A) != filter->total_height ||
 			gs_texrender_get_format(filter->intermediate_texrender_A) != intermediate_format ) {
-
+			
 			if(filter->intermediate_texrender_A) gs_texrender_destroy(filter->intermediate_texrender_A);
 			filter->intermediate_texrender_A = gs_texrender_create(intermediate_format, GS_ZS_NONE);
 		}
@@ -4203,7 +4203,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 		if(filter->intermediate_texrender_B) gs_texrender_reset(filter->intermediate_texrender_B);
 		obs_leave_graphics();
 	}
-
+	
 	// Ensure output_texrender is also ready (it's handled by create_or_reset_texrender in render_shader)
 	// but let's be explicit about its state for clarity before potential multi-pass rendering.
 	// filter->output_texrender = create_or_reset_texrender(filter->output_texrender);
@@ -4238,7 +4238,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 					target_texrender = filter->intermediate_texrender_A; // Target A
 				}
 			}
-
+			
 			if (!target_texrender) { // Should not happen if intermediates are created
 				blog(LOG_ERROR, "[obs-shaderfilter] Target texrender is null for pass %d", i);
 				continue;
@@ -4251,7 +4251,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 			// These are currently stored once in `filter` and applied to each pass.
 			// The 'image' uniform for this pass is `current_iteration_input_texture`.
 			gs_effect_set_texture(gs_effect_get_param_by_name(filter->passes[i].effect, "image"), current_iteration_input_texture);
-
+			
 			if (filter->param_uv_scale) // Assuming these are global params potentially used by any pass
 				gs_effect_set_vec2(gs_effect_get_param_by_name(filter->passes[i].effect, "uv_scale"), &filter->uv_scale);
 			if (filter->param_uv_offset)
@@ -4274,7 +4274,7 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 				}
 				gs_texrender_end(target_texrender);
 			}
-
+			
 			// Output of this pass becomes input for the next
 			current_iteration_input_texture = gs_texrender_get_texture(target_texrender);
 			source_texrender = target_texrender; // Keep track of the texrender itself for ping-pong logic

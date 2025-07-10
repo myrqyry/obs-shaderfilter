@@ -852,6 +852,211 @@ static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info)
 	da_init(pass_info->stored_param_list);
 }
 
+// Helper function to add effect parameters to a properties group
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
+{
+	if (!param_list) return;
+
+	char prefixed_setting_name[256];
+	char source_setting_name[300];
+
+	size_t param_count = param_list->num;
+	for (size_t param_index = 0; param_index < param_count; param_index++) {
+		struct effect_param_data *param = (param_list->array + param_index);
+
+		if (setting_prefix && strlen(setting_prefix) > 0) {
+			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s%s", setting_prefix, param->name.array);
+		} else {
+			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s", param->name.array);
+		}
+
+		const char *label = param->display_name.len > 0 ? param->display_name.array : param->name.array;
+		const char *widget_type = param->widget_type.array;
+		const char *group_name = param->group.array;
+		const int *options_values = param->option_values.array;
+		const struct dstr *options_labels = param->option_labels.array;
+
+		struct dstr display_name_final = {0};
+		if (param->display_name.len > 0) {
+			dstr_copy_dstr(&display_name_final, &param->display_name);
+		} else {
+			dstr_copy(&display_name_final, param->name.array);
+			dstr_replace(&display_name_final, "_", " ");
+		}
+
+		obs_properties_t *actual_group_to_add_to = props_group;
+		if (group_name && strlen(group_name)) {
+			bool found_group = false;
+			for (size_t i = 0; i < created_groups_list.num; i++) {
+				const char *n = obs_property_name(created_groups_list.array[i]);
+				char full_group_id[128];
+				if (setting_prefix && strlen(setting_prefix) > 0) {
+					snprintf(full_group_id, sizeof(full_group_id), "%s%s", setting_prefix, group_name);
+				} else {
+					snprintf(full_group_id, sizeof(full_group_id), "%s", group_name);
+				}
+
+				if (strcmp(n, full_group_id) == 0) {
+					actual_group_to_add_to = obs_property_group_content(created_groups_list.array[i]);
+					found_group = true;
+					break;
+				}
+			}
+			if (!found_group) {
+				char full_group_id[128];
+				if (setting_prefix && strlen(setting_prefix) > 0) {
+					snprintf(full_group_id, sizeof(full_group_id), "%s%s", setting_prefix, group_name);
+				} else {
+					snprintf(full_group_id, sizeof(full_group_id), "%s", group_name);
+				}
+				obs_properties_t *new_ui_group = obs_properties_create();
+				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
+				da_push_back(created_groups_list, &p_group_prop);
+				actual_group_to_add_to = new_ui_group;
+			}
+		}
+
+		switch (param->type) {
+		case GS_SHADER_PARAM_BOOL:
+			obs_properties_add_bool(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			break;
+		case GS_SHADER_PARAM_FLOAT: {
+			double range_min = param->minimum.f;
+			double range_max = param->maximum.f;
+			double step = param->step.f;
+			if (range_min == range_max && step == 0.0) {
+				range_min = -1000.0; range_max = 1000.0; step = 0.01;
+			}
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_float_slider(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, range_min, range_max, step);
+			} else {
+				obs_properties_add_float(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, range_min, range_max, step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_INT: {
+			int r_min = (int)param->minimum.i;
+			int r_max = (int)param->maximum.i;
+			int r_step = (int)param->step.i;
+			if (r_min == r_max && r_step == 0) {
+				r_min = -1000; r_max = 1000; r_step = 1;
+			}
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_int_slider(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, r_min, r_max, r_step);
+			} else if (widget_type != NULL && strcmp(widget_type, "select") == 0 && param->option_values.num > 0) {
+				obs_property_t *plist = obs_properties_add_list(actual_group_to_add_to, prefixed_setting_name, display_name_final.array,
+										OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+				for (size_t k = 0; k < param->option_values.num; k++) {
+					const char* opt_label = (k < param->option_labels.num) ? options_labels[k].array : "Option";
+					obs_property_list_add_int(plist, opt_label, options_values[k]);
+				}
+			} else {
+				obs_properties_add_int(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, r_min, r_max, r_step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_VEC2:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y"};
+				for (int k=0; k<2; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			}
+			break;
+		case GS_SHADER_PARAM_VEC3:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y", "Z"};
+				for (int k=0; k<3; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			} else {
+				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			}
+			break;
+		case GS_SHADER_PARAM_VEC4:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y", "Z", "W"};
+				for (int k=0; k<4; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			} else {
+				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			}
+			break;
+		case GS_SHADER_PARAM_TEXTURE:
+			snprintf(source_setting_name, sizeof(source_setting_name), "%s_source", prefixed_setting_name);
+
+			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
+				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_enum_sources(add_source_to_list, p_source);
+				obs_enum_scenes(add_source_to_list, p_source);
+			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
+				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+			} else {
+				struct dstr file_label;
+				dstr_init_copy_dstr(&file_label, &display_name_final);
+				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
+				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, file_label.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+				dstr_free(&file_label);
+
+				struct dstr source_label;
+				dstr_init_copy_dstr(&source_label, &display_name_final);
+				dstr_cat(&source_label, obs_module_text("ShaderFilter.ImageSourceSuffix"));
+				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				dstr_free(&source_label);
+				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_enum_sources(add_source_to_list, p_source);
+				obs_enum_scenes(add_source_to_list, p_source);
+			}
+			break;
+		case GS_SHADER_PARAM_STRING:
+			if (widget_type != NULL && strcmp(widget_type, "info") == 0) {
+				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_INFO);
+			} else {
+				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
+			}
+			break;
+		default:;
+		}
+		dstr_free(&display_name_final);
+	}
+}
+
+
 // Function to reload an effect for a specific pass
 static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, int pass_index, obs_data_t *settings)
 {
@@ -1077,10 +1282,215 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 			break;
 		}
 	}
+}; // Explicit semicolon, though not standard C for function end, might help a confused parser.
+
+
+// Helper function to add effect parameters to a properties group
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
+{
+	if (!param_list) return;
+
+	char prefixed_setting_name[256];
+	char source_setting_name[300];
+
+	size_t param_count = param_list->num;
+	for (size_t param_index = 0; param_index < param_count; param_index++) {
+		struct effect_param_data *param = (param_list->array + param_index);
+
+		if (setting_prefix && strlen(setting_prefix) > 0) {
+			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s%s", setting_prefix, param->name.array);
+		} else {
+			snprintf(prefixed_setting_name, sizeof(prefixed_setting_name), "%s", param->name.array);
+		}
+
+		const char *label = param->display_name.len > 0 ? param->display_name.array : param->name.array;
+		const char *widget_type = param->widget_type.array;
+		const char *group_name = param->group.array;
+		const int *options_values = param->option_values.array;
+		const struct dstr *options_labels = param->option_labels.array;
+
+		struct dstr display_name_final = {0};
+		if (param->display_name.len > 0) {
+			dstr_copy_dstr(&display_name_final, &param->display_name);
+		} else {
+			dstr_copy(&display_name_final, param->name.array);
+			dstr_replace(&display_name_final, "_", " ");
+		}
+
+		obs_properties_t *actual_group_to_add_to = props_group;
+		if (group_name && strlen(group_name)) {
+			bool found_group = false;
+			for (size_t i = 0; i < created_groups_list.num; i++) {
+				const char *n = obs_property_name(created_groups_list.array[i]);
+				char full_group_id[128];
+				if (setting_prefix && strlen(setting_prefix) > 0) {
+					snprintf(full_group_id, sizeof(full_group_id), "%s%s", setting_prefix, group_name);
+				} else {
+					snprintf(full_group_id, sizeof(full_group_id), "%s", group_name);
+				}
+
+				if (strcmp(n, full_group_id) == 0) {
+					actual_group_to_add_to = obs_property_group_content(created_groups_list.array[i]);
+					found_group = true;
+					break;
+				}
+			}
+			if (!found_group) {
+				char full_group_id[128];
+				if (setting_prefix && strlen(setting_prefix) > 0) {
+					snprintf(full_group_id, sizeof(full_group_id), "%s%s", setting_prefix, group_name);
+				} else {
+					snprintf(full_group_id, sizeof(full_group_id), "%s", group_name);
+				}
+				obs_properties_t *new_ui_group = obs_properties_create();
+				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
+				da_push_back(created_groups_list, &p_group_prop);
+				actual_group_to_add_to = new_ui_group;
+			}
+		}
+
+		switch (param->type) {
+		case GS_SHADER_PARAM_BOOL:
+			obs_properties_add_bool(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			break;
+		case GS_SHADER_PARAM_FLOAT: {
+			double range_min = param->minimum.f;
+			double range_max = param->maximum.f;
+			double step = param->step.f;
+			if (range_min == range_max && step == 0.0) {
+				range_min = -1000.0; range_max = 1000.0; step = 0.01;
+			}
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_float_slider(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, range_min, range_max, step);
+			} else {
+				obs_properties_add_float(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, range_min, range_max, step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_INT: {
+			int r_min = (int)param->minimum.i;
+			int r_max = (int)param->maximum.i;
+			int r_step = (int)param->step.i;
+			if (r_min == r_max && r_step == 0) {
+				r_min = -1000; r_max = 1000; r_step = 1;
+			}
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_int_slider(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, r_min, r_max, r_step);
+			} else if (widget_type != NULL && strcmp(widget_type, "select") == 0 && param->option_values.num > 0) {
+				obs_property_t *plist = obs_properties_add_list(actual_group_to_add_to, prefixed_setting_name, display_name_final.array,
+										OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+				for (size_t k = 0; k < param->option_values.num; k++) {
+					const char* opt_label = (k < param->option_labels.num) ? options_labels[k].array : "Option";
+					obs_property_list_add_int(plist, opt_label, options_values[k]);
+				}
+			} else {
+				obs_properties_add_int(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, r_min, r_max, r_step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_VEC2:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y"};
+				for (int k=0; k<2; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			}
+			break;
+		case GS_SHADER_PARAM_VEC3:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y", "Z"};
+				for (int k=0; k<3; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			} else {
+				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			}
+			break;
+		case GS_SHADER_PARAM_VEC4:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				char component_name[300];
+				const char* comp_labels[] = {"X", "Y", "Z", "W"};
+				for (int k=0; k<4; ++k) {
+					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
+					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
+					struct dstr full_comp_label;
+					dstr_init_copy_dstr(&full_comp_label, &display_name_final);
+					dstr_cat(&full_comp_label, " ");
+					dstr_cat(&full_comp_label, comp_disp_name);
+					obs_properties_add_float_slider(actual_group_to_add_to, component_name, full_comp_label.array,
+					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
+					dstr_free(&full_comp_label);
+				}
+			} else {
+				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
+			}
+			break;
+		case GS_SHADER_PARAM_TEXTURE:
+			snprintf(source_setting_name, sizeof(source_setting_name), "%s_source", prefixed_setting_name);
+
+			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
+				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_enum_sources(add_source_to_list, p_source);
+				obs_enum_scenes(add_source_to_list, p_source);
+			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
+				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+			} else {
+				struct dstr file_label;
+				dstr_init_copy_dstr(&file_label, &display_name_final);
+				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
+				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, file_label.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+				dstr_free(&file_label);
+
+				struct dstr source_label;
+				dstr_init_copy_dstr(&source_label, &display_name_final);
+				dstr_cat(&source_label, obs_module_text("ShaderFilter.ImageSourceSuffix"));
+				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				dstr_free(&source_label);
+				obs_property_list_insert_string(p_source, 0, "", "");
+				obs_enum_sources(add_source_to_list, p_source);
+				obs_enum_scenes(add_source_to_list, p_source);
+			}
+			break;
+		case GS_SHADER_PARAM_STRING:
+			if (widget_type != NULL && strcmp(widget_type, "info") == 0) {
+				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_INFO);
+			} else {
+				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
+			}
+			break;
+		default:;
+		}
+		dstr_free(&display_name_final);
+	}
 }
 
-
-static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
+// Function to reload an effect for a specific pass
+static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, int pass_index, obs_data_t *settings)
 {
 	UNUSED_PARAMETER(p);
 	struct shader_filter_data *filter = obs_properties_get_param(props);
@@ -2516,6 +2926,9 @@ static obs_properties_t *shader_filter_properties(void *data)
 	// UI for original single shader (can be kept for backward compatibility or as a 'final pass' if desired)
 	// For now, we'll assume the multi-pass system replaces this if any pass is enabled.
 	// This section for individual params might be dynamically shown/hidden based on whether multi-pass is active.
+// Moving add_effect_params_to_ui to file scope, before shader_filter_properties where it's first used.
+// Also ensuring other functions are correctly at file scope.
+
 // Helper function to add effect parameters to a properties group
 // Changed created_groups_list to be passed by value (it's a small struct)
 static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
@@ -2625,14 +3038,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 			}
 			break;
 		}
-		case GS_SHADER_PARAM_VEC2: // Assuming vec2 components are separate float sliders/inputs
-			// This requires settings like "prefix_paramName_0", "prefix_paramName_1"
-			// The UI for this needs careful thought if it's not just two separate float properties.
-			// For now, let's assume if widget_type is "slider", we create two sliders.
-			// This is a simplification; a true vec2 UI element might be different.
+		case GS_SHADER_PARAM_VEC2:
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
 				char component_name[300];
-				const char* comp_labels[] = {"X", "Y"}; // Default component labels
+				const char* comp_labels[] = {"X", "Y"};
 				for (int k=0; k<2; ++k) {
 					snprintf(component_name, sizeof(component_name), "%s_%d", prefixed_setting_name, k);
 					const char* comp_disp_name = (k < param->option_labels.num) ? param->option_labels.array[k].array : comp_labels[k];
@@ -2645,14 +3054,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else {
-				// Fallback: perhaps add a non-editable text or a placeholder?
-				// Or expect user to provide individual float params in shader if they want UI
 			}
 			break;
-		case GS_SHADER_PARAM_VEC3: // Typically color, or 3 float sliders
+		case GS_SHADER_PARAM_VEC3:
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
-				// Add 3 float sliders, similar to VEC2 example
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z"};
 				for (int k=0; k<3; ++k) {
@@ -2666,13 +3071,12 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else { // Default to color picker
+			} else {
 				obs_properties_add_color(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
-		case GS_SHADER_PARAM_VEC4: // Typically color with alpha, or 4 float sliders
+		case GS_SHADER_PARAM_VEC4:
 			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
-				// Add 4 float sliders
 				char component_name[300];
 				const char* comp_labels[] = {"X", "Y", "Z", "W"};
 				for (int k=0; k<4; ++k) {
@@ -2686,25 +3090,23 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					                                param->minimum.f, param->maximum.f, param->step.f == 0.0 ? 0.01 : param->step.f);
 					dstr_free(&full_comp_label);
 				}
-			} else { // Default to color picker with alpha
+			} else {
 				obs_properties_add_color_alpha(actual_group_to_add_to, prefixed_setting_name, display_name_final.array);
 			}
 			break;
 		case GS_SHADER_PARAM_TEXTURE:
-			// Setting name for file path: prefix + param_name
-			// Setting name for source list: prefix + param_name + "_source"
 			snprintf(source_setting_name, sizeof(source_setting_name), "%s_source", prefixed_setting_name);
 
 			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, display_name_final.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
-				obs_property_list_insert_string(p_source, 0, "", ""); // Add empty option
+				obs_property_list_insert_string(p_source, 0, "", "");
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
 				obs_properties_add_path(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_PATH_FILE,
 							shader_filter_texture_file_filter, NULL);
-			} else { // Default: provide both options
+			} else {
 				struct dstr file_label;
 				dstr_init_copy_dstr(&file_label, &display_name_final);
 				dstr_cat(&file_label, obs_module_text("ShaderFilter.ImagePathSuffix"));
@@ -2718,7 +3120,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t *p_source = obs_properties_add_list(actual_group_to_add_to, source_setting_name, source_label.array,
 									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 				dstr_free(&source_label);
-				obs_property_list_insert_string(p_source, 0, "", ""); // Add empty option
+				obs_property_list_insert_string(p_source, 0, "", "");
 				obs_enum_sources(add_source_to_list, p_source);
 				obs_enum_scenes(add_source_to_list, p_source);
 			}
@@ -2730,17 +3132,16 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_properties_add_text(actual_group_to_add_to, prefixed_setting_name, display_name_final.array, OBS_TEXT_MULTILINE);
 			}
 			break;
-		default:; // GS_SHADER_PARAM_INT3 etc. not typically exposed directly or need specific UI
+		default:;
 		}
 		dstr_free(&display_name_final);
 	}
 }
 
-// Removed 'static'
 obs_properties_t *shader_filter_properties(void *data)
 {
 	struct shader_filter_data *filter = data;
-	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL; // Get settings for context
+	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL;
 
 	struct dstr examples_path = {0};
 	dstr_init(&examples_path);

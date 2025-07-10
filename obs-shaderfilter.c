@@ -10,6 +10,7 @@
 #include <util/dstr.h>
 #include <util/darray.h>
 #include <util/platform.h>
+#include <obs-data.h> // For obs_data_get_type and other obs_data_* functions
 #include <float.h>
 #include <limits.h>
 #include <stdio.h>
@@ -2516,8 +2517,9 @@ static obs_properties_t *shader_filter_properties(void *data)
 	// For now, we'll assume the multi-pass system replaces this if any pass is enabled.
 	// This section for individual params might be dynamically shown/hidden based on whether multi-pass is active.
 // Helper function to add effect parameters to a properties group
+// Changed created_groups_list to be passed by value (it's a small struct)
 static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
-                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) *created_groups_list)
+                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
 {
 	if (!param_list) return;
 
@@ -2552,9 +2554,9 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 		obs_properties_t *actual_group_to_add_to = props_group;
 		if (group_name && strlen(group_name)) {
 			bool found_group = false;
-			for (size_t i = 0; i < created_groups_list->num; i++) {
-				const char *n = obs_property_name(created_groups_list->array[i]);
-				// Construct full group ID: prefix_groupname for uniqueness if prefix exists
+			// Iterate through the darray directly
+			for (size_t i = 0; i < created_groups_list.num; i++) {
+				const char *n = obs_property_name(created_groups_list.array[i]);
 				char full_group_id[128];
 				if (setting_prefix && strlen(setting_prefix) > 0) {
 					snprintf(full_group_id, sizeof(full_group_id), "%s%s", setting_prefix, group_name);
@@ -2563,7 +2565,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				}
 
 				if (strcmp(n, full_group_id) == 0) {
-					actual_group_to_add_to = obs_property_group_content(created_groups_list->array[i]);
+					actual_group_to_add_to = obs_property_group_content(created_groups_list.array[i]);
 					found_group = true;
 					break;
 				}
@@ -2576,8 +2578,10 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 					snprintf(full_group_id, sizeof(full_group_id), "%s", group_name);
 				}
 				obs_properties_t *new_ui_group = obs_properties_create();
-				obs_property_t *p = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
-				da_push_back(*created_groups_list, &p);
+				obs_property_t *p_group_prop = obs_properties_add_group(props_group, full_group_id, group_name, OBS_GROUP_NORMAL, new_ui_group);
+				// da_push_back expects the darray variable itself, not a pointer to it.
+				// Since created_groups_list is now passed by value (it's the struct), this is correct.
+				da_push_back(created_groups_list, &p_group_prop);
 				actual_group_to_add_to = new_ui_group;
 			}
 		}
@@ -2732,8 +2736,8 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 	}
 }
 
-
-static obs_properties_t *shader_filter_properties(void *data)
+// Removed 'static'
+obs_properties_t *shader_filter_properties(void *data)
 {
 	struct shader_filter_data *filter = data;
 	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL; // Get settings for context
@@ -2815,23 +2819,24 @@ static obs_properties_t *shader_filter_properties(void *data)
 				snprintf(prefix, sizeof(prefix), "pass_%d_", i);
 				// pass_props_content is the obs_properties_t* for this specific pass's group
 				// pass_ui_groups is used to track subgroups created *within* these pass parameter sections
-				add_effect_params_to_ui(pass_props_content, &filter->passes[i].stored_param_list, prefix, settings, &pass_ui_groups);
+				// Pass pass_ui_groups by value (it's a DARRAY struct)
+				add_effect_params_to_ui(pass_props_content, &filter->passes[i].stored_param_list, prefix, settings, pass_ui_groups);
 			}
 		}
-		da_free(pass_ui_groups); // Free the list of group properties for passes
+		// Important: pass_ui_groups itself is a DARRAY, its elements (obs_property_t*) are not owned by it directly,
+		// but the darray's internal buffer for these pointers is freed by da_free.
+		// The obs_property_t objects themselves are owned by the obs_properties_t they were added to.
+		da_free(pass_ui_groups);
 	}
 	// --- End UI for Multi-Pass Shaders ---
 
 	obs_properties_add_text(props, "main_shader_parameters_label", obs_module_text("ShaderFilter.MainShaderParameters"), OBS_TEXT_INFO);
 
-	DARRAY(obs_property_t *) main_created_groups; // For the main effect's parameter groups
+	DARRAY(obs_property_t *) main_created_groups;
 	da_init(main_created_groups);
 
-	if (filter && filter->effect) { // For the main effect (if still used)
-		// Pass 'props' here if main_shader_parameters_label is meant to be a sibling,
-		// or a specific subgroup if it's meant to be nested further.
-		// Assuming parameters are added directly to 'props' or a main subgroup for them.
-		add_effect_params_to_ui(props, &filter->stored_param_list, "", settings, &main_created_groups);
+	if (filter && filter->effect) {
+		add_effect_params_to_ui(props, &filter->stored_param_list, "", settings, main_created_groups);
 	}
 
 	da_free(main_created_groups);
@@ -2885,14 +2890,11 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 		}
 
 		snprintf(prop_name, sizeof(prop_name), "pass_%d_effect_file", i);
-		const char *new_effect_file = obs_data_get_string(settings, prop_name);
+		const char *new_effect_file_val = obs_data_get_string(settings, prop_name); // Renamed variable
 
-		snprintf(prop_name, sizeof(prop_name), "pass_%d_effect_file", i);
-		const char *new_effect_file = obs_data_get_string(settings, prop_name);
-
-		bool path_changed = (dstr_cmp(&filter->passes[i].effect_file_path, new_effect_file) != 0);
+		bool path_changed = (dstr_cmp(&filter->passes[i].effect_file_path, new_effect_file_val) != 0);
 		if (path_changed) {
-			dstr_copy(&filter->passes[i].effect_file_path, new_effect_file);
+			dstr_copy(&filter->passes[i].effect_file_path, new_effect_file_val);
 		}
 
 		// Reload conditions:

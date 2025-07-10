@@ -3644,28 +3644,160 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 
 	struct shader_filter_data *filter = data;
 
-	float f = 0.0f;
-	obs_source_t *filter_to = NULL;
-	if (move_get_transition_filter)
-		f = move_get_transition_filter(filter->context, &filter_to);
-
-	if (f == 0.0f && filter->output_rendered) {
-		draw_output(filter);
-		return;
-	}
-
-	if (filter->effect == NULL || filter->rendering) {
+	// Early exit if already rendering this frame (prevent recursion) or no effect setup
+	// This condition might need refinement based on multi-pass logic.
+	// If num_active_passes is 0 AND filter->effect is NULL, then skip.
+	if (filter->rendering || (filter->num_active_passes == 0 && !filter->effect)) {
 		obs_source_skip_video_filter(filter->context);
 		return;
 	}
 
-	get_input_source(filter);
-
 	filter->rendering = true;
-	render_shader(filter, f, filter_to);
-	draw_output(filter);
-	if (f == 0.0f)
-		filter->output_rendered = true;
+
+	// Prepare the initial input texture
+	get_input_source(filter); // Populates filter->input_texrender
+	if (!gs_texrender_get_texture(filter->input_texrender)) {
+		obs_source_skip_video_filter(filter->context);
+		filter->rendering = false;
+		return;
+	}
+
+	// Ensure intermediate render targets are available and correctly sized
+	// Determine format based on input or a preferred high-quality intermediate format
+	// For now, using GS_RGBA like other texrenders in this filter.
+	// This might need to be more sophisticated, e.g. matching source_space from get_input_source
+	enum gs_color_format intermediate_format = GS_RGBA;
+	// If input_texrender has a specific format, try to match it or use a known good default like GS_RGBA_UNORM
+	if(gs_texrender_get_texture(filter->input_texrender)) {
+		intermediate_format = gs_texture_get_color_format(gs_texrender_get_texture(filter->input_texrender));
+	}
+
+
+	if (filter->num_active_passes > 0) { // Only create if we have passes that might use them
+		obs_enter_graphics(); // Ensure graphics context for creation/reset
+		if (!filter->intermediate_texrender_A ||
+			gs_texrender_get_width(filter->intermediate_texrender_A) != filter->total_width ||
+			gs_texrender_get_height(filter->intermediate_texrender_A) != filter->total_height ||
+			gs_texrender_get_format(filter->intermediate_texrender_A) != intermediate_format ) {
+
+			if(filter->intermediate_texrender_A) gs_texrender_destroy(filter->intermediate_texrender_A);
+			filter->intermediate_texrender_A = gs_texrender_create(intermediate_format, GS_ZS_NONE);
+		}
+		// It's typical to reset before use even if dimensions match, to clear previous content if needed
+		// However, since we render fullscreen sprites, explicit clear in gs_texrender_begin might be enough.
+		// For safety, let's reset if it exists.
+		if(filter->intermediate_texrender_A) gs_texrender_reset(filter->intermediate_texrender_A);
+
+
+		if (!filter->intermediate_texrender_B ||
+			gs_texrender_get_width(filter->intermediate_texrender_B) != filter->total_width ||
+			gs_texrender_get_height(filter->intermediate_texrender_B) != filter->total_height ||
+			gs_texrender_get_format(filter->intermediate_texrender_B) != intermediate_format) {
+
+			if(filter->intermediate_texrender_B) gs_texrender_destroy(filter->intermediate_texrender_B);
+			filter->intermediate_texrender_B = gs_texrender_create(intermediate_format, GS_ZS_NONE);
+		}
+		if(filter->intermediate_texrender_B) gs_texrender_reset(filter->intermediate_texrender_B);
+		obs_leave_graphics();
+	}
+
+	// Ensure output_texrender is also ready (it's handled by create_or_reset_texrender in render_shader)
+	// but let's be explicit about its state for clarity before potential multi-pass rendering.
+	// filter->output_texrender = create_or_reset_texrender(filter->output_texrender);
+	// This is actually handled within render_shader or the new multi-pass loop.
+
+	gs_texture_t *current_iteration_input_texture = gs_texrender_get_texture(filter->input_texrender);
+	gs_texrender_t *source_texrender = filter->input_texrender; // Initial source
+	gs_texrender_t *target_texrender = NULL;
+
+	int active_passes_processed = 0;
+
+	if (filter->num_active_passes > 0) {
+		gs_blend_state_push();
+		gs_reset_blend_state(); // Usually GS_BLEND_ONE, GS_BLEND_ZERO for shader passes unless blending is intended
+
+		for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+			if (!filter->passes[i].enabled || !filter->passes[i].effect) {
+				continue;
+			}
+
+			active_passes_processed++;
+
+			// Determine target for this pass
+			if (active_passes_processed == filter->num_active_passes) {
+				// This is the last active pass, render to final output_texrender
+				target_texrender = create_or_reset_texrender(filter->output_texrender);
+			} else {
+				// Not the last pass, ping-pong between intermediate_A and intermediate_B
+				if (target_texrender == filter->intermediate_texrender_A) { // Last write was to A (or A was initial target)
+					target_texrender = filter->intermediate_texrender_B; // Target B
+				} else {
+					target_texrender = filter->intermediate_texrender_A; // Target A
+				}
+			}
+
+			if (!target_texrender) { // Should not happen if intermediates are created
+				blog(LOG_ERROR, "[obs-shaderfilter] Target texrender is null for pass %d", i);
+				continue;
+			}
+
+			// Set current pass's effect specific parameters
+			shader_filter_set_pass_effect_params(filter, i);
+
+			// Set global parameters for this pass's effect (e.g., uv_scale, elapsed_time)
+			// These are currently stored once in `filter` and applied to each pass.
+			// The 'image' uniform for this pass is `current_iteration_input_texture`.
+			gs_effect_set_texture(gs_effect_get_param_by_name(filter->passes[i].effect, "image"), current_iteration_input_texture);
+
+			if (filter->param_uv_scale) // Assuming these are global params potentially used by any pass
+				gs_effect_set_vec2(gs_effect_get_param_by_name(filter->passes[i].effect, "uv_scale"), &filter->uv_scale);
+			if (filter->param_uv_offset)
+				gs_effect_set_vec2(gs_effect_get_param_by_name(filter->passes[i].effect, "uv_offset"), &filter->uv_offset);
+			if (filter->param_uv_pixel_interval)
+				gs_effect_set_vec2(gs_effect_get_param_by_name(filter->passes[i].effect, "uv_pixel_interval"), &filter->uv_pixel_interval);
+			if (filter->param_uv_size)
+				gs_effect_set_vec2(gs_effect_get_param_by_name(filter->passes[i].effect, "uv_size"), &filter->uv_size);
+			if (filter->param_elapsed_time)
+				gs_effect_set_float(gs_effect_get_param_by_name(filter->passes[i].effect, "elapsed_time"), filter->elapsed_time);
+			// Add other global params as needed (rand_f, etc.)
+
+
+			// Render the pass
+			if (gs_texrender_begin(target_texrender, filter->total_width, filter->total_height)) {
+				gs_ortho(0.0f, (float)filter->total_width, 0.0f, (float)filter->total_height, -100.0f, 100.0f);
+				// Loop through techniques and passes within the current pass's effect file
+				while (gs_effect_loop(filter->passes[i].effect, "Draw")) { // Assuming "Draw" is the common technique name
+					gs_draw_sprite(current_iteration_input_texture, 0, filter->total_width, filter->total_height);
+				}
+				gs_texrender_end(target_texrender);
+			}
+
+			// Output of this pass becomes input for the next
+			current_iteration_input_texture = gs_texrender_get_texture(target_texrender);
+			source_texrender = target_texrender; // Keep track of the texrender itself for ping-pong logic
+		}
+		gs_blend_state_pop();
+		draw_output(filter); // Draw the final output_texrender
+		filter->output_rendered = true; // Mark that we have something to show
+
+	} else if (filter->effect) { // No active passes, but a main effect exists (fallback)
+		float f = 0.0f;
+		obs_source_t *filter_to = NULL;
+		if (move_get_transition_filter)
+			f = move_get_transition_filter(filter->context, &filter_to);
+
+		if (f == 0.0f && filter->output_rendered) {
+			draw_output(filter);
+		} else {
+			render_shader(filter, f, filter_to); // Original single effect render
+			if (f == 0.0f) filter->output_rendered = true;
+		}
+		draw_output(filter);
+
+	} else { // No active passes and no main effect
+		obs_source_skip_video_filter(filter->context);
+	}
+
 	filter->rendering = false;
 }
 

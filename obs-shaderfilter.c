@@ -985,6 +985,99 @@ static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, 
 	return true;
 }
 
+// Sets the parameters for a single pass's effect
+static void shader_filter_set_pass_effect_params(struct shader_filter_data *filter, int pass_idx)
+{
+	if (pass_idx < 0 || pass_idx >= MAX_SHADER_PASSES || !filter->passes[pass_idx].effect || !filter->passes[pass_idx].enabled) {
+		return;
+	}
+
+	struct shader_pass_info *current_pass = &filter->passes[pass_idx];
+	size_t param_count = current_pass->stored_param_list.num;
+
+	for (size_t i = 0; i < param_count; ++i) {
+		struct effect_param_data *param_info = &current_pass->stored_param_list.array[i];
+		if (!param_info->param) continue; // Should not happen if populated correctly
+
+		obs_source_t *source_for_tex = NULL;
+
+		switch (param_info->type) {
+		case GS_SHADER_PARAM_BOOL:
+			gs_effect_set_bool(param_info->param, param_info->value.i);
+			break;
+		case GS_SHADER_PARAM_FLOAT:
+			gs_effect_set_float(param_info->param, (float)param_info->value.f);
+			break;
+		case GS_SHADER_PARAM_INT:
+			gs_effect_set_int(param_info->param, (int)param_info->value.i);
+			break;
+		case GS_SHADER_PARAM_VEC2:
+			gs_effect_set_vec2(param_info->param, &param_info->value.vec2);
+			break;
+		case GS_SHADER_PARAM_VEC3:
+			gs_effect_set_vec3(param_info->param, &param_info->value.vec3);
+			break;
+		case GS_SHADER_PARAM_VEC4:
+			gs_effect_set_vec4(param_info->param, &param_info->value.vec4);
+			break;
+		case GS_SHADER_PARAM_TEXTURE:
+			source_for_tex = obs_weak_source_get_source(param_info->source);
+			if (source_for_tex) {
+				// If this texture parameter comes from a source, we need to render that source
+				// to this parameter's specific texrender (`param_info->render`).
+				// This logic is similar to how the main effect handles source textures.
+				const enum gs_color_space preferred_spaces[] = {GS_CS_SRGB, GS_CS_SRGB_16F, GS_CS_709_EXTENDED};
+				const enum gs_color_space space = obs_source_get_color_space(source_for_tex, OBS_COUNTOF(preferred_spaces), preferred_spaces);
+				const enum gs_color_format format = gs_get_format_from_space(space);
+
+				if (!param_info->render || gs_texrender_get_format(param_info->render) != format) {
+					if(param_info->render) gs_texrender_destroy(param_info->render);
+					param_info->render = gs_texrender_create(format, GS_ZS_NONE);
+				} else {
+					gs_texrender_reset(param_info->render);
+				}
+
+				uint32_t base_width = obs_source_get_base_width(source_for_tex);
+				uint32_t base_height = obs_source_get_base_height(source_for_tex);
+
+				if (base_width > 0 && base_height > 0 && gs_texrender_begin_with_color_space(param_info->render, base_width, base_height, space)) {
+					gs_blend_state_push();
+					gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Typically non-premultiplied for shader inputs
+
+					struct vec4 clear_color; vec4_zero(&clear_color);
+					gs_clear(GS_CLEAR_COLOR, &clear_color, 0.0f, 0);
+					gs_ortho(0.0f, (float)base_width, 0.0f, (float)base_height, -100.0f, 100.0f);
+
+					uint32_t flags = obs_source_get_output_flags(source_for_tex);
+					if (!(flags & OBS_SOURCE_CUSTOM_DRAW) && !(flags & OBS_SOURCE_ASYNC))
+						obs_source_default_render(source_for_tex);
+					else
+						obs_source_video_render(source_for_tex);
+
+					gs_texrender_end(param_info->render);
+					gs_blend_state_pop();
+					gs_effect_set_texture(param_info->param, gs_texrender_get_texture(param_info->render));
+				} else {
+					gs_effect_set_texture(param_info->param, NULL); // Failed to render source
+				}
+				obs_source_release(source_for_tex);
+			} else if (param_info->image && param_info->image->texture) {
+				gs_effect_set_texture(param_info->param, param_info->image->texture);
+			} else {
+				// No source, no image file, set texture to NULL or a default placeholder if available
+				gs_effect_set_texture(param_info->param, NULL);
+			}
+			break;
+		case GS_SHADER_PARAM_STRING:
+			gs_effect_set_val(param_info->param, (param_info->value.string ? param_info->value.string : ""), gs_effect_get_val_size(param_info->param));
+			break;
+		default:
+			// Should not happen
+			break;
+		}
+	}
+}
+
 
 static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
 {

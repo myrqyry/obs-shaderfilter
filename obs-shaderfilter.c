@@ -28,66 +28,85 @@
 
 #include "version.h"
 
-// Forward declarations for OBS callbacks
-static const char *shader_filter_get_name(void *unused);
-static void *shader_filter_create(obs_data_t *settings, obs_source_t *source);
-static void shader_filter_destroy(void *data);
-static void shader_filter_update(void *data, obs_data_t *settings);
-static void shader_filter_defaults(obs_data_t *settings);
-static obs_properties_t *shader_filter_properties(void *data);
-static void shader_filter_tick(void *data, float seconds);
-static void shader_filter_render(void *data, gs_effect_t *effect);
-static uint32_t shader_filter_getwidth(void *data);
-static uint32_t shader_filter_getheight(void *data);
-static enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces);
-static void shader_filter_activate(void *data);
-static void shader_filter_deactivate(void *data);
-static void shader_filter_show(void *data);
-static void shader_filter_hide(void *data);
+// Moved struct definitions before forward declarations to resolve type issues
 
-static const char *shader_transition_get_name(void *unused);
-static void *shader_transition_create(obs_data_t *settings, obs_source_t *source);
-static void shader_transition_defaults(obs_data_t *settings);
-static bool shader_transition_audio_render(void *data, uint64_t *ts_out, struct obs_source_audio_mix *audio, uint32_t mixers, size_t channels, size_t sample_rate);
-static void shader_transition_video_render(void *data, gs_effect_t *effect);
-static enum gs_color_space shader_transition_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces);
+struct effect_param_data {
+	struct dstr name;
+	struct dstr display_name;
+	struct dstr widget_type;
+	struct dstr group;
+	struct dstr path;
+	DARRAY(int) option_values;
+	DARRAY(struct dstr) option_labels;
+	enum gs_shader_param_type type;
+	gs_eparam_t *param;
+	gs_image_file_t *image;
+	gs_texrender_t *render;
+	obs_weak_source_t *source;
+	union { long long i; double f; char *string; struct vec2 vec2; struct vec3 vec3; struct vec4 vec4; } value;
+	union { long long i; double f; char *string; struct vec2 vec2; struct vec3 vec3; struct vec4 vec4; } default_value;
+	bool has_default;
+	char *label;
+	union { long long i; double f; } minimum;
+	union { long long i; double f; } maximum;
+	union { long long i; double f; } step;
+};
 
-// Forward declarations for static helper functions if they are used before definition
-// OBS UI callbacks
-static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
-static bool shader_filter_text_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
-static bool shader_filter_file_name_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
-static bool shader_filter_reload_effect_clicked(obs_properties_t *props, obs_property_t *property, void *data);
-static bool shader_filter_convert(obs_properties_t *props, obs_property_t *property, void *data);
-static bool shader_filter_pass_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass specific file change
-static bool shader_filter_pass_enabled_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass enable/disable
+// Forward declare shader_filter_data so shader_pass_info can use it if needed,
+// though in this case shader_pass_info is self-contained or uses effect_param_data.
+// This is not strictly necessary here as shader_pass_info is defined within shader_filter_data,
+// but good practice if they were separate and cross-referencing.
+struct shader_filter_data;
 
-// Core logic helpers
-static char *load_shader_from_file(const char *file_name);
-static void shader_filter_clear_params(struct shader_filter_data *filter); // For main effect
-static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info); // For pass effects
-static void load_output_effect(struct shader_filter_data *filter);
-static void shader_filter_reload_effect(struct shader_filter_data *filter); // For main effect
-static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, int pass_index, obs_data_t *settings); // For pass effects
-static void shader_filter_set_pass_effect_params(struct shader_filter_data *filter, int pass_idx);
-static void get_input_source(struct shader_filter_data *filter);
-static void draw_output(struct shader_filter_data *filter);
-static void render_shader(struct shader_filter_data *filter, float f, obs_source_t *filter_to);
-static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render);
-static bool is_var_char(char ch);
-static char *str_replace(const char *str, const char *find, const char *replace);
-static bool add_source_to_list(void *data, obs_source_t *source);
-static unsigned int rand_interval(unsigned int min, unsigned int max);
+#define MAX_SHADER_PASSES 3
+struct shader_pass_info {
+	gs_effect_t *effect;
+	struct dstr effect_file_path;
+	bool enabled;
+	DARRAY(struct effect_param_data) stored_param_list;
+	struct dstr error_string; // For per-pass error UI
+};
 
-// UI generation helper
-static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
-                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list);
+struct shader_filter_data {
+	obs_source_t *context;
+	gs_effect_t *effect;
+	gs_effect_t *output_effect;
+	gs_texrender_t *input_texrender, *previous_input_texrender, *output_texrender, *previous_output_texrender;
+	gs_eparam_t *param_output_image;
+	bool reload_effect;
+	struct dstr last_path;
+	bool last_from_file;
+	bool transition, transitioning, prev_transitioning;
+	bool use_pm_alpha, output_rendered, input_rendered;
+	float shader_start_time, shader_show_time, shader_active_time, shader_enable_time;
+	bool enabled;
+	gs_eparam_t *param_uv_offset, *param_uv_scale, *param_uv_pixel_interval, *param_uv_size;
+	gs_eparam_t *param_current_time_ms, *param_current_time_sec, *param_current_time_min, *param_current_time_hour;
+	gs_eparam_t *param_current_time_day_of_week, *param_current_time_day_of_month, *param_current_time_month, *param_current_time_day_of_year, *param_current_time_year;
+	gs_eparam_t *param_elapsed_time, *param_elapsed_time_start, *param_elapsed_time_show, *param_elapsed_time_active, *param_elapsed_time_enable;
+	gs_eparam_t *param_loops, *param_loop_second, *param_local_time;
+	gs_eparam_t *param_rand_f, *param_rand_instance_f, *param_rand_activation_f;
+	gs_eparam_t *param_image, *param_previous_image, *param_image_a, *param_image_b;
+	gs_eparam_t *param_transition_time, *param_convert_linear, *param_previous_output;
+	int expand_left, expand_right, expand_top, expand_bottom;
+	int total_width, total_height;
+	bool no_repeat, rendering;
+	struct vec2 uv_offset_val, uv_scale_val, uv_pixel_interval_val, uv_size_val;
+	float elapsed_time_val, elapsed_time_loop_val, local_time_val, rand_f_val, rand_instance_f_val, rand_activation_f_val;
+	int loops_val;
+	DARRAY(struct effect_param_data) stored_param_list; // For main effect
+	struct shader_pass_info passes[MAX_SHADER_PASSES];
+	int num_active_passes;
+	gs_texrender_t *intermediate_texrender_A, *intermediate_texrender_B;
+	struct dstr global_error_string; // For global/main effect errors
+};
 
 
+// Global variables
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
-
 #define nullptr ((void *)0)
 
+// Effect templates
 static const char *effect_template_begin = "\
 uniform float4x4 ViewProj;\n\
 uniform texture2d image;\n\
@@ -176,69 +195,60 @@ technique Draw\n\
 }\n";
 
 
-struct effect_param_data {
-	struct dstr name;
-	struct dstr display_name;
-	struct dstr widget_type;
-	struct dstr group;
-	struct dstr path;
-	DARRAY(int) option_values;
-	DARRAY(struct dstr) option_labels;
-	enum gs_shader_param_type type;
-	gs_eparam_t *param;
-	gs_image_file_t *image;
-	gs_texrender_t *render;
-	obs_weak_source_t *source;
-	union { long long i; double f; char *string; struct vec2 vec2; struct vec3 vec3; struct vec4 vec4; } value;
-	union { long long i; double f; char *string; struct vec2 vec2; struct vec3 vec3; struct vec4 vec4; } default_value;
-	bool has_default;
-	char *label;
-	union { long long i; double f; } minimum;
-	union { long long i; double f; } maximum;
-	union { long long i; double f; } step;
-};
+// Forward declarations for OBS callbacks
+static const char *shader_filter_get_name(void *unused);
+static void *shader_filter_create(obs_data_t *settings, obs_source_t *source);
+static void shader_filter_destroy(void *data);
+static void shader_filter_update(void *data, obs_data_t *settings);
+static void shader_filter_defaults(obs_data_t *settings);
+static obs_properties_t *shader_filter_properties(void *data);
+static void shader_filter_tick(void *data, float seconds);
+static void shader_filter_render(void *data, gs_effect_t *effect);
+static uint32_t shader_filter_getwidth(void *data);
+static uint32_t shader_filter_getheight(void *data);
+static enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces);
+static void shader_filter_activate(void *data);
+static void shader_filter_deactivate(void *data);
+static void shader_filter_show(void *data);
+static void shader_filter_hide(void *data);
 
-struct shader_filter_data {
-	obs_source_t *context;
-	gs_effect_t *effect;
-	gs_effect_t *output_effect;
-	gs_texrender_t *input_texrender, *previous_input_texrender, *output_texrender, *previous_output_texrender;
-	gs_eparam_t *param_output_image;
-	bool reload_effect;
-	struct dstr last_path;
-	bool last_from_file;
-	bool transition, transitioning, prev_transitioning;
-	bool use_pm_alpha, output_rendered, input_rendered;
-	float shader_start_time, shader_show_time, shader_active_time, shader_enable_time;
-	bool enabled;
-	gs_eparam_t *param_uv_offset, *param_uv_scale, *param_uv_pixel_interval, *param_uv_size;
-	// ... other gs_eparam_t members
-	gs_eparam_t *param_current_time_ms, *param_current_time_sec, *param_current_time_min, *param_current_time_hour;
-	gs_eparam_t *param_current_time_day_of_week, *param_current_time_day_of_month, *param_current_time_month, *param_current_time_day_of_year, *param_current_time_year;
-	gs_eparam_t *param_elapsed_time, *param_elapsed_time_start, *param_elapsed_time_show, *param_elapsed_time_active, *param_elapsed_time_enable;
-	gs_eparam_t *param_loops, *param_loop_second, *param_local_time;
-	gs_eparam_t *param_rand_f, *param_rand_instance_f, *param_rand_activation_f;
-	gs_eparam_t *param_image, *param_previous_image, *param_image_a, *param_image_b;
-	gs_eparam_t *param_transition_time, *param_convert_linear, *param_previous_output;
-	int expand_left, expand_right, expand_top, expand_bottom;
-	int total_width, total_height;
-	bool no_repeat, rendering;
-	struct vec2 uv_offset_val, uv_scale_val, uv_pixel_interval_val, uv_size_val;
-	float elapsed_time_val, elapsed_time_loop_val, local_time_val, rand_f_val, rand_instance_f_val, rand_activation_f_val;
-	int loops_val;
-	DARRAY(struct effect_param_data) stored_param_list; // For main effect
-#define MAX_SHADER_PASSES 3
-	struct shader_pass_info {
-		gs_effect_t *effect;
-		struct dstr effect_file_path;
-		bool enabled;
-		DARRAY(struct effect_param_data) stored_param_list;
-		struct dstr error_string; // For per-pass error UI
-	} passes[MAX_SHADER_PASSES];
-	int num_active_passes;
-	gs_texrender_t *intermediate_texrender_A, *intermediate_texrender_B;
-	struct dstr global_error_string; // For global/main effect errors
-};
+static const char *shader_transition_get_name(void *unused);
+static void *shader_transition_create(obs_data_t *settings, obs_source_t *source);
+static void shader_transition_defaults(obs_data_t *settings);
+static bool shader_transition_audio_render(void *data, uint64_t *ts_out, struct obs_source_audio_mix *audio, uint32_t mixers, size_t channels, size_t sample_rate);
+static void shader_transition_video_render(void *data, gs_effect_t *effect);
+static enum gs_color_space shader_transition_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces);
+
+// Forward declarations for static helper functions if they are used before definition
+// OBS UI callbacks
+static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
+static bool shader_filter_text_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
+static bool shader_filter_file_name_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings);
+static bool shader_filter_reload_effect_clicked(obs_properties_t *props, obs_property_t *property, void *data);
+static bool shader_filter_convert(obs_properties_t *props, obs_property_t *property, void *data);
+static bool shader_filter_pass_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass specific file change
+static bool shader_filter_pass_enabled_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass enable/disable
+
+// Core logic helpers
+static char *load_shader_from_file(const char *file_name);
+static void shader_filter_clear_params(struct shader_filter_data *filter); // For main effect
+static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info); // For pass effects
+static void load_output_effect(struct shader_filter_data *filter);
+static void shader_filter_reload_effect(struct shader_filter_data *filter); // For main effect
+static bool shader_filter_reload_pass_effect(struct shader_filter_data *filter, int pass_index, obs_data_t *settings); // For pass effects
+static void shader_filter_set_pass_effect_params(struct shader_filter_data *filter, int pass_idx);
+static void get_input_source(struct shader_filter_data *filter);
+static void draw_output(struct shader_filter_data *filter);
+static void render_shader(struct shader_filter_data *filter, float f, obs_source_t *filter_to);
+static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render);
+static bool is_var_char(char ch);
+static char *str_replace(const char *str, const char *find, const char *replace);
+static bool add_source_to_list(void *data, obs_source_t *source);
+static unsigned int rand_interval(unsigned int min, unsigned int max);
+
+// UI generation helper
+static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
+                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list);
 
 // --- START OF STATIC HELPER FUNCTION DEFINITIONS ---
 
@@ -467,11 +477,11 @@ static void shader_filter_reload_effect_internal(gs_effect_t **effect_ptr,
             da_free(param->option_labels);
             continue;
         }
-        da_push_back(temp_list, *param); // Copies the struct
+        // darray_push_back expects a pointer to the item
+        darray_push_back(sizeof(struct effect_param_data), &temp_list, param);
     }
-    // Replace original list with filtered list
-    da_free(*param_list); // Free the old darray itself (not its contents, which were moved or freed)
-    *param_list = temp_list; // Steal the darray from temp_list
+    // Move contents from temp_list to *param_list
+    da_move(*param_list, temp_list);
 }
 
 
@@ -784,7 +794,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				p = obs_properties_add_list(target_props, prefixed_setting_name, display_name, OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 				obs_property_list_add_string(p, "", ""); // Add an empty option
                 obs_enum_sources(add_source_to_list, p);
-			} else if (param->widget_type.array && strcmp(param_widget_type.array, "image_file") == 0) {
+			} else if (param->widget_type.array && strcmp(param->widget_type.array, "image_file") == 0) { // Corrected param_widget_type to param->widget_type
                  // TODO: Determine base path for file dialog if necessary
                 char *default_path_str = "";
                 if (param->path.array && param->path.len > 0) default_path_str = param->path.array;
@@ -981,9 +991,9 @@ static void draw_output(struct shader_filter_data *filter) {
 
 	gs_blend_state_push();
 	if (filter->use_pm_alpha)
-		gs_blend_function(GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA); // Pre-multiplied alpha
+		gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA); // Pre-multiplied alpha
 	else
-		gs_blend_function_separate(GS_BLEND_SRCALPHA, GS_BLEND_INV_SRCALPHA, GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA); // Standard alpha
+		gs_blend_function_separate(GS_BLEND_SRCALPHA, GS_BLEND_INVSRCALPHA, GS_BLEND_ONE, GS_BLEND_INVSRCALPHA); // Standard alpha
 
 	gs_enable_blending(true);
 	while (gs_effect_loop(filter->output_effect, "Draw")) {
@@ -1785,8 +1795,8 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
                 gs_effect_set_texture_srgb(filter->param_output_image, gs_texrender_get_texture(filter->input_texrender));
 
                 gs_blend_state_push();
-                if (filter->use_pm_alpha) gs_blend_function(GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA);
-                else gs_blend_function_separate(GS_BLEND_SRCALPHA, GS_BLEND_INV_SRCALPHA, GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA);
+                if (filter->use_pm_alpha) gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+                else gs_blend_function_separate(GS_BLEND_SRCALPHA, GS_BLEND_INVSRCALPHA, GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
                 gs_enable_blending(true);
 
                 while (gs_effect_loop(filter->output_effect, "Draw")) {

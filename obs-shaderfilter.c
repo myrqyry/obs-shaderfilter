@@ -5,6 +5,7 @@
 #include <graphics/graphics.h>
 #include <graphics/image-file.h>
 #include <graphics/math-extra.h>
+#include <obs-paths.h>      // For os_get_abs_path_ptr
 
 #include <util/base.h>
 #include <util/dstr.h>

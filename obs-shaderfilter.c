@@ -319,7 +319,7 @@ static char *load_shader_from_file(const char *file_name) {
 				end_char--;
 			}
 
-			char *base_path = os_get_path_ptr(file_name);
+			char *base_path = os_get_path_ptr(file_name); // Using os_get_path_ptr
 			struct dstr full_include_path;
 			dstr_init(&full_include_path);
 			dstr_catf(&full_include_path, "%s/%s", base_path, include_file_name);
@@ -366,7 +366,7 @@ static void shader_filter_clear_params_internal(DARRAY(struct effect_param_data)
         param->source = NULL;
         param->render = NULL; // Not owned by param_data
 	}
-	da_free(*param_list);
+	darray_free(&(*param_list).da); // Use direct darray_free
 }
 
 
@@ -447,7 +447,7 @@ static void shader_filter_reload_effect_internal(gs_effect_t **effect_ptr,
     if(error_dstr) dstr_clear(error_dstr); // Clear any previous error message if successful
 
 
-	da_init(*param_list);
+	darray_init(&(*param_list).da); // Use direct darray_init
 	gs_effect_get_parameters(*effect_ptr, param_list);
 
     // Filter out known global/internal parameters
@@ -987,7 +987,7 @@ static void draw_output(struct shader_filter_data *filter) {
 	gs_viewport_push();
 	gs_projection_push();
 	gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
-	gs_set_2d_mode((float)width, (float)height); // Custom helper if it exists, or direct gs_set_viewport
+	gs_set_2d_mode(); // gs_set_2d_mode takes no arguments
 
 	gs_blend_state_push();
 	if (filter->use_pm_alpha)
@@ -1907,3 +1907,5 @@ void obs_module_post_load()
 	}
 	calldata_free(&cd);
 }
+
+[end of obs-shaderfilter.c]

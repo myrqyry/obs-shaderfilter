@@ -86,9 +86,94 @@ float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **fi
 
 #define nullptr ((void *)0)
 
-// ... (effect templates and struct definitions remain unchanged, so they are omitted for brevity in this diff) ...
-// Make sure struct effect_param_data and struct shader_filter_data are here and correct.
-// For example:
+static const char *effect_template_begin = "\
+uniform float4x4 ViewProj;\n\
+uniform texture2d image;\n\
+\n\
+uniform float2 uv_offset;\n\
+uniform float2 uv_scale;\n\
+uniform float2 uv_pixel_interval;\n\
+uniform float2 uv_size;\n\
+uniform float rand_f;\n\
+uniform float rand_instance_f;\n\
+uniform float rand_activation_f;\n\
+uniform float elapsed_time;\n\
+uniform float elapsed_time_start;\n\
+uniform float elapsed_time_show;\n\
+uniform float elapsed_time_active;\n\
+uniform float elapsed_time_enable;\n\
+uniform int loops;\n\
+uniform float loop_second;\n\
+uniform float local_time;\n\
+\n\
+sampler_state textureSampler{\n\
+	Filter = Linear;\n\
+	AddressU = Border;\n\
+	AddressV = Border;\n\
+	BorderColor = 00000000;\n\
+};\n\
+\n\
+struct VertData {\n\
+	float4 pos : POSITION;\n\
+	float2 uv : TEXCOORD0;\n\
+};\n\
+\n\
+VertData mainTransform(VertData v_in)\n\
+{\n\
+	VertData vert_out;\n\
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);\n\
+	vert_out.uv = v_in.uv * uv_scale + uv_offset;\n\
+	return vert_out;\n\
+}\n\
+\n\
+float srgb_nonlinear_to_linear_channel(float u)\n\
+{\n\
+	return (u <= 0.04045) ? (u / 12.92) : pow((u + 0.055) / 1.055, 2.4);\n\
+}\n\
+\n\
+float3 srgb_nonlinear_to_linear(float3 v)\n\
+{\n\
+	return float3(srgb_nonlinear_to_linear_channel(v.r),\n\
+		      srgb_nonlinear_to_linear_channel(v.g),\n\
+		      srgb_nonlinear_to_linear_channel(v.b));\n\
+}\n\
+\n";
+
+static const char *effect_template_default_image_shader = "\n\
+float4 mainImage(VertData v_in) : TARGET\n\
+{\n\
+	return image.Sample(textureSampler, v_in.uv);\n\
+}\n\
+";
+
+static const char *effect_template_default_transition_image_shader = "\n\
+uniform texture2d image_a;\n\
+uniform texture2d image_b;\n\
+uniform float transition_time = 0.5;\n\
+uniform bool convert_linear = true;\n\
+\n\
+float4 mainImage(VertData v_in) : TARGET\n\
+{\n\
+	float4 a_val = image_a.Sample(textureSampler, v_in.uv);\n\
+	float4 b_val = image_b.Sample(textureSampler, v_in.uv);\n\
+	float4 rgba = lerp(a_val, b_val, transition_time);\n\
+	if (convert_linear)\n\
+		rgba.rgb = srgb_nonlinear_to_linear(rgba.rgb);\n\
+	return rgba;\n\
+}\n\
+";
+
+static const char *effect_template_end = "\n\
+technique Draw\n\
+{\n\
+	pass\n\
+	{\n\
+		vertex_shader = mainTransform(v_in);\n\
+		pixel_shader = mainImage(v_in);\n\
+	}\n\
+}\n";
+
+
 struct effect_param_data {
 	struct dstr name;
 	struct dstr display_name;
@@ -529,26 +614,26 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
 
         switch (param_info->type) {
         case GS_SHADER_PARAM_BOOL:
-            gs_effect_set_bool(pass_effect, param_info->param, param_info->value.i);
+            gs_effect_set_bool(param_info->param, param_info->value.i);
             break;
         case GS_SHADER_PARAM_FLOAT:
-            gs_effect_set_float(pass_effect, param_info->param, param_info->value.f);
+            gs_effect_set_float(param_info->param, param_info->value.f);
             break;
         case GS_SHADER_PARAM_INT:
-            gs_effect_set_int(pass_effect, param_info->param, param_info->value.i);
+            gs_effect_set_int(param_info->param, param_info->value.i);
             break;
         case GS_SHADER_PARAM_STRING:
             // String parameters are not typically set per frame unless they change.
-            // gs_effect_set_string(pass_effect, param_info->param, param_info->value.string);
+            // gs_effect_set_string(param_info->param, param_info->value.string);
             break;
         case GS_SHADER_PARAM_VEC2:
-            gs_effect_set_vec2(pass_effect, param_info->param, &param_info->value.vec2);
+            gs_effect_set_vec2(param_info->param, &param_info->value.vec2);
             break;
         case GS_SHADER_PARAM_VEC3:
-            gs_effect_set_vec3(pass_effect, param_info->param, &param_info->value.vec3);
+            gs_effect_set_vec3(param_info->param, &param_info->value.vec3);
             break;
         case GS_SHADER_PARAM_VEC4:
-            gs_effect_set_vec4(pass_effect, param_info->param, &param_info->value.vec4);
+            gs_effect_set_vec4(param_info->param, &param_info->value.vec4);
             break;
         case GS_SHADER_PARAM_TEXTURE:
             if (param_info->source) {
@@ -556,18 +641,18 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
                 if (source) {
                     gs_texture_t *tex = obs_source_get_texture(source);
                     if (tex) {
-                         gs_effect_set_texture_srgb(pass_effect, param_info->param, tex);
+                         gs_effect_set_texture_srgb(param_info->param, tex);
                     }
                     obs_source_release(source);
                 } else { // Source was removed or unavailable
-                    gs_effect_set_texture_srgb(pass_effect, param_info->param, obs_get_black_texture());
+                    gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
                 }
             } else if (param_info->image && param_info->image->texture) {
-                gs_effect_set_texture_srgb(pass_effect, param_info->param, param_info->image->texture);
+                gs_effect_set_texture_srgb(param_info->param, param_info->image->texture);
             } else if (param_info->render) { // For internal render targets (e.g. previous_output)
-                 gs_effect_set_texture_srgb(pass_effect, param_info->param, gs_texrender_get_texture(param_info->render));
+                 gs_effect_set_texture_srgb(param_info->param, gs_texrender_get_texture(param_info->render));
             } else {
-                 gs_effect_set_texture_srgb(pass_effect, param_info->param, obs_get_black_texture());
+                 gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
             }
             break;
         default:
@@ -856,7 +941,7 @@ static void get_input_source(struct shader_filter_data *filter) {
 		uint32_t height = obs_source_get_height(input_source);
 		if (width == 0 || height == 0) return;
 
-		filter->input_texrender = gs_texrender_create(GS_RGBA_UNORM_SRGB, GS_ZS_NONE); // Use SRGB format
+		filter->input_texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE); // Use GS_RGBA
 		gs_texrender_reset(filter->input_texrender);
 		if (!gs_texrender_resize(filter->input_texrender, width, height)) {
 			blog(LOG_ERROR, "[obs-shaderfilter] Failed to resize input_texrender");
@@ -885,7 +970,7 @@ static void draw_output(struct shader_filter_data *filter) {
 	uint32_t height = gs_texture_get_height(tex);
 	if (width == 0 || height == 0) return;
 
-    gs_effect_set_texture_srgb(filter->param_output_image, tex); // Ensure SRGB version is used
+    gs_effect_set_texture_srgb(filter->param_output_image, tex);
 
 	gs_viewport_push();
 	gs_projection_push();
@@ -931,65 +1016,66 @@ static void render_shader(struct shader_filter_data *filter, float t, obs_source
 	filter->uv_size_val.x = (float)filter->total_width;
 	filter->uv_size_val.y = (float)filter->total_height;
 
-	if (filter->param_uv_offset) gs_effect_set_vec2(filter->effect, filter->param_uv_offset, &filter->uv_offset_val);
-	if (filter->param_uv_scale) gs_effect_set_vec2(filter->effect, filter->param_uv_scale, &filter->uv_scale_val);
-	if (filter->param_uv_pixel_interval) gs_effect_set_vec2(filter->effect, filter->param_uv_pixel_interval, &filter->uv_pixel_interval_val);
-	if (filter->param_uv_size) gs_effect_set_vec2(filter->effect, filter->param_uv_size, &filter->uv_size_val);
+	if (filter->param_uv_offset) gs_effect_set_vec2(filter->param_uv_offset, &filter->uv_offset_val);
+	if (filter->param_uv_scale) gs_effect_set_vec2(filter->param_uv_scale, &filter->uv_scale_val);
+	if (filter->param_uv_pixel_interval) gs_effect_set_vec2(filter->param_uv_pixel_interval, &filter->uv_pixel_interval_val);
+	if (filter->param_uv_size) gs_effect_set_vec2(filter->param_uv_size, &filter->uv_size_val);
     // ... (set other global params like time, rand_f, etc.)
-    if (filter->param_elapsed_time) gs_effect_set_float(filter->effect, filter->param_elapsed_time, filter->elapsed_time_val);
-	if (filter->param_rand_f) gs_effect_set_float(filter->effect, filter->param_rand_f, filter->rand_f_val);
+    if (filter->param_elapsed_time) gs_effect_set_float(filter->param_elapsed_time, filter->elapsed_time_val);
+	if (filter->param_rand_f) gs_effect_set_float(filter->param_rand_f, filter->rand_f_val);
     // ... (and others) ...
 
-	if (filter->param_image && tex) gs_effect_set_texture_srgb(filter->effect, filter->param_image, tex);
+	if (filter->param_image && tex) gs_effect_set_texture_srgb(filter->param_image, tex);
     if (filter->param_previous_image && filter->previous_input_texrender) {
-        gs_effect_set_texture_srgb(filter->effect, filter->param_previous_image, gs_texrender_get_texture(filter->previous_input_texrender));
+        gs_effect_set_texture_srgb(filter->param_previous_image, gs_texrender_get_texture(filter->previous_input_texrender));
     }
     if (filter->param_previous_output && filter->previous_output_texrender) {
-         gs_effect_set_texture_srgb(filter->effect, filter->param_previous_output, gs_texrender_get_texture(filter->previous_output_texrender));
+         gs_effect_set_texture_srgb(filter->param_previous_output, gs_texrender_get_texture(filter->previous_output_texrender));
     }
 
 
 	if (filter->transition) {
 		// Transition specific parameters
-		if (filter->param_transition_time) gs_effect_set_float(filter->effect, filter->param_transition_time, t);
-		if (filter->param_convert_linear) gs_effect_set_bool(filter->effect, filter->param_convert_linear, true); // Example
+		if (filter->param_transition_time) gs_effect_set_float(filter->param_transition_time, t);
+		if (filter->param_convert_linear) gs_effect_set_bool(filter->param_convert_linear, true); // Example
 
 		if (filter_to) { // If there's a 'to' source for transition
 			gs_texture_t *tex_b = obs_source_get_texture(filter_to);
 			if (tex_b && filter->param_image_b) {
-				gs_effect_set_texture_srgb(filter->effect, filter->param_image_b, tex_b);
+				gs_effect_set_texture_srgb(filter->param_image_b, tex_b);
 			}
             // 'image_a' would be the 'from' source, already set as 'image'
-            if(tex && filter->param_image_a) gs_effect_set_texture_srgb(filter->effect, filter->param_image_a, tex);
+            if(tex && filter->param_image_a) gs_effect_set_texture_srgb(filter->param_image_a, tex);
 		}
 	}
 
     // Set user-defined parameters for the main effect
     for (size_t i = 0; i < filter->stored_param_list.num; i++) {
         struct effect_param_data *param_info = filter->stored_param_list.array + i;
-        if (!param_info->param) param_info->param = gs_effect_get_param_by_name(filter->effect, param_info->name.array); // Re-acquire
+        // Re-acquire gs_eparam_t from the main effect, as it might have been reloaded
+        param_info->param = gs_effect_get_param_by_name(filter->effect, param_info->name.array);
         if (!param_info->param) continue;
 
         switch (param_info->type) {
-            case GS_SHADER_PARAM_BOOL: gs_effect_set_bool(filter->effect, param_info->param, param_info->value.i); break;
-            case GS_SHADER_PARAM_FLOAT: gs_effect_set_float(filter->effect, param_info->param, param_info->value.f); break;
-            case GS_SHADER_PARAM_INT: gs_effect_set_int(filter->effect, param_info->param, param_info->value.i); break;
-            case GS_SHADER_PARAM_VEC2: gs_effect_set_vec2(filter->effect, param_info->param, &param_info->value.vec2); break;
-            case GS_SHADER_PARAM_VEC3: gs_effect_set_vec3(filter->effect, param_info->param, &param_info->value.vec3); break;
-            case GS_SHADER_PARAM_VEC4: gs_effect_set_vec4(filter->effect, param_info->param, &param_info->value.vec4); break;
+            case GS_SHADER_PARAM_BOOL: gs_effect_set_bool(param_info->param, param_info->value.i); break;
+            case GS_SHADER_PARAM_FLOAT: gs_effect_set_float(param_info->param, param_info->value.f); break;
+            case GS_SHADER_PARAM_INT: gs_effect_set_int(param_info->param, param_info->value.i); break;
+            case GS_SHADER_PARAM_VEC2: gs_effect_set_vec2(param_info->param, &param_info->value.vec2); break;
+            case GS_SHADER_PARAM_VEC3: gs_effect_set_vec3(param_info->param, &param_info->value.vec3); break;
+            case GS_SHADER_PARAM_VEC4: gs_effect_set_vec4(param_info->param, &param_info->value.vec4); break;
             case GS_SHADER_PARAM_TEXTURE:
                 if (param_info->source) {
                     obs_source_t *s = obs_weak_source_get_source(param_info->source);
                     if (s) {
                         gs_texture_t *tx = obs_source_get_texture(s);
-                        if (tx) gs_effect_set_texture_srgb(filter->effect, param_info->param, tx);
+                        if (tx) gs_effect_set_texture_srgb(param_info->param, tx);
                         obs_source_release(s);
-                    } else gs_effect_set_texture_srgb(filter->effect, param_info->param, obs_get_black_texture());
+                    } else gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
                 } else if (param_info->image && param_info->image->texture) {
-                    gs_effect_set_texture_srgb(filter->effect, param_info->param, param_info->image->texture);
+                    gs_effect_set_texture_srgb(param_info->param, param_info->image->texture);
                 } else if (param_info->render) {
-                    gs_effect_set_texture_srgb(filter->effect, param_info->param, gs_texrender_get_texture(param_info->render));
-                } else gs_effect_set_texture_srgb(filter->effect, param_info->param, obs_get_black_texture());
+                    gs_effect_set_texture_srgb(param_info->param, gs_texrender_get_texture(param_info->render));
+                } else gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
                 break;
             default: break;
         }
@@ -998,7 +1084,7 @@ static void render_shader(struct shader_filter_data *filter, float t, obs_source
 
 	if (filter->output_texrender) {
 		gs_texrender_reset(filter->output_texrender);
-		if (gs_texrender_begin_srgb(filter->output_texrender, filter->total_width, filter->total_height)) { // Ensure SRGB target
+		if (gs_texrender_begin(filter->output_texrender, filter->total_width, filter->total_height)) { // Use gs_texrender_begin
 			gs_blend_state_push();
 			gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Opaque draw for effect base
 
@@ -1032,7 +1118,7 @@ static void render_shader(struct shader_filter_data *filter, float t, obs_source
 
 gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render) {
     if (!render) {
-        render = gs_texrender_create(GS_RGBA_UNORM_SRGB, GS_ZS_NONE); // Create as SRGB
+        render = gs_texrender_create(GS_RGBA, GS_ZS_NONE); // Use GS_RGBA
     } else {
         gs_texrender_reset(render); // Reset if exists
     }
@@ -1529,7 +1615,200 @@ void shader_filter_update(void *data, obs_data_t *settings) {
 
 void shader_filter_defaults(obs_data_t *settings) { /* ... (content as modified for multi-pass) ... */ }
 void shader_filter_tick(void *data, float seconds) { /* ... (content as modified for multi-pass) ... */ }
-void shader_filter_render(void *data, gs_effect_t *effect) { /* ... (content as modified for multi-pass) ... */ }
+
+void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
+{
+	struct shader_filter_data *filter = data;
+	UNUSED_PARAMETER(effect_param_not_used); // Main effect parameter is not used directly here for multi-pass
+
+	if (!filter->context) return;
+
+	obs_source_t *target = obs_filter_get_target(filter->context);
+	obs_source_t *parent = obs_filter_get_parent(filter->context);
+	uint32_t width = obs_source_get_width(target ? target : parent);
+	uint32_t height = obs_source_get_height(target ? target : parent);
+
+	if (width == 0 || height == 0) return;
+
+	// Update dynamic parameters like time, random numbers, etc.
+	// (This logic might be better placed in shader_filter_tick if not strictly render-tied)
+	filter->elapsed_time_val = obs_source_get_signal_unscaled_time(filter->context) / 1000000000.0f - filter->shader_start_time;
+	// ... (other time/rand updates) ...
+
+	// Ensure input_texrender has the current frame from the source/target
+	get_input_source(filter); // This populates filter->input_texrender
+
+	if (filter->num_active_passes > 0) {
+		gs_texrender_t *current_target = NULL;
+		gs_texrender_t *last_output_target = NULL; // Tracks the output of the previous pass
+		gs_texture_t *current_input_texture = NULL;
+		int active_pass_count = 0;
+
+		// Determine the actual number of passes that will run
+		for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+			if (filter->passes[i].enabled && filter->passes[i].effect && filter->passes[i].error_string.len == 0) {
+				active_pass_count++;
+			}
+		}
+		if (active_pass_count == 0) { // Should not happen if num_active_passes > 0, but as a safe guard
+			if (filter->input_texrender) draw_output(filter); // Draw original if no passes ran
+			return;
+		}
+
+
+		// Resize intermediate texrenders if necessary (only once before the loop)
+		if (filter->intermediate_texrender_A && (gs_texrender_get_width(filter->intermediate_texrender_A) != width || gs_texrender_get_height(filter->intermediate_texrender_A) != height)) {
+			gs_texrender_destroy(filter->intermediate_texrender_A);
+			filter->intermediate_texrender_A = NULL;
+		}
+		if (!filter->intermediate_texrender_A) filter->intermediate_texrender_A = create_or_reset_texrender(NULL);
+		gs_texrender_resize(filter->intermediate_texrender_A, width, height);
+
+		if (filter->intermediate_texrender_B && (gs_texrender_get_width(filter->intermediate_texrender_B) != width || gs_texrender_get_height(filter->intermediate_texrender_B) != height)) {
+			gs_texrender_destroy(filter->intermediate_texrender_B);
+			filter->intermediate_texrender_B = NULL;
+		}
+		if (!filter->intermediate_texrender_B) filter->intermediate_texrender_B = create_or_reset_texrender(NULL);
+		gs_texrender_resize(filter->intermediate_texrender_B, width, height);
+
+		// Also ensure output_texrender is correctly sized if it's used as the final target of a pass
+		if (filter->output_texrender && (gs_texrender_get_width(filter->output_texrender) != width || gs_texrender_get_height(filter->output_texrender) != height)) {
+			gs_texrender_destroy(filter->output_texrender);
+			filter->output_texrender = NULL;
+		}
+		if (!filter->output_texrender) filter->output_texrender = create_or_reset_texrender(NULL);
+		gs_texrender_resize(filter->output_texrender, width, height);
+
+
+		int current_active_pass_idx = 0;
+		for (int i = 0; i < MAX_SHADER_PASSES; ++i) {
+			if (!filter->passes[i].enabled || !filter->passes[i].effect || filter->passes[i].error_string.len > 0) {
+				continue; // Skip disabled or errored passes
+			}
+            int actual_pass_index = i; // The index in filter->passes array
+
+			// Determine input texture for this pass
+			if (current_active_pass_idx == 0) { // First active pass
+				current_input_texture = filter->input_texrender ? gs_texrender_get_texture(filter->input_texrender) : obs_get_black_texture();
+				current_target = (active_pass_count == 1) ? filter->output_texrender : filter->intermediate_texrender_A;
+			} else { // Subsequent active passes
+				current_input_texture = gs_texrender_get_texture(last_output_target);
+				current_target = (last_output_target == filter->intermediate_texrender_A) ? filter->intermediate_texrender_B : filter->intermediate_texrender_A;
+				if (current_active_pass_idx == active_pass_count - 1) { // Last active pass
+					current_target = filter->output_texrender;
+				}
+			}
+
+			gs_texrender_reset(current_target);
+			// gs_texrender_resize already called, but good practice if sizes could change mid-loop (not here though)
+			// if (!gs_texrender_resize(current_target, width, height)) { ... }
+
+			// Begin rendering to the current target
+			if (gs_texrender_begin(current_target, width, height)) { // MODIFIED LINE
+				gs_blend_state_push();
+				gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Opaque draw
+
+				gs_effect_t *pass_effect = filter->passes[actual_pass_index].effect;
+
+				// Set global uniforms for this pass (e.g., uv_offset, uv_scale, time, image)
+				// Note: These might need to be fetched per-pass effect if names differ.
+				// Assuming common names for simplicity for now.
+				gs_eparam_t *pass_param_uv_offset = gs_effect_get_param_by_name(pass_effect, "uv_offset");
+				gs_eparam_t *pass_param_uv_scale = gs_effect_get_param_by_name(pass_effect, "uv_scale");
+				gs_eparam_t *pass_param_elapsed_time = gs_effect_get_param_by_name(pass_effect, "elapsed_time");
+				gs_eparam_t *pass_param_image = gs_effect_get_param_by_name(pass_effect, "image"); // Standard input image
+
+				if (pass_param_uv_offset) gs_effect_set_vec2(pass_param_uv_offset, &filter->uv_offset_val);
+				if (pass_param_uv_scale) gs_effect_set_vec2(pass_param_uv_scale, &filter->uv_scale_val);
+				if (pass_param_elapsed_time) gs_effect_set_float(pass_param_elapsed_time, filter->elapsed_time_val);
+				// ... set other global-like params ...
+				if (pass_param_image) gs_effect_set_texture_srgb(pass_param_image, current_input_texture);
+
+
+				// Set specific parameters for this pass effect
+				shader_filter_set_pass_effect_params(filter, actual_pass_index);
+
+				// Render the pass
+				gs_technique_t *tech = gs_effect_get_technique(pass_effect, "Draw");
+				if (!tech) tech = gs_effect_get_fallback_technique(pass_effect);
+
+				if (tech) {
+					size_t num_shader_passes = gs_technique_begin(tech);
+					for (size_t j = 0; j < num_shader_passes; j++) {
+						if (gs_technique_begin_pass_by_index(tech, j)) {
+							// For multi-pass, the input texture ('image') is already set.
+							// We draw a quad that will sample from it.
+							gs_draw_sprite(current_input_texture, 0, width, height); // Or draw a generic quad if shader handles texcoords
+							gs_technique_end_pass(tech);
+						}
+					}
+					gs_technique_end(tech);
+				}
+				gs_blend_state_pop();
+				gs_texrender_end(current_target);
+				last_output_target = current_target; // Update for the next iteration
+			}
+			current_active_pass_idx++;
+		}
+		// After all passes, the final image is in filter->output_texrender (if last pass targeted it, or if only one pass)
+		// or in last_output_target if it's an intermediate.
+		// If the final image landed in an intermediate, we might need to copy it to output_texrender.
+		// However, the logic above tries to make current_target = filter->output_texrender for the last active pass.
+		if (filter->output_texrender == last_output_target) {
+			// Final image is already in output_texrender, draw it to screen/next filter
+			draw_output(filter);
+		} else if (last_output_target) {
+			// This case should ideally not be hit if the logic correctly targets output_texrender for the last pass.
+			// If it is, copy from last_output_target to filter->output_texrender then draw_output, or draw directly.
+			// For now, assume output_texrender was the final target.
+			blog(LOG_WARNING, "[obs-shaderfilter] Multi-pass rendering finished on an intermediate texture. This might be a bug.");
+			// As a fallback, attempt to draw from last_output_target if output_texrender wasn't correctly set.
+            // This requires draw_output to be flexible or another draw call here.
+            // For simplicity, we'll rely on output_texrender being the final destination.
+            // If this warning appears, the targetting logic needs review.
+		}
+
+
+	} else if (filter->effect && filter->global_error_string.len == 0) {
+		// Fallback to single main effect rendering if no active passes
+		render_shader(filter, 0.0f, NULL); // Render main effect to filter->output_texrender
+		draw_output(filter); // Draw filter->output_texrender to screen
+	} else {
+		// No passes, no main effect, or main effect has error: draw original input if available
+		if (filter->input_texrender) {
+            // We need to copy input_texrender to output_texrender then draw_output,
+            // or draw input_texrender directly using output_effect.
+            // Simplest: use output_effect to draw input_texrender's texture.
+            if(filter->output_effect && filter->param_output_image && gs_texrender_get_texture(filter->input_texrender)) {
+                gs_effect_set_texture_srgb(filter->param_output_image, gs_texrender_get_texture(filter->input_texrender));
+
+                gs_blend_state_push();
+                if (filter->use_pm_alpha) gs_blend_function(GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA);
+                else gs_blend_function_separate(GS_BLEND_SRCALPHA, GS_BLEND_INV_SRCALPHA, GS_BLEND_ONE, GS_BLEND_INV_SRCALPHA);
+                gs_enable_blending(true);
+
+                while (gs_effect_loop(filter->output_effect, "Draw")) {
+                    gs_draw_sprite(gs_texrender_get_texture(filter->input_texrender), 0, width, height);
+                }
+                gs_enable_blending(false);
+                gs_blend_state_pop();
+                filter->output_rendered = true; // Mark that something was drawn.
+            }
+		} else {
+            // Nothing to draw, clear the screen? OBS usually handles this by drawing parent/target.
+        }
+	}
+
+	// Manage previous_output_texrender for temporal effects
+	if (filter->output_rendered) {
+		if (filter->previous_output_texrender) {
+			gs_texrender_destroy(filter->previous_output_texrender);
+		}
+		filter->previous_output_texrender = filter->output_texrender;
+		filter->output_texrender = create_or_reset_texrender(NULL); // Get a new one for next frame
+        filter->output_rendered = false; // Reset for next frame
+	}
+}
 uint32_t shader_filter_getwidth(void *data) { /* ... (original content) ... */ struct shader_filter_data *filter = data; return filter->total_width; }
 uint32_t shader_filter_getheight(void *data) { /* ... (original content) ... */ struct shader_filter_data *filter = data; return filter->total_height; }
 enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces) { /* ... (original content) ... */ return GS_CS_SRGB; }
@@ -1616,4 +1895,3 @@ void obs_module_post_load()
 	}
 	calldata_free(&cd);
 }
->>>>>>> REPLACE

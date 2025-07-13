@@ -1096,7 +1096,7 @@ static void render_shader(struct shader_filter_data *filter, float t, obs_source
 
 	if (filter->output_texrender) {
 		gs_texrender_reset(filter->output_texrender);
-		if (gs_texrender_begin(filter->output_texrender, filter->total_width, filter->total_height)) { // Use gs_texrender_begin
+		if (gs_texrender_resize(filter->output_texrender, filter->total_width, filter->total_height)) { 
 			gs_blend_state_push();
 			gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Opaque draw for effect base
 
@@ -1716,7 +1716,8 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
 			// if (!gs_texrender_resize(current_target, width, height)) { ... }
 
 			// Begin rendering to the current target
-			if (gs_texrender_begin(current_target, width, height)) { // MODIFIED LINE
+			gs_texrender_reset(current_target);
+			if (gs_texrender_resize(current_target, width, height)) {
 				gs_blend_state_push();
 				gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO); // Opaque draw
 
@@ -1907,5 +1908,3 @@ void obs_module_post_load()
 	}
 	calldata_free(&cd);
 }
-
-[end of obs-shaderfilter.c]

@@ -5,6 +5,7 @@
 #include <graphics/graphics.h>
 #include <graphics/image-file.h>
 #include <graphics/math-extra.h>
+#include <obs-properties.h>
 // #include <obs-paths.h> // os_get_abs_path_ptr is in util/platform.h
 // util/platform.h is already included below, which should provide os_get_abs_path_ptr
 
@@ -319,7 +320,7 @@ static char *load_shader_from_file(const char *file_name) {
 				end_char--;
 			}
 
-			char *base_path = os_get_path_ptr(file_name); // Using os_get_path_ptr
+			char *base_path = os_get_abs_path_ptr(file_name); // Using os_get_path_ptr
 			struct dstr full_include_path;
 			dstr_init(&full_include_path);
 			dstr_catf(&full_include_path, "%s/%s", base_path, include_file_name);
@@ -401,7 +402,8 @@ static void load_output_effect(struct shader_filter_data *filter) {
 		return;
 	}
 
-	filter->output_effect = gs_effect_create_from_string(effect_str, NULL);
+	char *errors = NULL;
+	filter->output_effect = gs_effect_create(effect_str, NULL, &errors);
 	bfree(effect_str);
 
 	if (!filter->output_effect) {
@@ -432,7 +434,7 @@ static void shader_filter_reload_effect_internal(gs_effect_t **effect_ptr,
     }
 
     const char *error = NULL;
-    *effect_ptr = gs_effect_create_from_string(effect_string, &error);
+    *effect_ptr = gs_effect_create(effect_string, NULL, &error);
 
     if (!*effect_ptr) {
         blog(LOG_WARNING, "[obs-shaderfilter] Effect compilation error for %s: %s",
@@ -657,14 +659,14 @@ static void shader_filter_set_pass_effect_params(struct shader_filter_data *filt
                     }
                     obs_source_release(source);
                 } else { // Source was removed or unavailable
-                    gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
+                    gs_effect_set_texture_srgb(param_info->param, gs_black_texture());
                 }
             } else if (param_info->image && param_info->image->texture) {
                 gs_effect_set_texture_srgb(param_info->param, param_info->image->texture);
             } else if (param_info->render) { // For internal render targets (e.g. previous_output)
                  gs_effect_set_texture_srgb(param_info->param, gs_texrender_get_texture(param_info->render));
             } else {
-                 gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
+                 gs_effect_set_texture_srgb(param_info->param, gs_black_texture());
             }
             break;
         default:
@@ -692,7 +694,7 @@ static bool add_source_to_list(void *data, obs_source_t *source) {
 
 // Helper function to add effect parameters to a properties group
 static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
-                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) created_groups_list)
+                                    const char *setting_prefix, obs_data_t *settings, DARRAY(obs_property_t *) *created_groups_list)
 {
 	if (!param_list || !param_list->num) return;
 
@@ -719,7 +721,7 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 				obs_property_t* existing_group_prop = created_groups_list.array[g_idx];
 				if (strcmp(obs_property_name(existing_group_prop), group_setting_name) == 0) {
 					p_group_prop = existing_group_prop;
-					target_props = obs_property_get_properties(p_group_prop); // Get the subgroup's properties
+					target_props = obs_properties_get(p_group_prop); // Get the subgroup's properties
 					group_exists = true;
 					break;
 				}
@@ -1082,12 +1084,12 @@ static void render_shader(struct shader_filter_data *filter, float t, obs_source
                         gs_texture_t *tx = obs_source_get_texture(s);
                         if (tx) gs_effect_set_texture_srgb(param_info->param, tx);
                         obs_source_release(s);
-                    } else gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
+                    } else gs_effect_set_texture_srgb(param_info->param, gs_black_texture());
                 } else if (param_info->image && param_info->image->texture) {
                     gs_effect_set_texture_srgb(param_info->param, param_info->image->texture);
                 } else if (param_info->render) {
                     gs_effect_set_texture_srgb(param_info->param, gs_texrender_get_texture(param_info->render));
-                } else gs_effect_set_texture_srgb(param_info->param, obs_get_black_texture());
+                } else gs_effect_set_texture_srgb(param_info->param, gs_black_texture());
                 break;
             default: break;
         }
@@ -1669,14 +1671,14 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
 
 
 		// Resize intermediate texrenders if necessary (only once before the loop)
-		if (filter->intermediate_texrender_A && (gs_texrender_get_width(filter->intermediate_texrender_A) != width || gs_texrender_get_height(filter->intermediate_texrender_A) != height)) {
+		if (filter->intermediate_texrender_A && (gs_texture_get_width(gs_texrender_get_texture(filter->intermediate_texrender_A)) != width || gs_texture_get_height(gs_texrender_get_texture(filter->intermediate_texrender_A)) != height)) {
 			gs_texrender_destroy(filter->intermediate_texrender_A);
 			filter->intermediate_texrender_A = NULL;
 		}
 		if (!filter->intermediate_texrender_A) filter->intermediate_texrender_A = create_or_reset_texrender(NULL);
 		gs_texrender_resize(filter->intermediate_texrender_A, width, height);
 
-		if (filter->intermediate_texrender_B && (gs_texrender_get_width(filter->intermediate_texrender_B) != width || gs_texrender_get_height(filter->intermediate_texrender_B) != height)) {
+		if (filter->intermediate_texrender_B && (gs_texture_get_width(gs_texrender_get_texture(filter->intermediate_texrender_B)) != width || gs_texture_get_height(gs_texrender_get_texture(filter->intermediate_texrender_B)) != height)) {
 			gs_texrender_destroy(filter->intermediate_texrender_B);
 			filter->intermediate_texrender_B = NULL;
 		}
@@ -1684,7 +1686,7 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
 		gs_texrender_resize(filter->intermediate_texrender_B, width, height);
 
 		// Also ensure output_texrender is correctly sized if it's used as the final target of a pass
-		if (filter->output_texrender && (gs_texrender_get_width(filter->output_texrender) != width || gs_texrender_get_height(filter->output_texrender) != height)) {
+		if (filter->output_texrender && (gs_texture_get_width(gs_texrender_get_texture(filter->output_texrender)) != width || gs_texture_get_height(gs_texrender_get_texture(filter->output_texrender)) != height)) {
 			gs_texrender_destroy(filter->output_texrender);
 			filter->output_texrender = NULL;
 		}
@@ -1701,7 +1703,7 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
 
 			// Determine input texture for this pass
 			if (current_active_pass_idx == 0) { // First active pass
-				current_input_texture = filter->input_texrender ? gs_texrender_get_texture(filter->input_texrender) : obs_get_black_texture();
+				current_input_texture = filter->input_texrender ? gs_texrender_get_texture(filter->input_texrender) : gs_black_texture();
 				current_target = (active_pass_count == 1) ? filter->output_texrender : filter->intermediate_texrender_A;
 			} else { // Subsequent active passes
 				current_input_texture = gs_texrender_get_texture(last_output_target);

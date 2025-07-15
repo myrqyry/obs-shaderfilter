@@ -229,6 +229,7 @@ static bool shader_filter_convert(obs_properties_t *props, obs_property_t *prope
 static bool shader_filter_pass_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass specific file change
 static bool shader_filter_pass_enabled_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings); // For pass enable/disable
 
+<<<<<<< HEAD
 // Core logic helpers
 static char *load_shader_from_file(const char *file_name);
 static void shader_filter_clear_params(struct shader_filter_data *filter); // For main effect
@@ -245,6 +246,13 @@ static bool is_var_char(char ch);
 static char *str_replace(const char *str, const char *find, const char *replace);
 static bool add_source_to_list(void *data, obs_source_t *source);
 static unsigned int rand_interval(unsigned int min, unsigned int max);
+=======
+struct shader_filter_data {
+	obs_source_t *context;
+	gs_effect_t *effect;
+	gs_effect_t *output_effect;
+	gs_vertbuffer_t *sprite_buffer;
+>>>>>>> origin/relocate-extra-pixels-ui
 
 // UI generation helper
 static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct effect_param_data) *param_list,
@@ -252,7 +260,80 @@ static void add_effect_params_to_ui(obs_properties_t *props_group, DARRAY(struct
 
 // --- START OF STATIC HELPER FUNCTION DEFINITIONS ---
 
+<<<<<<< HEAD
 static unsigned int rand_interval(unsigned int min, unsigned int max) {
+=======
+	bool use_pm_alpha;
+	bool output_rendered;
+	bool input_rendered;
+
+	float shader_start_time;
+	float shader_show_time;
+	float shader_active_time;
+	float shader_enable_time;
+	bool enabled;
+	bool use_template;
+
+	gs_eparam_t *param_uv_offset;
+	gs_eparam_t *param_uv_scale;
+	gs_eparam_t *param_uv_pixel_interval;
+	gs_eparam_t *param_uv_size;
+	gs_eparam_t *param_current_time_ms;
+	gs_eparam_t *param_current_time_sec;
+	gs_eparam_t *param_current_time_min;
+	gs_eparam_t *param_current_time_hour;
+	gs_eparam_t *param_current_time_day_of_week;
+	gs_eparam_t *param_current_time_day_of_month;
+	gs_eparam_t *param_current_time_month;
+	gs_eparam_t *param_current_time_day_of_year;
+	gs_eparam_t *param_current_time_year;
+	gs_eparam_t *param_elapsed_time;
+	gs_eparam_t *param_elapsed_time_start;
+	gs_eparam_t *param_elapsed_time_show;
+	gs_eparam_t *param_elapsed_time_active;
+	gs_eparam_t *param_elapsed_time_enable;
+	gs_eparam_t *param_loops;
+	gs_eparam_t *param_loop_second;
+	gs_eparam_t *param_local_time;
+	gs_eparam_t *param_rand_f;
+	gs_eparam_t *param_rand_instance_f;
+	gs_eparam_t *param_rand_activation_f;
+	gs_eparam_t *param_image;
+	gs_eparam_t *param_previous_image;
+	gs_eparam_t *param_image_a;
+	gs_eparam_t *param_image_b;
+	gs_eparam_t *param_transition_time;
+	gs_eparam_t *param_convert_linear;
+	gs_eparam_t *param_previous_output;
+
+	int expand_left;
+	int expand_right;
+	int expand_top;
+	int expand_bottom;
+
+	int total_width;
+	int total_height;
+	bool no_repeat;
+	bool rendering;
+
+	struct vec2 uv_offset;
+	struct vec2 uv_scale;
+	struct vec2 uv_pixel_interval;
+	struct vec2 uv_size;
+	float elapsed_time;
+	float elapsed_time_loop;
+	int loops;
+	float local_time;
+	float rand_f;
+	float rand_instance_f;
+	float rand_activation_f;
+
+	DARRAY(struct effect_param_data) stored_param_list;
+};
+
+static unsigned int rand_interval(unsigned int min, unsigned int max)
+{
+>>>>>>> origin/relocate-extra-pixels-ui
 	unsigned int r;
 	const unsigned int range = 1 + max - min;
 	const unsigned int buckets = RAND_MAX / range;
@@ -263,6 +344,7 @@ static unsigned int rand_interval(unsigned int min, unsigned int max) {
 	return min + (r / buckets);
 }
 
+<<<<<<< HEAD
 static char *str_replace(const char *str, const char *find, const char *replace) {
     // Simple string replacement, ensure it handles memory correctly if used.
     // This is a placeholder for now; the original file might have a more robust version or not use it.
@@ -295,6 +377,10 @@ static char *str_replace(const char *str, const char *find, const char *replace)
 
 
 static char *load_shader_from_file(const char *file_name) {
+=======
+static char *load_shader_from_file(const char *file_name) // add input of visited files
+{
+>>>>>>> origin/relocate-extra-pixels-ui
 	char *file_ptr = os_quick_read_utf8_file(file_name);
 	if (!file_ptr) {
 		blog(LOG_WARNING, "[obs-shaderfilter] failed to read file: %s", file_name);
@@ -374,6 +460,7 @@ static void shader_filter_clear_params(struct shader_filter_data *filter) {
     shader_filter_clear_params_internal(&filter->stored_param_list);
 }
 
+<<<<<<< HEAD
 static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info) {
     if (pass_info->effect) {
         gs_effect_destroy(pass_info->effect);
@@ -381,17 +468,294 @@ static void shader_filter_clear_pass_params(struct shader_pass_info *pass_info) 
     }
     shader_filter_clear_params_internal(&pass_info->stored_param_list);
     dstr_free(&pass_info->error_string); // Clear error string too
+=======
+static void load_sprite_buffer(struct shader_filter_data *filter)
+{
+	if (filter->sprite_buffer)
+		return;
+	struct gs_vb_data *vbd = gs_vbdata_create();
+	vbd->num = 4;
+	vbd->points = bmalloc(sizeof(struct vec3) * 4);
+	vbd->num_tex = 1;
+	vbd->tvarray = bmalloc(sizeof(struct gs_tvertarray));
+	vbd->tvarray[0].width = 2;
+	vbd->tvarray[0].array = bmalloc(sizeof(struct vec2) * 4);
+	memset(vbd->points, 0, sizeof(struct vec3) * 4);
+	memset(vbd->tvarray[0].array, 0, sizeof(struct vec2) * 4);
+	filter->sprite_buffer = gs_vertexbuffer_create(vbd, GS_DYNAMIC);
+}
+
+static void shader_filter_reload_effect(struct shader_filter_data *filter)
+{
+	obs_data_t *settings = obs_source_get_settings(filter->context);
+
+	// First, clean up the old effect and all references to it.
+	filter->shader_start_time = 0.0f;
+	shader_filter_clear_params(filter);
+
+	if (filter->effect != NULL) {
+		obs_enter_graphics();
+		gs_effect_destroy(filter->effect);
+		filter->effect = NULL;
+		obs_leave_graphics();
+	}
+
+	// Load text and build the effect from the template, if necessary.
+	char *shader_text = NULL;
+	bool use_template = !obs_data_get_bool(settings, "override_entire_effect");
+
+	if (obs_data_get_bool(settings, "from_file")) {
+		const char *file_name = obs_data_get_string(settings, "shader_file_name");
+		if (!strlen(file_name)) {
+			obs_data_unset_user_value(settings, "last_error");
+			goto end;
+		}
+		shader_text = load_shader_from_file(file_name);
+		if (!shader_text) {
+			obs_data_set_string(settings, "last_error", obs_module_text("ShaderFilter.FileLoadFailed"));
+			goto end;
+		}
+	} else {
+		shader_text = bstrdup(obs_data_get_string(settings, "shader_text"));
+		use_template = true;
+	}
+	filter->use_template = use_template;
+
+	struct dstr effect_text = {0};
+
+	if (use_template) {
+		dstr_cat(&effect_text, effect_template_begin);
+	}
+
+	if (shader_text) {
+		dstr_cat(&effect_text, shader_text);
+		bfree(shader_text);
+	}
+
+	if (use_template) {
+		dstr_cat(&effect_text, effect_template_end);
+	}
+
+	// Create the effect.
+	char *errors = NULL;
+
+	obs_enter_graphics();
+	int device_type = gs_get_device_type();
+	if (device_type == GS_DEVICE_OPENGL) {
+		dstr_replace(&effect_text, "[loop]", "");
+		dstr_insert(&effect_text, 0, "#define OPENGL 1\n");
+	}
+
+	if (effect_text.len && dstr_find(&effect_text, "#define USE_PM_ALPHA 1")) {
+		filter->use_pm_alpha = true;
+	} else {
+		filter->use_pm_alpha = false;
+	}
+
+	if (filter->effect)
+		gs_effect_destroy(filter->effect);
+	filter->effect = gs_effect_create(effect_text.array, NULL, &errors);
+	obs_leave_graphics();
+
+	if (filter->effect == NULL) {
+		blog(LOG_WARNING, "[obs-shaderfilter] Unable to create effect. Errors returned from parser:\n%s",
+		     (errors == NULL || strlen(errors) == 0 ? "(None)" : errors));
+		if (errors && strlen(errors)) {
+			obs_data_set_string(settings, "last_error", errors);
+		} else {
+			obs_data_set_string(settings, "last_error", obs_module_text("ShaderFilter.Unknown"));
+		}
+		dstr_free(&effect_text);
+		bfree(errors);
+		goto end;
+	} else {
+		dstr_free(&effect_text);
+		obs_data_unset_user_value(settings, "last_error");
+	}
+
+	// Store references to the new effect's parameters.
+	da_free(filter->stored_param_list);
+
+	size_t effect_count = gs_effect_get_num_params(filter->effect);
+	for (size_t effect_index = 0; effect_index < effect_count; effect_index++) {
+		gs_eparam_t *param = gs_effect_get_param_by_idx(filter->effect, effect_index);
+		if (!param)
+			continue;
+		struct gs_effect_param_info info;
+		gs_effect_get_param_info(param, &info);
+
+		if (strcmp(info.name, "uv_offset") == 0) {
+			filter->param_uv_offset = param;
+		} else if (strcmp(info.name, "uv_scale") == 0) {
+			filter->param_uv_scale = param;
+		} else if (strcmp(info.name, "uv_pixel_interval") == 0) {
+			filter->param_uv_pixel_interval = param;
+		} else if (strcmp(info.name, "uv_size") == 0) {
+			filter->param_uv_size = param;
+		} else if (strcmp(info.name, "current_time_ms") == 0) {
+			filter->param_current_time_ms = param;
+		} else if (strcmp(info.name, "current_time_sec") == 0) {
+			filter->param_current_time_sec = param;
+		} else if (strcmp(info.name, "current_time_min") == 0) {
+			filter->param_current_time_min = param;
+		} else if (strcmp(info.name, "current_time_hour") == 0) {
+			filter->param_current_time_hour = param;
+		} else if (strcmp(info.name, "current_time_day_of_week") == 0) {
+			filter->param_current_time_day_of_week = param;
+		} else if (strcmp(info.name, "current_time_day_of_month") == 0) {
+			filter->param_current_time_day_of_month = param;
+		} else if (strcmp(info.name, "current_time_month") == 0) {
+			filter->param_current_time_month = param;
+		} else if (strcmp(info.name, "current_time_day_of_year") == 0) {
+			filter->param_current_time_day_of_year = param;
+		} else if (strcmp(info.name, "current_time_year") == 0) {
+			filter->param_current_time_year = param;
+		} else if (strcmp(info.name, "elapsed_time") == 0) {
+			filter->param_elapsed_time = param;
+		} else if (strcmp(info.name, "elapsed_time_start") == 0) {
+			filter->param_elapsed_time_start = param;
+		} else if (strcmp(info.name, "elapsed_time_show") == 0) {
+			filter->param_elapsed_time_show = param;
+		} else if (strcmp(info.name, "elapsed_time_active") == 0) {
+			filter->param_elapsed_time_active = param;
+		} else if (strcmp(info.name, "elapsed_time_enable") == 0) {
+			filter->param_elapsed_time_enable = param;
+		} else if (strcmp(info.name, "rand_f") == 0) {
+			filter->param_rand_f = param;
+		} else if (strcmp(info.name, "rand_activation_f") == 0) {
+			filter->param_rand_activation_f = param;
+		} else if (strcmp(info.name, "rand_instance_f") == 0) {
+			filter->param_rand_instance_f = param;
+		} else if (strcmp(info.name, "loops") == 0) {
+			filter->param_loops = param;
+		} else if (strcmp(info.name, "loop_second") == 0) {
+			filter->param_loop_second = param;
+		} else if (strcmp(info.name, "local_time") == 0) {
+			filter->param_local_time = param;
+		} else if (strcmp(info.name, "ViewProj") == 0) {
+			// Nothing.
+		} else if (strcmp(info.name, "image") == 0) {
+			filter->param_image = param;
+		} else if (strcmp(info.name, "previous_image") == 0) {
+			filter->param_previous_image = param;
+		} else if (strcmp(info.name, "previous_output") == 0) {
+			filter->param_previous_output = param;
+		} else if (filter->transition && strcmp(info.name, "image_a") == 0) {
+			filter->param_image_a = param;
+		} else if (filter->transition && strcmp(info.name, "image_b") == 0) {
+			filter->param_image_b = param;
+		} else if (filter->transition && strcmp(info.name, "transition_time") == 0) {
+			filter->param_transition_time = param;
+		} else if (filter->transition && strcmp(info.name, "convert_linear") == 0) {
+			filter->param_convert_linear = param;
+		} else {
+			struct effect_param_data *cached_data = da_push_back_new(filter->stored_param_list);
+			dstr_copy(&cached_data->name, info.name);
+			cached_data->type = info.type;
+			cached_data->param = param;
+			da_init(cached_data->option_values);
+			da_init(cached_data->option_labels);
+			const size_t annotation_count = gs_param_get_num_annotations(param);
+			for (size_t annotation_index = 0; annotation_index < annotation_count; annotation_index++) {
+				gs_eparam_t *annotation = gs_param_get_annotation_by_idx(param, annotation_index);
+				void *annotation_default = gs_effect_get_default_val(annotation);
+				gs_effect_get_param_info(annotation, &info);
+				if (strcmp(info.name, "name") == 0 && info.type == GS_SHADER_PARAM_STRING) {
+					dstr_copy(&cached_data->display_name, (const char *)annotation_default);
+				} else if (strcmp(info.name, "label") == 0 && info.type == GS_SHADER_PARAM_STRING) {
+					dstr_copy(&cached_data->display_name, (const char *)annotation_default);
+				} else if (strcmp(info.name, "widget_type") == 0 && info.type == GS_SHADER_PARAM_STRING) {
+					dstr_copy(&cached_data->widget_type, (const char *)annotation_default);
+				} else if (strcmp(info.name, "group") == 0 && info.type == GS_SHADER_PARAM_STRING) {
+					dstr_copy(&cached_data->group, (const char *)annotation_default);
+				} else if (strcmp(info.name, "minimum") == 0) {
+					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->minimum.f = *(float *)annotation_default;
+					} else if (info.type == GS_SHADER_PARAM_INT) {
+						cached_data->minimum.i = *(int *)annotation_default;
+					}
+				} else if (strcmp(info.name, "maximum") == 0) {
+					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->maximum.f = *(float *)annotation_default;
+					} else if (info.type == GS_SHADER_PARAM_INT) {
+						cached_data->maximum.i = *(int *)annotation_default;
+					}
+				} else if (strcmp(info.name, "step") == 0) {
+					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->step.f = *(float *)annotation_default;
+					} else if (info.type == GS_SHADER_PARAM_INT) {
+						cached_data->step.i = *(int *)annotation_default;
+					}
+				} else if (strncmp(info.name, "option_", 7) == 0) {
+					int id = atoi(info.name + 7);
+					if (info.type == GS_SHADER_PARAM_INT) {
+						int val = *(int *)annotation_default;
+						int *cd = da_insert_new(cached_data->option_values, id);
+						*cd = val;
+
+					} else if (info.type == GS_SHADER_PARAM_STRING) {
+						struct dstr val = {0};
+						dstr_copy(&val, (const char *)annotation_default);
+						struct dstr *cs = da_insert_new(cached_data->option_labels, id);
+						*cs = val;
+					}
+				}
+				bfree(annotation_default);
+			}
+		}
+	}
+
+end:
+	obs_data_release(settings);
+>>>>>>> origin/relocate-extra-pixels-ui
 }
 
 
 static void load_output_effect(struct shader_filter_data *filter) {
 	if (filter->output_effect)
+<<<<<<< HEAD
 		return;
 
 	char *effect_path = obs_module_file("output_template.effect");
 	if (!effect_path) {
 		blog(LOG_WARNING, "[obs-shaderfilter] output_template.effect not found");
 		return;
+=======
+		gs_effect_destroy(filter->output_effect);
+	if (filter->input_texrender)
+		gs_texrender_destroy(filter->input_texrender);
+	if (filter->output_texrender)
+		gs_texrender_destroy(filter->output_texrender);
+	if (filter->previous_input_texrender)
+		gs_texrender_destroy(filter->previous_input_texrender);
+	if (filter->previous_output_texrender)
+		gs_texrender_destroy(filter->previous_output_texrender);
+	if (filter->sprite_buffer)
+		gs_vertexbuffer_destroy(filter->sprite_buffer);
+	obs_leave_graphics();
+
+	dstr_free(&filter->last_path);
+	da_free(filter->stored_param_list);
+
+	bfree(filter);
+}
+
+static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
+{
+	UNUSED_PARAMETER(p);
+	struct shader_filter_data *filter = obs_properties_get_param(props);
+
+	bool from_file = obs_data_get_bool(settings, "from_file");
+
+	obs_property_set_visible(obs_properties_get(props, "shader_text"), !from_file);
+	obs_property_set_visible(obs_properties_get(props, "shader_file_name"), from_file);
+
+	if (from_file != filter->last_from_file) {
+		filter->reload_effect = true;
+>>>>>>> origin/relocate-extra-pixels-ui
 	}
 	char *effect_str = load_shader_from_file(effect_path);
 	bfree(effect_path);
@@ -1309,6 +1673,260 @@ obs_properties_t *shader_filter_properties(void *data)
         da_free(main_created_groups);
 	}
 
+<<<<<<< HEAD
+=======
+	obs_properties_add_bool(props, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
+
+	obs_property_t *from_file = obs_properties_add_bool(props, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
+	obs_property_set_modified_callback(from_file, shader_filter_from_file_changed);
+
+	obs_property_t *shader_text =
+		obs_properties_add_text(props, "shader_text", obs_module_text("ShaderFilter.ShaderText"), OBS_TEXT_MULTILINE);
+	obs_property_set_modified_callback(shader_text, shader_filter_text_changed);
+
+	obs_properties_add_button2(props, "shader_convert", obs_module_text("ShaderFilter.Convert"), shader_filter_convert, data);
+
+	char *abs_path = os_get_abs_path_ptr(examples_path.array);
+	obs_property_t *file_name = obs_properties_add_path(props, "shader_file_name",
+							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
+							    abs_path ? abs_path : examples_path.array);
+	if (abs_path)
+		bfree(abs_path);
+	dstr_free(&examples_path);
+	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
+
+	if (filter) {
+		obs_data_t *settings = obs_source_get_settings(filter->context);
+		const char *last_error = obs_data_get_string(settings, "last_error");
+		if (last_error && strlen(last_error)) {
+			obs_property_t *error =
+				obs_properties_add_text(props, "last_error", obs_module_text("ShaderFilter.Error"), OBS_TEXT_INFO);
+			obs_property_text_set_info_type(error, OBS_TEXT_INFO_ERROR);
+		}
+		obs_data_release(settings);
+	}
+
+	obs_properties_add_button(props, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
+				  shader_filter_reload_effect_clicked);
+
+	DARRAY(obs_property_t *) groups;
+	da_init(groups);
+
+	size_t param_count = filter->stored_param_list.num;
+	for (size_t param_index = 0; param_index < param_count; param_index++) {
+		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
+		//gs_eparam_t *annot = gs_param_get_annotation_by_idx(param->param, param_index);
+		const char *param_name = param->name.array;
+		const char *label = param->display_name.array;
+		const char *widget_type = param->widget_type.array;
+		const char *group_name = param->group.array;
+		const int *options = param->option_values.array;
+		const struct dstr *option_labels = param->option_labels.array;
+
+		struct dstr display_name = {0};
+		struct dstr sources_name = {0};
+
+		if (label == NULL) {
+			dstr_ncat(&display_name, param_name, param->name.len);
+			dstr_replace(&display_name, "_", " ");
+		} else {
+			dstr_ncat(&display_name, label, param->display_name.len);
+		}
+		obs_properties_t *group = NULL;
+		if (group_name && strlen(group_name)) {
+			for (size_t i = 0; i < groups.num; i++) {
+				const char *n = obs_property_name(groups.array[i]);
+				if (strcmp(n, group_name) == 0) {
+					group = obs_property_group_content(groups.array[i]);
+				}
+			}
+			if (!group) {
+				group = obs_properties_create();
+				obs_property_t *p =
+					obs_properties_add_group(props, group_name, group_name, OBS_GROUP_NORMAL, group);
+				da_push_back(groups, &p);
+			}
+		}
+		if (!group)
+			group = props;
+		switch (param->type) {
+		case GS_SHADER_PARAM_BOOL:
+			obs_properties_add_bool(group, param_name, display_name.array);
+			break;
+		case GS_SHADER_PARAM_FLOAT: {
+			double range_min = param->minimum.f;
+			double range_max = param->maximum.f;
+			double step = param->step.f;
+			if (range_min == range_max) {
+				range_min = -1000.0;
+				range_max = 1000.0;
+				step = 0.0001;
+			}
+			obs_properties_remove_by_name(props, param_name);
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_float_slider(group, param_name, display_name.array, range_min, range_max, step);
+			} else {
+				obs_properties_add_float(group, param_name, display_name.array, range_min, range_max, step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_INT: {
+			int range_min = (int)param->minimum.i;
+			int range_max = (int)param->maximum.i;
+			int step = (int)param->step.i;
+			if (range_min == range_max) {
+				range_min = -1000;
+				range_max = 1000;
+				step = 1;
+			}
+			obs_properties_remove_by_name(props, param_name);
+
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				obs_properties_add_int_slider(group, param_name, display_name.array, range_min, range_max, step);
+			} else if (widget_type != NULL && strcmp(widget_type, "select") == 0) {
+				obs_property_t *plist = obs_properties_add_list(group, param_name, display_name.array,
+										OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+				for (size_t i = 0; i < param->option_values.num; i++) {
+					obs_property_list_add_int(plist, option_labels[i].array, options[i]);
+				}
+			} else {
+				obs_properties_add_int(group, param_name, display_name.array, range_min, range_max, step);
+			}
+			break;
+		}
+		case GS_SHADER_PARAM_INT3:
+
+			break;
+		case GS_SHADER_PARAM_VEC2: {
+			double range_min = param->minimum.f;
+			double range_max = param->maximum.f;
+			double step = param->step.f;
+			if (range_min == range_max) {
+				range_min = -1000.0;
+				range_max = 1000.0;
+				step = 0.0001;
+			}
+
+			bool slider = (widget_type != NULL && strcmp(widget_type, "slider") == 0);
+
+			for (size_t i = 0; i < 2; i++) {
+				dstr_printf(&sources_name, "%s_%zu", param_name, i);
+				if (i < param->option_labels.num) {
+					if (slider) {
+						obs_properties_add_float_slider(group, sources_name.array,
+										param->option_labels.array[i].array, range_min,
+										range_max, step);
+					} else {
+						obs_properties_add_float(group, sources_name.array,
+									 param->option_labels.array[i].array, range_min, range_max,
+									 step);
+					}
+				} else if (slider) {
+
+					obs_properties_add_float_slider(group, sources_name.array, display_name.array, range_min,
+									range_max, step);
+				} else {
+					obs_properties_add_float(group, sources_name.array, display_name.array, range_min,
+								 range_max, step);
+				}
+			}
+			dstr_free(&sources_name);
+
+			break;
+		}
+		case GS_SHADER_PARAM_VEC3:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				double range_min = param->minimum.f;
+				double range_max = param->maximum.f;
+				double step = param->step.f;
+				if (range_min == range_max) {
+					range_min = -1000.0;
+					range_max = 1000.0;
+					step = 0.0001;
+				}
+				for (size_t i = 0; i < 3; i++) {
+					dstr_printf(&sources_name, "%s_%zu", param_name, i);
+					if (i < param->option_labels.num) {
+						obs_properties_add_float_slider(group, sources_name.array,
+										param->option_labels.array[i].array, range_min,
+										range_max, step);
+					} else {
+						obs_properties_add_float_slider(group, sources_name.array, display_name.array,
+										range_min, range_max, step);
+					}
+				}
+				dstr_free(&sources_name);
+			} else {
+				obs_properties_add_color(group, param_name, display_name.array);
+			}
+			break;
+		case GS_SHADER_PARAM_VEC4:
+			if (widget_type != NULL && strcmp(widget_type, "slider") == 0) {
+				double range_min = param->minimum.f;
+				double range_max = param->maximum.f;
+				double step = param->step.f;
+				if (range_min == range_max) {
+					range_min = -1000.0;
+					range_max = 1000.0;
+					step = 0.0001;
+				}
+				for (size_t i = 0; i < 4; i++) {
+					dstr_printf(&sources_name, "%s_%zu", param_name, i);
+					if (i < param->option_labels.num) {
+						obs_properties_add_float_slider(group, sources_name.array,
+										param->option_labels.array[i].array, range_min,
+										range_max, step);
+					} else {
+						obs_properties_add_float_slider(group, sources_name.array, display_name.array,
+										range_min, range_max, step);
+					}
+				}
+				dstr_free(&sources_name);
+			} else {
+				obs_properties_add_color_alpha(group, param_name, display_name.array);
+			}
+			break;
+		case GS_SHADER_PARAM_TEXTURE:
+			if (widget_type != NULL && strcmp(widget_type, "source") == 0) {
+				dstr_init_copy_dstr(&sources_name, &param->name);
+				dstr_cat(&sources_name, "_source");
+				obs_property_t *p = obs_properties_add_list(group, sources_name.array, display_name.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				dstr_free(&sources_name);
+				obs_enum_sources(add_source_to_list, p);
+				obs_enum_scenes(add_source_to_list, p);
+				obs_property_list_insert_string(p, 0, "", "");
+
+			} else if (widget_type != NULL && strcmp(widget_type, "file") == 0) {
+				obs_properties_add_path(group, param_name, display_name.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+			} else {
+				dstr_init_copy_dstr(&sources_name, &param->name);
+				dstr_cat(&sources_name, "_source");
+				obs_property_t *p = obs_properties_add_list(group, sources_name.array, display_name.array,
+									    OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
+				dstr_free(&sources_name);
+				obs_property_list_add_string(p, "", "");
+				obs_enum_sources(add_source_to_list, p);
+				obs_enum_scenes(add_source_to_list, p);
+				obs_properties_add_path(group, param_name, display_name.array, OBS_PATH_FILE,
+							shader_filter_texture_file_filter, NULL);
+			}
+			break;
+		case GS_SHADER_PARAM_STRING:
+			if (widget_type != NULL && strcmp(widget_type, "info") == 0) {
+				obs_properties_add_text(group, param_name, display_name.array, OBS_TEXT_INFO);
+			} else {
+				obs_properties_add_text(group, param_name, display_name.array, OBS_TEXT_MULTILINE);
+			}
+			break;
+		default:;
+		}
+		dstr_free(&display_name);
+	}
+	da_free(groups);
+
+>>>>>>> origin/relocate-extra-pixels-ui
 	if (!filter || !filter->transition) {
 		obs_properties_add_int(props, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999, 1);
 		obs_properties_add_int(props, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999, 1);
@@ -1777,6 +2395,34 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
             // If this warning appears, the targetting logic needs review.
 		}
 
+<<<<<<< HEAD
+=======
+static void build_sprite(struct gs_vb_data *data, float fcx, float fcy, float start_u, float end_u, float start_v, float end_v)
+{
+	struct vec2 *tvarray = data->tvarray[0].array;
+
+	vec3_zero(data->points);
+	vec3_set(data->points + 1, fcx, 0.0f, 0.0f);
+	vec3_set(data->points + 2, 0.0f, fcy, 0.0f);
+	vec3_set(data->points + 3, fcx, fcy, 0.0f);
+	vec2_set(tvarray, start_u, start_v);
+	vec2_set(tvarray + 1, end_u, start_v);
+	vec2_set(tvarray + 2, start_u, end_v);
+	vec2_set(tvarray + 3, end_u, end_v);
+}
+
+static inline void build_sprite_norm(struct gs_vb_data *data, float fcx, float fcy)
+{
+	build_sprite(data, fcx, fcy, 0.0f, 1.0f, 0.0f, 1.0f);
+}
+
+static void render_shader(struct shader_filter_data *filter, float f, obs_source_t *filter_to)
+{
+	gs_texture_t *texture = gs_texrender_get_texture(filter->input_texrender);
+	if (!texture) {
+		return;
+	}
+>>>>>>> origin/relocate-extra-pixels-ui
 
 	} else if (filter->effect && filter->global_error_string.len == 0) {
 		// Fallback to single main effect rendering if no active passes
@@ -1813,9 +2459,119 @@ void shader_filter_render(void *data, gs_effect_t *effect_param_not_used)
 		if (filter->previous_output_texrender) {
 			gs_texrender_destroy(filter->previous_output_texrender);
 		}
+<<<<<<< HEAD
 		filter->previous_output_texrender = filter->output_texrender;
 		filter->output_texrender = create_or_reset_texrender(NULL); // Get a new one for next frame
         filter->output_rendered = false; // Reset for next frame
+=======
+	}
+
+	gs_blend_state_push();
+	gs_reset_blend_state();
+	gs_enable_blending(false);
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+
+	if (gs_texrender_begin(filter->output_texrender, filter->total_width, filter->total_height)) {
+		gs_ortho(0.0f, (float)filter->total_width, 0.0f, (float)filter->total_height, -100.0f, 100.0f);
+		while (gs_effect_loop(filter->effect, "Draw")) {
+			if (filter->use_template) {
+				gs_draw_sprite(texture, 0, filter->total_width, filter->total_height);
+			} else {
+				if (!filter->sprite_buffer)
+					load_sprite_buffer(filter);
+
+				struct gs_vb_data *data = gs_vertexbuffer_get_data(filter->sprite_buffer);
+				build_sprite_norm(data, (float)filter->total_width, (float)filter->total_height);
+				gs_vertexbuffer_flush(filter->sprite_buffer);
+				gs_load_vertexbuffer(filter->sprite_buffer);
+				gs_load_indexbuffer(NULL);
+				gs_draw(GS_TRISTRIP, 0, 0);
+			}
+		}
+		gs_texrender_end(filter->output_texrender);
+	}
+
+	gs_blend_state_pop();
+}
+
+static void shader_filter_render(void *data, gs_effect_t *effect)
+{
+	UNUSED_PARAMETER(effect);
+
+	struct shader_filter_data *filter = data;
+
+	float f = 0.0f;
+	obs_source_t *filter_to = NULL;
+	if (move_get_transition_filter)
+		f = move_get_transition_filter(filter->context, &filter_to);
+
+	if (f == 0.0f && filter->output_rendered) {
+		draw_output(filter);
+		return;
+	}
+
+	if (filter->effect == NULL || filter->rendering) {
+		obs_source_skip_video_filter(filter->context);
+		return;
+	}
+
+	get_input_source(filter);
+
+	filter->rendering = true;
+	render_shader(filter, f, filter_to);
+	draw_output(filter);
+	if (f == 0.0f)
+		filter->output_rendered = true;
+	filter->rendering = false;
+}
+
+static uint32_t shader_filter_getwidth(void *data)
+{
+	struct shader_filter_data *filter = data;
+
+	return filter->total_width;
+}
+
+static uint32_t shader_filter_getheight(void *data)
+{
+	struct shader_filter_data *filter = data;
+
+	return filter->total_height;
+}
+
+static void shader_filter_defaults(obs_data_t *settings)
+{
+	obs_data_set_default_string(settings, "shader_text", effect_template_default_image_shader);
+}
+
+static enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces)
+{
+	UNUSED_PARAMETER(count);
+	UNUSED_PARAMETER(preferred_spaces);
+	struct shader_filter_data *filter = data;
+	obs_source_t *target = obs_filter_get_target(filter->context);
+	const enum gs_color_space potential_spaces[] = {
+		GS_CS_SRGB,
+		GS_CS_SRGB_16F,
+		GS_CS_709_EXTENDED,
+	};
+	return obs_source_get_color_space(target, OBS_COUNTOF(potential_spaces), potential_spaces);
+}
+
+void shader_filter_param_source_action(void *data, void (*action)(obs_source_t *source))
+{
+	struct shader_filter_data *filter = data;
+	size_t param_count = filter->stored_param_list.num;
+	for (size_t param_index = 0; param_index < param_count; param_index++) {
+		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
+		if (!param->source)
+			continue;
+		obs_source_t *source = obs_weak_source_get_source(param->source);
+		if (!source)
+			continue;
+		action(source);
+		obs_source_release(source);
+>>>>>>> origin/relocate-extra-pixels-ui
 	}
 }
 uint32_t shader_filter_getwidth(void *data) { /* ... (original content) ... */ struct shader_filter_data *filter = data; return filter->total_width; }
@@ -1903,6 +2659,10 @@ void obs_module_post_load()
 		move_get_transition_filter = calldata_ptr(&cd, "callback");
 	}
 	calldata_free(&cd);
+<<<<<<< HEAD
 }
 
 [end of obs-shaderfilter.c]
+=======
+}
+>>>>>>> origin/relocate-extra-pixels-ui

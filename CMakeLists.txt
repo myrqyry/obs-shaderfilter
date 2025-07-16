@@ -6,7 +6,7 @@ else()
   cmake_minimum_required(VERSION 3.18)
 endif()
 
-project(obs-shaderfilter VERSION 2.5.1)
+project(obs-shaderfilter VERSION 2.5.0)
 set(PROJECT_FULL_NAME "OBS Shaderfilter")
 
 # Set new UUIDs when you start to create a new plugin.
@@ -48,8 +48,14 @@ elseif(OS_MACOS)
 	target_compile_options(${PROJECT_NAME} PRIVATE -Wall)
 endif()
 
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${LIBOBS_INCLUDE_DIR}
+)
+
 target_link_libraries(${PROJECT_NAME}
-		OBS::libobs)
+    obs::libobs
+    obs::graphics
+)
 
 if(BUILD_OUT_OF_TREE)
     if(NOT LIB_OUT_DIR)

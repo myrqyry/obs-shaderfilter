@@ -2,9 +2,7 @@
 #include "shader_filter.hpp"
 
 #include <obs-module.h>
-#include <media-io/audio-io.h>
-#include <util/circlebuf.h>
-#include <cmath>
+#include <cmath>  // For sqrtf
 
 namespace audio_reactive {
 

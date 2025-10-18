@@ -51,8 +51,9 @@ static void watcher_loop()
                         shader_filter::reload_shader(filter);
                     }
                 }
-            } catch (const std::exception &e) {
-                blog(LOG_WARNING, "[ShaderFilter Plus Next] Watch error: %s", e.what());
+            } catch (const fs::filesystem_error &e) {
+                blog(LOG_WARNING, "[ShaderFilter Plus Next] Filesystem error for %s: %s",
+                     entry.first.c_str(), e.what());
             }
         }
     }
@@ -92,7 +93,8 @@ void watch_file(const char *path, void *filter_instance)
             if (fs::exists(path_str)) {
                 entry.last_write_time = fs::last_write_time(path_str);
             }
-        } catch (...) {
+        } catch (const fs::filesystem_error &e) {
+            blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot watch %s: %s", path, e.what());
             entry.last_write_time = fs::file_time_type::min();
         }
 

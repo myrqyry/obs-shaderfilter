@@ -2,8 +2,6 @@
 #include "shader_filter.hpp"
 
 #include <obs-module.h>
-#include <obs-source.h>
-#include <graphics/graphics.h>
 
 namespace multi_input {
 

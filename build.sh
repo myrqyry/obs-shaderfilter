@@ -52,14 +52,13 @@ cd "$BUILD_DIR"
 
 # Configure
 echo "Configuring..."
-CMAKE_ARGS=()
-CMAKE_ARGS+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
+CMAKE_ARGS="-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
 
 if [ -n "$OBS_DIR" ]; then
-    CMAKE_ARGS+=("-DOBS_DIR=$OBS_DIR")
+    CMAKE_ARGS="$CMAKE_ARGS -DOBS_DIR=$OBS_DIR"
 fi
 
-cmake .. "${CMAKE_ARGS[@]}"
+cmake .. $CMAKE_ARGS
 
 # Build
 echo "Building..."
@@ -68,7 +67,7 @@ cmake --build . --config "$BUILD_TYPE" -j$(nproc)
 # Install if requested
 if [ "$INSTALL" = true ]; then
     echo "Installing..."
-    cmake --install . --config "$BUILD_TYPE"
+    sudo cmake --install . --config "$BUILD_TYPE"
 fi
 
 echo "Build complete!"

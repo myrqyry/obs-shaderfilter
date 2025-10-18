@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.26)
+cmake_minimum_required(VERSION 3.16)
 
 project(obs-shaderfilter-plus-next VERSION 1.0.0)
 set(PROJECT_FULL_NAME "OBS ShaderFilter Plus Next")
@@ -7,7 +7,7 @@ set(PROJECT_FULL_NAME "OBS ShaderFilter Plus Next")
 set(PLUGIN_AUTHOR "myrqyry")
 set(PLUGIN_GIT obs-shaderfilter-plus-next)
 set(MACOS_BUNDLEID "com.myrqyry.obs-shaderfilter-plus-next")
-set(LINUX_MAINTAINER_EMAIL "your@email.com")
+set(LINUX_MAINTAINER_EMAIL "your.actual.email@example.com")
 
 # ===== PLATFORM DETECTION =====
 if(UNIX AND NOT APPLE)
@@ -113,10 +113,16 @@ else()
         endif()
 
     elseif(WIN32)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(OBS_ARCH_DIR "64bit")
+        else()
+            set(OBS_ARCH_DIR "32bit")
+        endif()
+
         set(LibOBS_INCLUDE_DIR "${OBS_DIR}/include")
-        set(LibOBS_LIBRARY "${OBS_DIR}/bin/64bit/obs.lib")
+        set(LibOBS_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs.lib")
         if(ENABLE_FRONTEND_API)
-            set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/64bit/obs-frontend-api.lib")
+            set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs-frontend-api.lib")
         endif()
 
     elseif(APPLE)
@@ -247,11 +253,12 @@ elseif(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         PREFIX ""
         SUFFIX ".so"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${MACOS_BUNDLEID}"
     )
 
-    # macOS specific frameworks
+    find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        "-framework CoreFoundation"
+        ${COREFOUNDATION_LIBRARY}
     )
 endif()
 

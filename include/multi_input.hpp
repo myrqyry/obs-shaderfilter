@@ -1,12 +1,14 @@
 #pragma once
-#include <obs-properties.h>
-#include <obs-data.h>
+#include <obs-module.h>
+
+namespace shader_filter {
+    struct filter_data; // Forward declaration
+}
 
 namespace multi_input {
-
-void add_properties(obs_properties_t *props, void *data);
-void set_defaults(obs_data_t *settings);
-void update_sources(void *filter_data, obs_data_t *settings);
-// void bind_textures(void *filter_data, gs_effect_t *effect);
-
-} // namespace multi_input
+    void add_properties(obs_properties_t *props, void *data);
+    void set_defaults(obs_data_t *settings);
+    void update_sources(void *filter_data, obs_data_t *settings);
+    void bind_textures(void *filter_data, gs_effect_t *effect);
+    void cleanup_textures(void *filter_data);  // NEW: Cleanup function
+}

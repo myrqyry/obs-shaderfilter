@@ -2,7 +2,7 @@
 #include "shader_filter.hpp"
 
 #include <obs-module.h>
-#include <cmath>  // For sqrtf
+#include <cmath>
 
 namespace audio_reactive {
 

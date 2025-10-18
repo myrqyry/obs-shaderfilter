@@ -68,7 +68,7 @@ cmake --build . --config "$BUILD_TYPE" -j$(nproc)
 # Install if requested
 if [ "$INSTALL" = true ]; then
     echo "Installing..."
-    sudo cmake --install . --config "$BUILD_TYPE"
+    cmake --install . --config "$BUILD_TYPE"
 fi
 
 echo "Build complete!"

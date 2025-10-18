@@ -1,0 +1,172 @@
+// Advanced dual video source compositing with blend modes and masking
+
+// ===== REQUIRED OBS UNIFORMS =====
+uniform float4x4 ViewProj;
+uniform texture2d image;           // Primary video input
+uniform float2 uv_offset;
+uniform float2 uv_scale;
+uniform float2 uv_size;
+uniform float2 uv_pixel_interval;
+uniform float elapsed_time;
+
+// ===== MULTI-INPUT TEXTURE =====
+uniform texture2d secondary_image; // Secondary video input
+uniform texture2d mask_image;      // Optional mask texture
+
+// ===== CUSTOM PARAMETERS =====
+uniform int blend_mode<
+    string label = "Blend Mode";
+    string widget_type = "select";
+    string group = "Blending";
+    int option_0_value = 0;
+    string option_0_label = "Normal";
+    int option_1_value = 1;
+    string option_1_label = "Add";
+    int option_2_value = 2;
+    string option_2_label = "Multiply";
+    int option_3_value = 3;
+    string option_3_label = "Screen";
+    int option_4_value = 4;
+    string option_4_label = "Overlay";
+    int option_5_value = 5;
+    string option_5_label = "Difference";
+> = 0;
+
+uniform float opacity<
+    string label = "Secondary Opacity";
+    string widget_type = "slider";
+    string group = "Blending";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 1.0;
+
+uniform bool use_mask<
+    string label = "Use Mask Texture";
+    string group = "Masking";
+> = false;
+
+uniform bool invert_mask<
+    string label = "Invert Mask";
+    string group = "Masking";
+> = false;
+
+uniform float2 secondary_offset<
+    string label = "Secondary Offset X";
+    string widget_type = "slider";
+    string group = "Transform";
+    float minimum = -1.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = {0.0, 0.0};
+
+uniform float secondary_scale<
+    string label = "Secondary Scale";
+    string widget_type = "slider";
+    string group = "Transform";
+    float minimum = 0.1;
+    float maximum = 3.0;
+    float step = 0.01;
+> = 1.0;
+
+// ===== SAMPLER STATE =====
+sampler_state textureSampler {
+    Filter    = Linear;
+    AddressU  = Clamp;
+    AddressV  = Clamp;
+};
+
+// ===== DATA STRUCTURES =====
+struct VertexIn {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+struct VertexOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+// ===== VERTEX SHADER =====
+VertexOut VSDefault(VertexIn v_in)
+{
+    VertexOut v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv * uv_scale + uv_offset;
+    return v_out;
+}
+
+// ===== BLEND MODE FUNCTIONS =====
+float3 blend_add(float3 base, float3 blend) {
+    return min(base + blend, 1.0);
+}
+
+float3 blend_multiply(float3 base, float3 blend) {
+    return base * blend;
+}
+
+float3 blend_screen(float3 base, float3 blend) {
+    return 1.0 - (1.0 - base) * (1.0 - blend);
+}
+
+float3 blend_overlay(float3 base, float3 blend) {
+    return (base < 0.5) ?
+        (2.0 * base * blend) :
+        (1.0 - 2.0 * (1.0 - base) * (1.0 - blend));
+}
+
+float3 blend_difference(float3 base, float3 blend) {
+    return abs(base - blend);
+}
+
+// ===== PIXEL SHADER =====
+float4 PSDualComposite(VertexOut v_in) : TARGET
+{
+    // Sample primary input
+    float4 primary = image.Sample(textureSampler, v_in.uv);
+
+    // Calculate transformed UV for secondary
+    float2 secondary_uv = (v_in.uv - 0.5) / secondary_scale + 0.5 + secondary_offset;
+    float4 secondary = secondary_image.Sample(textureSampler, secondary_uv);
+
+    // Apply blend mode
+    float3 blended;
+    if (blend_mode == 0) {
+        blended = lerp(primary.rgb, secondary.rgb, secondary.a * opacity);
+    } else if (blend_mode == 1) {
+        blended = blend_add(primary.rgb, secondary.rgb * opacity);
+    } else if (blend_mode == 2) {
+        blended = blend_multiply(primary.rgb, secondary.rgb);
+        blended = lerp(primary.rgb, blended, opacity);
+    } else if (blend_mode == 3) {
+        blended = blend_screen(primary.rgb, secondary.rgb);
+        blended = lerp(primary.rgb, blended, opacity);
+    } else if (blend_mode == 4) {
+        blended = blend_overlay(primary.rgb, secondary.rgb);
+        blended = lerp(primary.rgb, blended, opacity);
+    } else if (blend_mode == 5) {
+        blended = blend_difference(primary.rgb, secondary.rgb);
+        blended = lerp(primary.rgb, blended, opacity);
+    } else {
+        blended = primary.rgb;
+    }
+
+    // Apply mask if enabled
+    if (use_mask) {
+        float mask_value = mask_image.Sample(textureSampler, v_in.uv).r;
+        if (invert_mask) mask_value = 1.0 - mask_value;
+        blended = lerp(primary.rgb, blended, mask_value);
+    }
+
+    return float4(blended, primary.a);
+}
+
+// ===== TECHNIQUE =====
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader  = PSDualComposite(v_in);
+    }
+}

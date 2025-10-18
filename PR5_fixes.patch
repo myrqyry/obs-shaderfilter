@@ -1,0 +1,146 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1234567..abcdefg 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,7 +1,7 @@
+ # --- Detect if the plugin is build out of tree or not ---
+ if(CMAKE_PROJECT_NAME STREQUAL "obs-studio")
+     set(BUILD_OUT_OF_TREE OFF)
+-    cmake_minimum_required(VERSION 3.16...3.26)
++    cmake_minimum_required(VERSION 3.16)
+ else()
+     set(BUILD_OUT_OF_TREE ON)
+     cmake_minimum_required(VERSION 3.16)
+@@ -11,7 +11,7 @@ project(obs-shaderfilter-plus-next VERSION 1.0.0)
+
+ set(PLUGIN_AUTHOR "myrqyry")
+ set(PLUGIN_GIT obs-shaderfilter-plus-next)
+-set(LINUX_MAINTAINER_EMAIL "your@email.com")
++set(LINUX_MAINTAINER_EMAIL "your.actual.email@example.com")
+ set(MACOS_BUNDLEID "com.myrqyry.obs-shaderfilter-plus-next")
+
+ # ===== BUILD OPTIONS =====
+@@ -114,9 +114,15 @@ if(IN_OBS_BUILD)
+
+     elseif(WIN32)
++        # Detect architecture
++        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
++            set(OBS_ARCH_DIR "64bit")
++        else()
++            set(OBS_ARCH_DIR "32bit")
++        endif()
++
+         set(LibOBS_INCLUDE_DIR "${OBS_DIR}/include")
+-        set(LibOBS_LIBRARY "${OBS_DIR}/bin/64bit/obs.lib")
++        set(LibOBS_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs.lib")
+         if(ENABLE_FRONTEND_API)
+-            set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/64bit/obs-frontend-api.lib")
++            set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs-frontend-api.lib")
+         endif()
+
+@@ -249,9 +255,11 @@ elseif(APPLE)
+     set_target_properties(${PROJECT_NAME} PROPERTIES
+         PREFIX ""
+         SUFFIX ".so"
++        MACOSX_BUNDLE_GUI_IDENTIFIER "${MACOS_BUNDLEID}"
+     )
+
+-    # macOS specific frameworks
++    # Find and link CoreFoundation framework properly
++    find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
+     target_link_libraries(${PROJECT_NAME} PRIVATE
+-        "-framework CoreFoundation"
++        ${COREFOUNDATION_LIBRARY}
+     )
+ endif()
+
+diff --git a/src/audio_reactive.cpp b/src/audio_reactive.cpp
+index 2345678..bcdefgh 100644
+--- a/src/audio_reactive.cpp
++++ b/src/audio_reactive.cpp
+@@ -2,9 +2,6 @@
+ #include "shader_filter.hpp"
+
+ #include <obs-module.h>
+-#include <media-io/audio-io.h>
+-#include <util/circlebuf.h>
+-#include <cmath>
++#include <cmath>  // For sqrtf
+
+ namespace audio_reactive {
+
+diff --git a/src/multi_input.cpp b/src/multi_input.cpp
+index 3456789..cdefghi 100644
+--- a/src/multi_input.cpp
++++ b/src/multi_input.cpp
+@@ -2,7 +2,6 @@
+ #include "shader_filter.hpp"
+
+ #include <obs-module.h>
+-#include <graphics/graphics.h>
+
+ namespace multi_input {
+
+diff --git a/src/hot_reload.cpp b/src/hot_reload.cpp
+index 4567890..defghij 100644
+--- a/src/hot_reload.cpp
++++ b/src/hot_reload.cpp
+@@ -42,8 +42,10 @@ static void watcher_loop()
+                 if (fs::exists(entry.second.path)) {
+                     entry.last_write_time = fs::last_write_time(entry.second.path);
+                 }
+-            } catch (...) {
++            } catch (const fs::filesystem_error &e) {
++                blog(LOG_WARNING, "[ShaderFilter Plus Next] Filesystem error for %s: %s",
++                     path_str.c_str(), e.what());
+                 entry.last_write_time = fs::file_time_type::min();
+             }
+
+@@ -82,7 +84,9 @@ void watch_file(const char *path, void *filter_instance)
+         try {
+             if (fs::exists(path_str)) {
+                 entry.last_write_time = fs::last_write_time(path_str);
++            } else {
++                blog(LOG_WARNING, "[ShaderFilter Plus Next] File does not exist: %s", path);
+             }
+-        } catch (...) {
++        } catch (const fs::filesystem_error &e) {
++            blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot watch %s: %s", path, e.what());
+             entry.last_write_time = fs::file_time_type::min();
+         }
+
+diff --git a/data/shaders/examples/akira_trails.effect b/data/shaders/examples/akira_trails.effect
+index 5678901..efghijk 100644
+--- a/data/shaders/examples/akira_trails.effect
++++ b/data/shaders/examples/akira_trails.effect
+@@ -95,6 +95,21 @@ float3 hsv2rgb(float3 hsv)
+     return hsv.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
+ }
+
++// ===== MULTI-PASS RENDERING OPTIONS =====
++// This effect provides multiple pixel shaders for different rendering approaches:
++//
++// Current (Single Pass): Direct trail accumulation
++//   technique Draw { pass { pixel_shader = PSTrailAccumulation; } }
++//
++// Alternative (Bright Pass First): Extract bright areas, then accumulate
++//   Modify technique to use PSBrightPass in first pass
++//
++// Advanced (Full Composite): Bright extraction + accumulation + final composite
++//   Add PSFinalComposite as a third pass to blend with original
++//
++// To use different approaches, modify the technique block at the bottom of this file.
++// The current implementation uses single-pass for simplicity and performance.
++
+ // ===== PIXEL SHADER: BRIGHT PASS =====
+ float4 PSBrightPass(VertexOut v_in) : TARGET
+ {
+@@ -159,6 +174,7 @@ float4 PSFinalComposite(VertexOut v_in) : TARGET
+     return result;
+ }
+
+-// ===== TECHNIQUE =====
++// ===== TECHNIQUE (SINGLE PASS TRAIL) =====
++// Modify this to use PSBrightPass or PSFinalComposite for different effects
+ technique Draw
+ {

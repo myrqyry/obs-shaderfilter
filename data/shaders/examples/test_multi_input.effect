@@ -1,0 +1,41 @@
+uniform float4x4 ViewProj;
+
+uniform texture2d image;
+uniform texture2d secondary_image;
+
+uniform float blend_amount< string label="Blend Amount"; string widget_type="slider"; float minimum=0.0; float maximum=1.0; float step=0.01; > = 0.5;
+
+sampler_state textureSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+
+struct VertexIn {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+struct VertexOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertexOut VSDefault(VertexIn v_in)
+{
+    VertexOut v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv;
+    return v_out;
+}
+
+float4 PSMain(VertexOut v_in) : TARGET
+{
+    float4 base = image.Sample(textureSampler, v_in.uv);
+    float4 second = secondary_image.Sample(textureSampler, v_in.uv);
+
+    return lerp(base, second, blend_amount);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader = PSMain(v_in);
+    }
+}

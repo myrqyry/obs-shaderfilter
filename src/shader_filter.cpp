@@ -74,8 +74,8 @@ static void filter_destroy(void *data)
 {
     filter_data *filter = static_cast<filter_data*>(data);
 
-    if (filter->shader_path && filter->hot_reload_enabled) {
-        hot_reload::unwatch_file(filter->shader_path, filter);
+    if (!filter->shader_path.empty() && filter->hot_reload_enabled) {
+        hot_reload::unwatch_file(filter->shader_path.c_str(), filter);
     }
 
     obs_enter_graphics();
@@ -103,8 +103,6 @@ static void filter_destroy(void *data)
     if (filter->mask_source) {
         obs_weak_source_release(filter->mask_source);
     }
-
-    bfree(filter->shader_path);
 
     delete filter;
 }
@@ -140,19 +138,18 @@ static void filter_update(void *data, obs_data_t *settings)
 {
     filter_data *filter = static_cast<filter_data*>(data);
 
-    const char *shader_path = obs_data_get_string(settings, "shader_file");
+    const char *shader_path_c = obs_data_get_string(settings, "shader_file");
     bool use_effect = obs_data_get_bool(settings, "use_effect_file");
 
-    if (shader_path && *shader_path) {
-        bool path_changed = !filter->shader_path ||
-                           strcmp(filter->shader_path, shader_path) != 0;
+    if (shader_path_c && *shader_path_c) {
+        bool path_changed = filter->shader_path.empty() ||
+                           filter->shader_path.compare(shader_path_c) != 0;
 
         if (path_changed) {
-            bfree(filter->shader_path);
-            filter->shader_path = bstrdup(shader_path);
+            filter->shader_path = shader_path_c;
             filter->use_effect_file = use_effect;
 
-            load_shader_from_file(filter, shader_path);
+            load_shader_from_file(filter, shader_path_c);
         }
     }
 
@@ -160,10 +157,10 @@ static void filter_update(void *data, obs_data_t *settings)
     if (hot_reload != filter->hot_reload_enabled) {
         filter->hot_reload_enabled = hot_reload;
 
-        if (hot_reload && filter->shader_path) {
-            hot_reload::watch_file(filter->shader_path, filter);
-        } else if (!hot_reload && filter->shader_path) {
-            hot_reload::unwatch_file(filter->shader_path, filter);
+        if (hot_reload && !filter->shader_path.empty()) {
+            hot_reload::watch_file(filter->shader_path.c_str(), filter);
+        } else if (!hot_reload && !filter->shader_path.empty()) {
+            hot_reload::unwatch_file(filter->shader_path.c_str(), filter);
         }
     }
 
@@ -188,6 +185,7 @@ static void filter_render(void *data, gs_effect_t *effect)
     }
 
     if (obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING)) {
+        multi_input::bind_textures(filter, filter->effect);
         obs_source_process_filter_end(filter->context, filter->effect, 0, 0);
     }
 }
@@ -208,10 +206,10 @@ static void filter_defaults(obs_data_t *settings)
 void reload_shader(void *data)
 {
     filter_data *filter = static_cast<filter_data*>(data);
-    if (filter->shader_path) {
+    if (!filter->shader_path.empty()) {
         blog(LOG_INFO, "[ShaderFilter Plus Next] Hot-reloading shader: %s",
-             filter->shader_path);
-        load_shader_from_file(filter, filter->shader_path);
+             filter->shader_path.c_str());
+        load_shader_from_file(filter, filter->shader_path.c_str());
     }
 }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <obs.h>
 
 namespace shader_filter {

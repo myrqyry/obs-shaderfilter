@@ -1,7 +1,7 @@
 #pragma once
 
-#include <obs.h>
-#include <obs-source.h>
+#include <obs/obs.h>
+#include <obs/obs-source.h>
 #include <obs/graphics/gs_effect.h>
 #include <obs/graphics/gs_texrender.h>
 

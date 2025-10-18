@@ -1,8 +1,8 @@
 #include "audio_reactive.hpp"
 #include "shader_filter_data.hpp"
 
-#include <obs-module.h>
-#include <media-io/audio-io.h>
+#include <obs/obs-module.h>
+#include <obs/media-io/audio-io.h>
 #include <util/circlebuf.h>
 #include <cmath>
 #include <obs-enum-sources.h>
@@ -68,16 +68,13 @@ void add_properties(obs_properties_t *props, void *data)
         obs_module_text("SpectrumBands"),
         8, 256, 8);
 
-    obs_properties_add_bool(audio_group,
-        "audio_reactive_enabled",
-        obs_module_text("AudioReactivityEnabled"));
 }
 
 void set_defaults(obs_data_t *settings)
 {
     obs_data_set_default_string(settings, "audio_source", "");
     obs_data_set_default_int(settings, "spectrum_bands", 64);
-    obs_data_set_default_bool(settings, "audio_reactive_enabled", false);
+    obs_data_set_default_bool(settings, "audio_reactive", false);
 }
 
 void update_settings(void *filter_data, obs_data_t *settings)
@@ -85,7 +82,7 @@ void update_settings(void *filter_data, obs_data_t *settings)
     shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
 
     filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
-    filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive_enabled");
+    filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
 
     const char* audio_source_name = obs_data_get_string(settings, "audio_source");
 

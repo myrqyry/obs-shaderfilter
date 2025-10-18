@@ -1,7 +1,7 @@
 #include "hot_reload.hpp"
 #include "shader_filter.hpp"
 
-#include <obs-module.h>
+#include <obs/obs-module.h>
 #include <filesystem>
 #include <thread>
 #include <mutex>

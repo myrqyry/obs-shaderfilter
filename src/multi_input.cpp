@@ -1,8 +1,8 @@
 #include "multi_input.hpp"
 #include "shader_filter_data.hpp"
 
-#include <obs-module.h>
-#include <obs-source.h>
+#include <obs/obs-module.h>
+#include <obs/obs-source.h>
 #include <graphics/graphics.h>
 #include <obs-enum-sources.h>
 

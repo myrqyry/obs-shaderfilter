@@ -1,5 +1,5 @@
 #pragma once
-#include <obs-properties.h>
+#include <obs/obs-properties.h>
 
 namespace hot_reload {
 

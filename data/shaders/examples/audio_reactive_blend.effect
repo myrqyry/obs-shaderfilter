@@ -1,0 +1,170 @@
+// Audio-reactive dual video source blending with spectrum visualization
+
+// ===== REQUIRED OBS UNIFORMS =====
+uniform float4x4 ViewProj;
+uniform texture2d image;           // Primary video input
+uniform float2 uv_offset;
+uniform float2 uv_scale;
+uniform float2 uv_size;
+uniform float2 uv_pixel_interval;
+uniform float elapsed_time;
+
+// ===== MULTI-INPUT TEXTURE =====
+uniform texture2d secondary_image; // Secondary video input
+
+// ===== AUDIO DATA =====
+uniform float audio_spectrum[256]; // FFT spectrum data
+uniform int spectrum_bands = 64;   // Number of active bands
+
+// ===== CUSTOM PARAMETERS =====
+uniform float blend_amount<
+    string label = "Base Blend Amount";
+    string widget_type = "slider";
+    string group = "Blend Settings";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.5;
+
+uniform float audio_reactivity<
+    string label = "Audio Reactivity Strength";
+    string widget_type = "slider";
+    string group = "Audio Settings";
+    float minimum = 0.0;
+    float maximum = 2.0;
+    float step = 0.1;
+> = 1.0;
+
+uniform float frequency_low<
+    string label = "Low Frequency Band";
+    string widget_type = "slider";
+    string group = "Audio Settings";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.2;
+
+uniform float frequency_mid<
+    string label = "Mid Frequency Band";
+    string widget_type = "slider";
+    string group = "Audio Settings";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.5;
+
+uniform float frequency_high<
+    string label = "High Frequency Band";
+    string widget_type = "slider";
+    string group = "Audio Settings";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.8;
+
+uniform bool show_spectrum<
+    string label = "Show Spectrum Overlay";
+    string group = "Visualization";
+> = false;
+
+uniform float4 spectrum_color<
+    string label = "Spectrum Color";
+    string widget_type = "color";
+    string group = "Visualization";
+> = {0.0, 1.0, 0.5, 1.0};
+
+// ===== SAMPLER STATE =====
+sampler_state textureSampler {
+    Filter    = Linear;
+    AddressU  = Clamp;
+    AddressV  = Clamp;
+};
+
+// ===== DATA STRUCTURES =====
+struct VertexIn {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+struct VertexOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+// ===== VERTEX SHADER =====
+VertexOut VSDefault(VertexIn v_in)
+{
+    VertexOut v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv * uv_scale + uv_offset;
+    return v_out;
+}
+
+// ===== HELPER FUNCTIONS =====
+float get_frequency_band_average(float band_center, float band_width)
+{
+    int center_idx = (int)(band_center * spectrum_bands);
+    int width = max(1, (int)(band_width * spectrum_bands));
+
+    float sum = 0.0;
+    int count = 0;
+
+    for (int i = max(0, center_idx - width/2);
+         i < min(spectrum_bands, center_idx + width/2);
+         i++) {
+        sum += audio_spectrum[i];
+        count++;
+    }
+
+    return (count > 0) ? (sum / count) : 0.0;
+}
+
+// ===== PIXEL SHADER =====
+float4 PSAudioReactiveBlend(VertexOut v_in) : TARGET
+{
+    // Sample both video inputs
+    float4 primary = image.Sample(textureSampler, v_in.uv);
+    float4 secondary = secondary_image.Sample(textureSampler, v_in.uv);
+
+    // Get audio frequency bands
+    float low = get_frequency_band_average(frequency_low, 0.1);
+    float mid = get_frequency_band_average(frequency_mid, 0.1);
+    float high = get_frequency_band_average(frequency_high, 0.1);
+
+    // Calculate audio-driven blend factor
+    float audio_intensity = (low + mid + high) / 3.0;
+    float dynamic_blend = blend_amount + (audio_intensity * audio_reactivity);
+    dynamic_blend = saturate(dynamic_blend);
+
+    // Blend the two sources
+    float4 result = lerp(primary, secondary, dynamic_blend);
+
+    // Optional spectrum visualization overlay
+    if (show_spectrum) {
+        float spectrum_height = 0.15;
+        float spectrum_y_start = 1.0 - spectrum_height;
+
+        if (v_in.uv.y > spectrum_y_start) {
+            int band_index = (int)(v_in.uv.x * spectrum_bands);
+            float band_value = audio_spectrum[band_index];
+
+            float normalized_y = (v_in.uv.y - spectrum_y_start) / spectrum_height;
+
+            if (normalized_y < band_value) {
+                result = lerp(result, spectrum_color, 0.7);
+            }
+        }
+    }
+
+    return result;
+}
+
+// ===== TECHNIQUE =====
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader  = PSAudioReactiveBlend(v_in);
+    }
+}

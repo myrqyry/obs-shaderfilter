@@ -1,11 +1,12 @@
-#include "multi_input.hpp"
+#include "audio_reactive.hpp"
 #include "shader_filter.hpp"
 
 #include <obs-module.h>
-#include <obs-source.h>
-#include <graphics/graphics.h>
+#include <media-io/audio-io.h>
+#include <util/circlebuf.h>
+#include <cmath>
 
-namespace multi_input {
+namespace audio_reactive {
 
 void add_properties(obs_properties_t *props, void *data)
 {
@@ -19,9 +20,9 @@ void set_defaults(obs_data_t *settings)
     // Placeholder
 }
 
-void update_sources(void *filter_data, obs_data_t *settings)
+void update_settings(void *filter_data, obs_data_t *settings)
 {
     // Placeholder
 }
 
-} // namespace multi_input
+} // namespace audio_reactive

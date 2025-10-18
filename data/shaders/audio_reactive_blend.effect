@@ -1,0 +1,51 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float audio_spectrum[256];
+uniform int spectrum_bands;
+
+sampler_state def_sampler {
+    Filter    = Linear;
+    AddressU  = Wrap;
+    AddressV  = Wrap;
+};
+
+struct VertData {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+    VertData v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv  = v_in.uv;
+    return v_out;
+}
+
+float4 PShader(VertData v_in) : TARGET
+{
+    float4 base_color = image.Sample(def_sampler, v_in.uv);
+    float  audio_sum = 0.0;
+
+    // Calculate the average of the spectrum bands
+    for (int i = 0; i < spectrum_bands; i++) {
+        audio_sum += audio_spectrum[i];
+    }
+    float audio_avg = audio_sum / float(spectrum_bands);
+
+    // Make the effect more pronounced
+    audio_avg = pow(audio_avg, 2.0) * 2.0;
+
+    // Blend with red based on audio level
+    float4 audio_color = float4(1.0, 0.0, 0.0, 1.0);
+    return lerp(base_color, audio_color, audio_avg);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader  = PShader(v_in);
+    }
+}

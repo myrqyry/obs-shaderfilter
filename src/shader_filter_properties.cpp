@@ -1,5 +1,5 @@
 #include "shader_filter.hpp"
-#include <obs-module.h>
+#include <obs/obs-module.h>
 
 // Forward declarations from other modules
 namespace multi_input { void add_properties(obs_properties_t*, void*); }

@@ -63,8 +63,8 @@ else()
             )
         elseif(LINUX)
             set(OBS_SEARCH_PATHS
-                "/usr"
                 "/usr/local"
+                "/usr"
                 "$ENV{HOME}/.local"
             )
         endif()
@@ -81,22 +81,20 @@ else()
 
     # Set include and library paths
     if(LINUX)
-        find_path(LibOBS_INCLUDE_DIR
-            NAMES obs.h
-            PATHS
-                ${OBS_DIR}/include
-                /usr/include
-                /usr/local/include
+        find_path(OBS_H_PATH
+            NAMES obs/obs.h
+            HINTS ${OBS_DIR}/include
+            NO_DEFAULT_PATH
         )
+        if(OBS_H_PATH)
+            get_filename_component(LibOBS_INCLUDE_DIR "${OBS_H_PATH}" DIRECTORY)
+        endif()
 
         find_library(LibOBS_LIBRARY
             NAMES obs libobs
-            PATHS
+            HINTS
                 ${OBS_DIR}/lib
                 ${OBS_DIR}/lib/x86_64-linux-gnu
-                /usr/lib
-                /usr/lib/x86_64-linux-gnu
-                /usr/local/lib
             NO_DEFAULT_PATH
         )
 
@@ -153,6 +151,15 @@ else()
     message(STATUS "OBS Library: ${LibOBS_LIBRARY}")
 endif()
 
+# ===== FFTW LIBRARY DETECTION (for Audio Reactivity) =====
+# We need the single-precision (float) version of FFTW3
+find_package(FFTW3F QUIET HINTS /usr/local /usr)
+if(FFTW3F_FOUND)
+    message(STATUS "Found FFTW3 (single-precision), enabling full audio reactivity.")
+else()
+    message(WARNING "FFTW3 (single-precision) not found. Audio reactivity will use simulated data.")
+endif()
+
 # ===== SOURCE FILES =====
 set(PLUGIN_SOURCES
     src/obs-shaderfilter-plus-next.cpp
@@ -196,6 +203,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 # ===== LINK LIBRARIES =====
+if(FFTW3F_FOUND)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_FFTW)
+    target_link_libraries(${PROJECT_NAME} PRIVATE FFTW3F::fftw3f)
+endif()
+
 if(IN_OBS_BUILD)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         OBS::libobs
@@ -242,15 +254,7 @@ if(LINUX)
     )
 
     # Add pthread for threading (hot reload)
-    find_package(FFTW3 QUIET)
-    if(FFTW3_FOUND)
-        target_link_libraries(${PROJECT_NAME} PRIVATE pthread FFTW3::fftw3f)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_FFTW)
-        message(STATUS "Found FFTW3, enabling full audio reactivity")
-    else()
-        target_link_libraries(${PROJECT_NAME} PRIVATE pthread)
-        message(WARNING "FFTW3 not found, audio reactivity will be simulated")
-    endif()
+    target_link_libraries(${PROJECT_NAME} PRIVATE pthread)
 
 elseif(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES

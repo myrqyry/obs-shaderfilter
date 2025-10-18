@@ -4,7 +4,7 @@
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
 
-#include <obs-module.h>
+#include <obs/obs-module.h>
 #include <graphics/graphics.h>
 #include <graphics/image-file.h>
 #include <util/platform.h>

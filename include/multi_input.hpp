@@ -1,6 +1,7 @@
 #pragma once
-#include <obs-properties.h>
-#include <obs-data.h>
+#include <obs/obs-properties.h>
+#include <obs/obs-data.h>
+#include <obs/obs-source.h>
 #include <obs/graphics/gs_effect.h>
 
 namespace multi_input {

@@ -41,7 +41,7 @@ struct filter_data {
     bool override_entire_effect;
 
     // Shader file path
-    char *shader_path;
+    std::string shader_path;
     bool use_effect_file;
 
     // Hot reload

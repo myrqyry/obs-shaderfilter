@@ -240,9 +240,15 @@ if(LINUX)
     )
 
     # Add pthread for threading (hot reload)
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        pthread
-    )
+    find_package(FFTW3 QUIET)
+    if(FFTW3_FOUND)
+        target_link_libraries(${PROJECT_NAME} PRIVATE pthread FFTW3::fftw3f)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_FFTW)
+        message(STATUS "Found FFTW3, enabling full audio reactivity")
+    else()
+        target_link_libraries(${PROJECT_NAME} PRIVATE pthread)
+        message(WARNING "FFTW3 not found, audio reactivity will be simulated")
+    endif()
 
 elseif(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES

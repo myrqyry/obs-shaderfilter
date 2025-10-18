@@ -18,7 +18,6 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source);
 static void filter_destroy(void *data);
 static void filter_update(void *data, obs_data_t *settings);
 static void filter_render(void *data, gs_effect_t *effect);
-extern obs_properties_t* get_properties(void*);
 static void filter_defaults(obs_data_t *settings);
 
 void register_filter()
@@ -65,6 +64,12 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->use_effect_file = false;
     filter->hot_reload_enabled = false;
 
+    filter->audio_source = nullptr;
+    filter->audio_capture = nullptr;
+    filter->audio_spectrum = new float[256]();
+    filter->spectrum_bands = 64;
+    filter->audio_reactive_enabled = false;
+
     filter_update(filter, settings);
 
     return filter;
@@ -104,6 +109,15 @@ static void filter_destroy(void *data)
         obs_weak_source_release(filter->mask_source);
     }
 
+    if (filter->audio_source) {
+        obs_weak_source_release(filter->audio_source);
+    }
+
+    if(filter->audio_capture){
+        delete filter->audio_capture;
+    }
+
+    delete[] filter->audio_spectrum;
     bfree(filter->shader_path);
 
     delete filter;
@@ -174,6 +188,29 @@ static void filter_update(void *data, obs_data_t *settings)
     filter->override_entire_effect = obs_data_get_bool(settings, "override_entire_effect");
 
     multi_input::update_sources(filter, settings);
+    audio_reactive::update_settings(filter, settings);
+}
+
+static void ensure_render_targets(filter_data *filter, uint32_t width, uint32_t height)
+{
+    if (filter->render_target_a &&
+        filter->target_width == width &&
+        filter->target_height == height) {
+        return;
+    }
+
+    if (filter->render_target_a) {
+        gs_texrender_destroy(filter->render_target_a);
+        gs_texrender_destroy(filter->render_target_b);
+    }
+
+    filter->render_target_a = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+    filter->render_target_b = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+    filter->target_width = width;
+    filter->target_height = height;
+
+    blog(LOG_DEBUG, "[ShaderFilter Plus Next] Created render targets: %dx%d",
+         width, height);
 }
 
 static void filter_render(void *data, gs_effect_t *effect)
@@ -187,9 +224,87 @@ static void filter_render(void *data, gs_effect_t *effect)
         return;
     }
 
-    if (obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING)) {
-        obs_source_process_filter_end(filter->context, filter->effect, 0, 0);
+    obs_source_t *target = obs_filter_get_target(filter->context);
+    uint32_t base_width = obs_source_get_base_width(target);
+    uint32_t base_height = obs_source_get_base_height(target);
+
+    if (!base_width || !base_height) {
+        obs_source_skip_video_filter(filter->context);
+        return;
     }
+
+    uint32_t width = base_width + filter->expand_left + filter->expand_right;
+    uint32_t height = base_height + filter->expand_top + filter->expand_bottom;
+
+    ensure_render_targets(filter, width, height);
+
+    gs_effect_t *render_effect = filter->override_entire_effect ?
+                                 filter->effect : obs_get_base_effect(OBS_EFFECT_DEFAULT);
+
+    gs_eparam_t *param_image = gs_effect_get_param_by_name(filter->effect, "image");
+    gs_eparam_t *param_elapsed = gs_effect_get_param_by_name(filter->effect, "elapsed_time");
+    gs_eparam_t *param_uv_size = gs_effect_get_param_by_name(filter->effect, "uv_size");
+
+    gs_texrender_t *current_target = filter->use_buffer_a ?
+                                     filter->render_target_a : filter->render_target_b;
+    gs_texrender_t *previous_target = filter->use_buffer_a ?
+                                      filter->render_target_b : filter->render_target_a;
+
+    if (gs_texrender_begin(current_target, width, height)) {
+
+        gs_viewport_push();
+        gs_projection_push();
+        gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+        gs_set_viewport(filter->expand_left, filter->expand_top,
+                       base_width, base_height);
+
+        struct vec2 uv_size = {(float)width, (float)height};
+
+        if (param_elapsed) {
+            float time = (float)obs_get_video_frame_time() / 1000000000.0f;
+            gs_effect_set_float(param_elapsed, time);
+        }
+
+        if (param_uv_size) {
+            gs_effect_set_vec2(param_uv_size, &uv_size);
+        }
+
+        gs_eparam_t *param_previous = gs_effect_get_param_by_name(filter->effect, "previous_frame");
+        if (param_previous) {
+            gs_texture_t *prev_tex = gs_texrender_get_texture(previous_target);
+            if (prev_tex) {
+                gs_effect_set_texture(param_previous, prev_tex);
+            }
+        }
+
+        multi_input::bind_textures(filter, render_effect);
+        audio_reactive::bind_audio_data(filter, render_effect);
+
+        if (param_image) {
+            if (obs_source_process_filter_begin(filter->context, GS_RGBA,
+                                               OBS_ALLOW_DIRECT_RENDERING)) {
+                obs_source_process_filter_end(filter->context, render_effect,
+                                             width, height);
+            }
+        }
+
+        gs_projection_pop();
+        gs_viewport_pop();
+        gs_texrender_end(current_target);
+    }
+
+    gs_texture_t *tex = gs_texrender_get_texture(current_target);
+    if (tex) {
+        gs_effect_t *pass_through = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+        gs_eparam_t *image = gs_effect_get_param_by_name(pass_through, "image");
+        gs_effect_set_texture(image, tex);
+
+        while (gs_effect_loop(pass_through, "Draw")) {
+            gs_draw_sprite(tex, 0, width, height);
+        }
+    }
+
+    filter->use_buffer_a = !filter->use_buffer_a;
 }
 
 static void filter_defaults(obs_data_t *settings)
@@ -203,6 +318,7 @@ static void filter_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "hot_reload_enabled", false);
 
     multi_input::set_defaults(settings);
+    audio_reactive::set_defaults(settings);
 }
 
 void reload_shader(void *data)

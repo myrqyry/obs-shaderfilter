@@ -13,22 +13,6 @@ namespace shader_filter {
 
 const char *FILTER_ID = "obs_shaderfilter_plus_next_filter";
 
-struct filter_data {
-    obs_source_t *context;
-    gs_effect_t *effect;
-
-    gs_texrender_t *render_target_a;
-    gs_texrender_t *render_target_b;
-    bool use_buffer_a;
-    uint32_t target_width;
-    uint32_t target_height;
-
-    char *shader_path;
-    bool use_effect_file;
-
-    bool hot_reload_enabled;
-};
-
 static const char *filter_get_name(void *unused);
 static void *filter_create(obs_data_t *settings, obs_source_t *source);
 static void filter_destroy(void *data);
@@ -71,6 +55,12 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->use_buffer_a = true;
     filter->target_width = 0;
     filter->target_height = 0;
+
+    filter->secondary_source = nullptr;
+    filter->mask_source = nullptr;
+    filter->secondary_texrender = nullptr;
+    filter->mask_texrender = nullptr;
+
     filter->shader_path = nullptr;
     filter->use_effect_file = false;
     filter->hot_reload_enabled = false;
@@ -103,6 +93,16 @@ static void filter_destroy(void *data)
     }
 
     obs_leave_graphics();
+
+    multi_input::cleanup_textures(filter);
+
+    if (filter->secondary_source) {
+        obs_weak_source_release(filter->secondary_source);
+    }
+
+    if (filter->mask_source) {
+        obs_weak_source_release(filter->mask_source);
+    }
 
     bfree(filter->shader_path);
 
@@ -166,6 +166,14 @@ static void filter_update(void *data, obs_data_t *settings)
             hot_reload::unwatch_file(filter->shader_path, filter);
         }
     }
+
+    filter->expand_left = (int)obs_data_get_int(settings, "expand_left");
+    filter->expand_right = (int)obs_data_get_int(settings, "expand_right");
+    filter->expand_top = (int)obs_data_get_int(settings, "expand_top");
+    filter->expand_bottom = (int)obs_data_get_int(settings, "expand_bottom");
+    filter->override_entire_effect = obs_data_get_bool(settings, "override_entire_effect");
+
+    multi_input::update_sources(filter, settings);
 }
 
 static void filter_render(void *data, gs_effect_t *effect)
@@ -187,7 +195,14 @@ static void filter_render(void *data, gs_effect_t *effect)
 static void filter_defaults(obs_data_t *settings)
 {
     obs_data_set_default_bool(settings, "use_effect_file", false);
+    obs_data_set_default_int(settings, "expand_left", 0);
+    obs_data_set_default_int(settings, "expand_right", 0);
+    obs_data_set_default_int(settings, "expand_top", 0);
+    obs_data_set_default_int(settings, "expand_bottom", 0);
+    obs_data_set_default_bool(settings, "override_entire_effect", false);
     obs_data_set_default_bool(settings, "hot_reload_enabled", false);
+
+    multi_input::set_defaults(settings);
 }
 
 void reload_shader(void *data)

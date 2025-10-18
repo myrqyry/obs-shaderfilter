@@ -1,5 +1,5 @@
 #include "audio_reactive.hpp"
-#include "shader_filter.hpp"
+#include "shader_filter_data.hpp"
 
 #include <obs-module.h>
 #include <media-io/audio-io.h>

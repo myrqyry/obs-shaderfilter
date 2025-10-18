@@ -1,4 +1,5 @@
 #include "shader_filter.hpp"
+#include "shader_filter_data.hpp"
 #include "hot_reload.hpp"
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
@@ -237,6 +238,8 @@ static void filter_render(void *data, gs_effect_t *effect)
     uint32_t height = base_height + filter->expand_top + filter->expand_bottom;
 
     ensure_render_targets(filter, width, height);
+
+    multi_input::render_sources(filter);
 
     gs_effect_t *render_effect = filter->override_entire_effect ?
                                  filter->effect : obs_get_base_effect(OBS_EFFECT_DEFAULT);

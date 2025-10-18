@@ -1,5 +1,5 @@
 #include "multi_input.hpp"
-#include "shader_filter.hpp"
+#include "shader_filter_data.hpp"
 
 #include <obs-module.h>
 #include <obs-source.h>
@@ -103,35 +103,86 @@ void update_sources(void *filter_data, obs_data_t *settings)
     }
 }
 
-void bind_textures(void *filter_data, gs_effect_t *effect)
+static void render_source(
+    obs_weak_source_t *weak_source,
+    gs_texrender_t *&texrender,
+    uint32_t &tex_width,
+    uint32_t &tex_height)
+{
+    obs_source_t *source = obs_weak_source_get_source(weak_source);
+    if (!source) {
+        return;
+    }
+
+    uint32_t width = obs_source_get_base_width(source);
+    uint32_t height = obs_source_get_base_height(source);
+
+    if (width == 0 || height == 0) {
+        obs_source_release(source);
+        return;
+    }
+
+    if (!texrender || width != tex_width || height != tex_height) {
+        if (texrender) {
+            gs_texrender_destroy(texrender);
+        }
+        texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+        tex_width = width;
+        tex_height = height;
+        blog(LOG_INFO, "[shader-filter-plus] Resized multi-input texture to %ux%u", width, height);
+    }
+
+    if (gs_texrender_begin(texrender, width, height)) {
+        gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+        obs_source_video_render(source);
+        gs_texrender_end(texrender);
+    }
+
+    obs_source_release(source);
+}
+
+void render_sources(void *filter_data)
 {
     shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
 
     if (filter->secondary_source) {
-        obs_source_t *source = obs_weak_source_get_source(filter->secondary_source);
-        if (source) {
-            gs_eparam_t *param = gs_effect_get_param_by_name(effect, "secondary_image");
-            if (param) {
-                gs_texture_t *tex = obs_source_get_texture(source);
-                if (tex) {
-                    gs_effect_set_texture(param, tex);
-                }
-            }
-            obs_source_release(source);
-        }
+        render_source(
+            filter->secondary_source,
+            filter->secondary_texrender,
+            filter->secondary_texrender_width,
+            filter->secondary_texrender_height);
     }
 
     if (filter->mask_source) {
-        obs_source_t *source = obs_weak_source_get_source(filter->mask_source);
-        if (source) {
-            gs_eparam_t *param = gs_effect_get_param_by_name(effect, "mask_image");
-            if (param) {
-                gs_texture_t *tex = obs_source_get_texture(source);
-                if (tex) {
-                    gs_effect_set_texture(param, tex);
-                }
+        render_source(
+            filter->mask_source,
+            filter->mask_texrender,
+            filter->mask_texrender_width,
+            filter->mask_texrender_height);
+    }
+}
+
+void bind_textures(void *filter_data, gs_effect_t *effect)
+{
+    shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
+
+    if (filter->secondary_texrender) {
+        gs_eparam_t *param = gs_effect_get_param_by_name(effect, "secondary_image");
+        if (param) {
+            gs_texture_t *tex = gs_texrender_get_texture(filter->secondary_texrender);
+            if (tex) {
+                gs_effect_set_texture(param, tex);
             }
-            obs_source_release(source);
+        }
+    }
+
+    if (filter->mask_texrender) {
+        gs_eparam_t *param = gs_effect_get_param_by_name(effect, "mask_image");
+        if (param) {
+            gs_texture_t *tex = gs_texrender_get_texture(filter->mask_texrender);
+            if (tex) {
+                gs_effect_set_texture(param, tex);
+            }
         }
     }
 }
@@ -145,12 +196,10 @@ void cleanup_textures(void *filter_data)
 
     if (filter->secondary_texrender) {
         gs_texrender_destroy(filter->secondary_texrender);
-        filter->secondary_texrender = nullptr;
     }
 
     if (filter->mask_texrender) {
         gs_texrender_destroy(filter->mask_texrender);
-        filter->mask_texrender = nullptr;
     }
 
     obs_leave_graphics();

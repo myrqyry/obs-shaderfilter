@@ -82,13 +82,11 @@ else()
     # Set include and library paths
     if(LINUX)
         find_path(LibOBS_INCLUDE_DIR
-            NAMES obs-module.h obs/obs-module.h
+            NAMES obs.h
             PATHS
-                ${OBS_DIR}/include/obs
                 ${OBS_DIR}/include
-                /usr/include/obs
-                /usr/local/include/obs
-            NO_DEFAULT_PATH
+                /usr/include
+                /usr/local/include
         )
 
         find_library(LibOBS_LIBRARY
@@ -192,6 +190,10 @@ else()
         ${LibOBS_INCLUDE_DIR}
     )
 endif()
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${LibOBS_INCLUDE_DIR}
+)
 
 # ===== LINK LIBRARIES =====
 if(IN_OBS_BUILD)

@@ -6,9 +6,6 @@ namespace shader_filter {
 // Main registration function
 void register_filter();
 
-// Forward declaration of the main filter data structure
-struct filter_data;
-
 // Callback for hot-reloading
 void reload_shader(void *data);
 

@@ -18,9 +18,18 @@ add_library(${PROJECT_NAME} MODULE)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
 
 target_sources(${PROJECT_NAME} PRIVATE
-	obs-shaderfilter.c
-	version.h)
-	
+    src/obs-shaderfilter-plus-next.cpp
+    src/shader_filter.cpp
+    src/hot_reload.cpp
+    src/multi_input.cpp
+    # src/audio_reactive.cpp
+    version.h)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    include
+    ${LIBOBS_INCLUDE_DIRS}
+)
+
 if(BUILD_OUT_OF_TREE)
   find_package(libobs REQUIRED)
   include(cmake/ObsPluginHelpers.cmake)

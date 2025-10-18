@@ -1,11 +1,10 @@
 #!/bin/bash
-
 # Build script for obs-shaderfilter-plus-next
 # Supports both in-tree and standalone builds
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BUILD_DIR="$SCRIPT_DIR/build"
 
 # Parse command line arguments
@@ -41,7 +40,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Clean if requested
-if [ "$CLEAN" = true ]; then
+if [[ $CLEAN == true ]]; then
     echo "Cleaning build directory..."
     rm -rf "$BUILD_DIR"
 fi
@@ -53,8 +52,7 @@ cd "$BUILD_DIR"
 # Configure
 echo "Configuring..."
 CMAKE_ARGS="-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
-
-if [ -n "$OBS_DIR" ]; then
+if [[ -n $OBS_DIR ]]; then
     CMAKE_ARGS="$CMAKE_ARGS -DOBS_DIR=$OBS_DIR"
 fi
 
@@ -62,12 +60,12 @@ cmake .. $CMAKE_ARGS
 
 # Build
 echo "Building..."
-cmake --build . --config "$BUILD_TYPE" -j$(nproc)
+cmake --build . --config $BUILD_TYPE -j$(nproc)
 
 # Install if requested
-if [ "$INSTALL" = true ]; then
+if [[ $INSTALL == true ]]; then
     echo "Installing..."
-    sudo cmake --install . --config "$BUILD_TYPE"
+    sudo cmake --install . --config $BUILD_TYPE
 fi
 
 echo "Build complete!"

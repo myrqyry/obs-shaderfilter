@@ -97,21 +97,6 @@ float3 hsv2rgb(float3 hsv)
     return hsv.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
 }
 
-// ===== MULTI-PASS RENDERING OPTIONS =====
-// This effect provides multiple pixel shaders for different rendering approaches:
-//
-// Current (Single Pass): Direct trail accumulation
-//   technique Draw { pass { pixel_shader = PSTrailAccumulation; } }
-//
-// Alternative (Bright Pass First): Extract bright areas, then accumulate
-//   Modify technique to use PSBrightPass in first pass
-//
-// Advanced (Full Composite): Bright extraction + accumulation + final composite
-//   Add PSFinalComposite as a third pass to blend with original
-//
-// To use different approaches, modify the technique block at the bottom of this file.
-// The current implementation uses single-pass for simplicity and performance.
-
 // ===== PIXEL SHADER: BRIGHT PASS =====
 float4 PSBrightPass(VertexOut v_in) : TARGET
 {
@@ -175,8 +160,7 @@ float4 PSFinalComposite(VertexOut v_in) : TARGET
     return result;
 }
 
-// ===== TECHNIQUE (SINGLE PASS TRAIL) =====
-// Modify this to use PSBrightPass or PSFinalComposite for different effects
+// ===== TECHNIQUE =====
 technique Draw
 {
     pass TrailAccumulation

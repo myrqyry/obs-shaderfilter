@@ -53,9 +53,13 @@ struct filter_data {
     int spectrum_bands;
     float audio_reactivity_strength;
     bool audio_reactive_enabled;
-    float attack;
-    float release;
-    float gain;
+    // Named to match audio_reactive.cpp usage
+    float audio_attack;
+    float audio_release;
+    float audio_gain;
+
+    // Temporally smoothed spectrum (same size as front/back buffers)
+    std::array<float, 256> smoothed_spectrum;
 };
 
 } // namespace shader_filter

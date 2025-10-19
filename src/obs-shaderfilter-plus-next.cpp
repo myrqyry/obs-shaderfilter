@@ -2,6 +2,8 @@
 #include <obs/obs-source.h>
 #include <obs/graphics/graphics.h>
 #include <obs/util/platform.h>
+#include <obs/obs-frontend-api.h>
+
 
 #include "shader_filter.hpp"
 #include "hot_reload.hpp"
@@ -19,11 +21,13 @@ MODULE_EXPORT const char *obs_module_description(void)
 // Forward declaration for the refresh logic
 static void refresh_all_filters();
 
-static void obs_frontend_event_callback(obs_frontend_event event, void *private_data)
+// Frontend event callbacks (optional)
+#if __has_include(<obs/obs-frontend-api.h>)
+static void frontend_event_handler(enum obs_frontend_event event, void *private_data)
 {
-    if (event == OBS_FRONTEND_EVENT_SOURCE_CREATED ||
-        event == OBS_FRONTEND_EVENT_SOURCE_REMOVED ||
-        event == OBS_FRONTEND_EVENT_SOURCE_RENAMED) {
+    if (event == OBS_FRONTEND_EVENT_CANVAS_ADDED ||
+        event == OBS_FRONTEND_EVENT_CANVAS_REMOVED ||
+        event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
         refresh_all_filters();
     }
     UNUSED_PARAMETER(private_data);
@@ -31,13 +35,17 @@ static void obs_frontend_event_callback(obs_frontend_event event, void *private_
 
 static void register_frontend_callbacks()
 {
-    obs_frontend_add_event_callback(obs_frontend_event_callback, nullptr);
+    obs_frontend_add_event_callback((obs_frontend_event_cb)frontend_event_handler, nullptr);
 }
 
 static void unregister_frontend_callbacks()
 {
-    obs_frontend_remove_event_callback(obs_frontend_event_callback, nullptr);
+    obs_frontend_remove_event_callback((obs_frontend_event_cb)frontend_event_handler, nullptr);
 }
+#else
+static void register_frontend_callbacks() {}
+static void unregister_frontend_callbacks() {}
+#endif
 
 bool obs_module_load(void)
 {

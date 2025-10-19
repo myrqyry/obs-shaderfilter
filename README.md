@@ -227,6 +227,15 @@ I recommend *.shader* as they do not require `Use Effect File (.effect)` as pixe
 | voronoi-pixelation.shader       |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/102317d5-ba5f-48bf-8666-c1d2b5850813) |
 | ZigZag.shader                   |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/3e3006cd-9f2a-4a7e-905c-50d80173e861) |
 | zoom_blur.shader                | A shader that creates a zoom with blur effect based on a number of samples and magnitude of each sample. It also includes an animation with or without easing and a glitch option. Set speed to zero to not use animation. Suggested values are 15 samples and 30-50 magnitude.                                                                                                                         |                                                                                                           |
+## New audio example shaders
+
+I added three new example shaders demonstrating the audio-reactive features. Place these in `data/shaders/examples/` (already added):
+
+- `audio_reactive_blur.effect` — Bass-driven dynamic blur: low frequencies increase the blur radius for dramatic background motion.
+- `audio_bars.shader` — A classic spectrum visualizer that draws vertical bars driven by the plugin's `audio_spectrum` uniform.
+- `audio_pulse.effect` — Global pulse/glow that brightens the image on beat peaks using overall spectral energy.
+
+These serve as quick demos you can load into the filter's shader file selection or use as templates for your own audio-reactive effects.
 
 
 ## Building

@@ -66,9 +66,11 @@ else()
                 "/usr/local/opt/obs"
             )
         elseif(LINUX)
+            # Prefer system-wide /usr includes over /usr/local to avoid
+            # picking older or conflicting headers installed in /usr/local.
             set(OBS_SEARCH_PATHS
-                "/usr/local"
                 "/usr"
+                "/usr/local"
                 "$ENV{HOME}/.local"
             )
         endif()
@@ -199,6 +201,14 @@ else()
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${LibOBS_INCLUDE_DIR}
     )
+endif()
+
+# When building standalone on Linux, make sure the system OBS include dir is searched
+# before any /usr/local paths to avoid picking older/conflicting headers.
+if(NOT IN_OBS_BUILD AND LINUX)
+    if(EXISTS "/usr/include/obs")
+        target_include_directories(${PROJECT_NAME} BEFORE PRIVATE /usr/include/obs)
+    endif()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE

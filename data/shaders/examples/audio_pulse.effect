@@ -1,0 +1,56 @@
+// Audio Pulse - pulses overall brightness to beats
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 uv_offset;
+uniform float2 uv_scale;
+uniform float2 uv_size;
+uniform float2 uv_pixel_interval;
+uniform float elapsed_time;
+
+uniform float audio_spectrum[256];
+uniform int spectrum_bands = 64;
+
+uniform float sensitivity<
+    string label = "Sensitivity";
+    string widget_type = "slider";
+    float minimum = 0.1;
+    float maximum = 5.0;
+    float step = 0.1;
+> = 1.5;
+
+uniform float4 pulse_color<
+    string label = "Pulse Color";
+    string widget_type = "color";
+> = {1.0, 1.0, 1.0, 1.0};
+
+sampler_state textureSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+
+struct VertexIn { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+struct VertexOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertexOut VSDefault(VertexIn v_in) {
+    VertexOut v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv * uv_scale + uv_offset;
+    return v_out;
+}
+
+float get_overall_energy() {
+    float s = 0.0;
+    for (int i = 0; i < spectrum_bands; ++i) {
+        s += audio_spectrum[i];
+    }
+    return s / (float)spectrum_bands;
+}
+
+float4 PSPulse(VertexOut v_in) : TARGET {
+    float energy = get_overall_energy();
+    float pulse = smoothstep(0.0, sensitivity, energy) * 1.2;
+
+    float4 base = image.Sample(textureSampler, v_in.uv);
+    float4 glow = lerp(base, pulse_color, pulse * 0.6);
+    return glow;
+}
+
+technique Draw { pass { vertex_shader = VSDefault(v_in); pixel_shader = PSPulse(v_in); } }

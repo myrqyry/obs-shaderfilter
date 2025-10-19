@@ -72,6 +72,11 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->audio_reactive_enabled = false;
     filter->front_buffer.fill(0.0f);
     filter->back_buffer.fill(0.0f);
+    // Initialize audio smoothing fields (keep in sync with defaults)
+    filter->audio_attack = 0.5f;
+    filter->audio_release = 0.3f;
+    filter->audio_gain = 1.0f;
+    filter->smoothed_spectrum.fill(0.0f);
 
     filter_update(filter, settings);
 

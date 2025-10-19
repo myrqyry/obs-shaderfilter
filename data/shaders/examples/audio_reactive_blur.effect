@@ -1,0 +1,71 @@
+// Audio-reactive blur: Bass controls blur radius
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 uv_offset;
+uniform float2 uv_scale;
+uniform float2 uv_size;
+uniform float2 uv_pixel_interval;
+uniform float elapsed_time;
+
+uniform float audio_spectrum[256];
+uniform int spectrum_bands = 64;
+
+uniform float bass_band<
+    string label = "Bass Band (0..1)";
+    string widget_type = "slider";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.1;
+
+uniform float blur_amount<
+    string label = "Base Blur";
+    string widget_type = "slider";
+    float minimum = 0.0;
+    float maximum = 10.0;
+    float step = 0.1;
+> = 2.0;
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertexIn { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+struct VertexOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertexOut VSDefault(VertexIn v_in) {
+    VertexOut v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv * uv_scale + uv_offset;
+    return v_out;
+}
+
+float get_band_average(float center) {
+    int idx = (int)(center * spectrum_bands);
+    idx = clamp(idx, 0, spectrum_bands-1);
+    return audio_spectrum[idx];
+}
+
+float4 PSBlur(VertexOut v_in) : TARGET {
+    float bass = get_band_average(bass_band);
+    float dynamic_blur = blur_amount + bass * 20.0;
+    float2 px = uv_pixel_interval;
+
+    // Simple box blur with radius based on dynamic_blur
+    int radius = (int)clamp(dynamic_blur, 0.0, 8.0);
+    float4 sum = float4(0,0,0,0);
+    int count = 0;
+    for (int x = -radius; x <= radius; x++) {
+        for (int y = -radius; y <= radius; y++) {
+            float2 offset = v_in.uv + float2(x * px.x, y * px.y) * 1.0;
+            sum += image.Sample(textureSampler, offset);
+            count++;
+        }
+    }
+    return sum / (float)count;
+}
+
+technique Draw { pass { vertex_shader = VSDefault(v_in); pixel_shader = PSBlur(v_in); } }

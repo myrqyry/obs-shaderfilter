@@ -44,6 +44,20 @@ if(IN_OBS_BUILD)
     endif()
 else()
     # Standalone build
+    if(NOT IN_OBS_BUILD)
+        # For Ubuntu packages
+        if(LINUX)
+            find_package(PkgConfig REQUIRED)
+            pkg_check_modules(LIBOBS REQUIRED libobs)
+
+            set(LibOBS_INCLUDE_DIR ${LIBOBS_INCLUDE_DIRS})
+            set(LibOBS_LIBRARY ${LIBOBS_LIBRARIES})
+
+            # Add include directories from pkg-config
+            target_include_directories(${PROJECT_NAME} PRIVATE ${LIBOBS_INCLUDE_DIRS})
+            target_link_directories(${PROJECT_NAME} PRIVATE ${LIBOBS_LIBRARY_DIRS})
+        endif()
+    endif()
 
     # Allow manual override
     set(OBS_DIR "" CACHE PATH "Path to OBS Studio installation")

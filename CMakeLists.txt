@@ -165,6 +165,21 @@ else()
     message(WARNING "FFTW3 (single-precision) not found. Audio reactivity will use simulated data.")
 endif()
 
+# Fallback: if the CMake package wasn't found, try to locate fftw3 header and single-precision
+# library manually (common on many distros where a FindFFTW3F.cmake may not be available).
+if(NOT FFTW3F_FOUND)
+    find_path(FFTW3F_INCLUDE_DIR NAMES fftw3.h PATHS /usr/include /usr/local/include NO_DEFAULT_PATH)
+    find_library(FFTW3F_LIBRARY NAMES fftw3f fftw3f.so fftw3f.so.3 PATHS /usr/lib /usr/lib/x86_64-linux-gnu /lib /lib/x86_64-linux-gnu /usr/local/lib NO_DEFAULT_PATH)
+
+    if(FFTW3F_INCLUDE_DIR AND FFTW3F_LIBRARY)
+        message(STATUS "Found FFTW3 (single-precision) via fallback detection.")
+        set(FFTW3F_FOUND TRUE)
+        # Provide variables for consistency with find_package
+        set(FFTW3F_INCLUDE_DIRS ${FFTW3F_INCLUDE_DIR})
+        set(FFTW3F_LIBRARIES ${FFTW3F_LIBRARY})
+    endif()
+endif()
+
 # ===== SOURCE FILES =====
 set(PLUGIN_SOURCES
     src/obs-shaderfilter-plus-next.cpp
@@ -172,8 +187,14 @@ set(PLUGIN_SOURCES
     src/shader_filter_properties.cpp
     src/hot_reload.cpp
     src/multi_input.cpp
-    src/audio_reactive.cpp
+    # Use audio_reactive.cpp when FFTW is available, otherwise build a stub
 )
+
+if(FFTW3F_FOUND)
+    list(APPEND PLUGIN_SOURCES src/audio_reactive.cpp)
+else()
+    list(APPEND PLUGIN_SOURCES src/audio_reactive_stub.cpp)
+endif()
 
 set(PLUGIN_HEADERS
     include/shader_filter.hpp
@@ -192,6 +213,10 @@ add_library(${PROJECT_NAME} MODULE
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# Ensure our local include directory is searched before system includes so
+# our shim headers (obs/.. shims) are picked up when present.
+target_include_directories(${PROJECT_NAME} BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(IN_OBS_BUILD)
     target_include_directories(${PROJECT_NAME} PRIVATE
@@ -218,7 +243,25 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # ===== LINK LIBRARIES =====
 if(FFTW3F_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_FFTW)
-    target_link_libraries(${PROJECT_NAME} PRIVATE FFTW3F::fftw3f)
+    # If a proper imported target exists (from find_package), use it. Otherwise
+    # fall back to the library path discovered above.
+    if(TARGET FFTW3F::fftw3f)
+        target_link_libraries(${PROJECT_NAME} PRIVATE FFTW3F::fftw3f)
+    elseif(DEFINED FFTW3F_LIBRARIES)
+        if(DEFINED FFTW3F_INCLUDE_DIRS)
+            target_include_directories(${PROJECT_NAME} PRIVATE ${FFTW3F_INCLUDE_DIRS})
+        elseif(DEFINED FFTW3F_INCLUDE_DIR)
+            target_include_directories(${PROJECT_NAME} PRIVATE ${FFTW3F_INCLUDE_DIR})
+        endif()
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFTW3F_LIBRARIES})
+    elseif(DEFINED FFTW3F_LIBRARY)
+        if(DEFINED FFTW3F_INCLUDE_DIR)
+            target_include_directories(${PROJECT_NAME} PRIVATE ${FFTW3F_INCLUDE_DIR})
+        endif()
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFTW3F_LIBRARY})
+    else()
+        message(WARNING "FFTW3 was marked found but no usable target or library variable is set.")
+    endif()
 endif()
 
 if(IN_OBS_BUILD)

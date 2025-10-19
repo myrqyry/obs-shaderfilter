@@ -120,7 +120,8 @@ static void filter_destroy(void *data)
     if (filter->audio_source) {
         obs_weak_source_release(filter->audio_source);
     }
-    delete filter->audio_capture;
+    // audio_capture_data is defined in audio_reactive.cpp; free it via the audio_reactive API
+    audio_reactive::free_capture_data(filter->audio_capture);
 
     bfree(filter->shader_path);
 
@@ -275,7 +276,8 @@ static void filter_render(void *data, gs_effect_t *effect)
             gs_effect_set_vec2(param_uv_size, &uv_size);
         }
 
-        obs_data_t *settings = obs_filter_get_settings(filter->context);
+        // obs_filter_get_settings isn't available in all header sets; use obs_source_get_settings
+        obs_data_t *settings = obs_source_get_settings(filter->context);
         gs_eparam_t *trail_param = gs_effect_get_param_by_name(filter->effect, "trail_length");
         if (trail_param) {
             float trail_value = (float)obs_data_get_double(settings, "trail_length");

@@ -1,4 +1,5 @@
 #pragma once
+#include <obs/obs.h>
 #include <obs/obs-properties.h>
 #include <obs/obs-data.h>
 #include <obs/obs-source.h>

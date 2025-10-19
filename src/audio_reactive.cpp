@@ -180,12 +180,13 @@ void update_settings(void *filter_data, obs_data_t *settings)
         if (source) {
             filter->audio_source = obs_source_get_weak_source(source);
 
-            audio_io_t *audio_output = obs_source_get_audio(source);
-            if (audio_output) {
-                size_t mix_buffer_size = audio_io_get_block_size(audio_output);
-                filter->audio_capture = new audio_capture_data(mix_buffer_size);
-                obs_source_add_audio_capture_callback(source, audio_capture_callback, filter->audio_capture);
-            }
+            // Older/newer OBS APIs expose audio capture via callbacks; instead of
+            // depending on a specific audio_io_t API we fall back to the
+            // configured audio output block size constant.
+            // AUDIO_OUTPUT_FRAMES is defined in audio-io.h and is a safe default.
+            size_t mix_buffer_size = AUDIO_OUTPUT_FRAMES;
+            filter->audio_capture = new audio_capture_data(mix_buffer_size);
+            obs_source_add_audio_capture_callback(source, audio_capture_callback, filter->audio_capture);
             obs_source_release(source);
         }
     }
@@ -283,7 +284,9 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
     gs_eparam_t *spectrum_param = gs_effect_get_param_by_name(effect, "audio_spectrum");
     if (spectrum_param) {
         std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
-        gs_effect_set_float_array(spectrum_param, filter->front_buffer.data(), filter->spectrum_bands);
+        /* gs_effect_set_float_array is not available in all OBS versions; use
+         * the generic gs_effect_set_val to upload the float array data. */
+        gs_effect_set_val(spectrum_param, filter->front_buffer.data(), sizeof(float) * filter->spectrum_bands);
     }
 
     gs_eparam_t *reactivity_param = gs_effect_get_param_by_name(effect, "audio_reactivity");
@@ -293,3 +296,10 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
 }
 
 } // namespace audio_reactive
+
+void audio_reactive::free_capture_data(void *capture)
+{
+    if (!capture) return;
+    auto *c = static_cast<audio_capture_data*>(capture);
+    delete c;
+}

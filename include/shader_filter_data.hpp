@@ -8,7 +8,7 @@
 #include <array>
 
 // Forward declarations for types used in the struct
-struct audio_capture_data;
+namespace audio_reactive { struct audio_capture_data; }
 
 namespace shader_filter {
 
@@ -46,7 +46,7 @@ struct filter_data {
 
     // Audio-reactive data
     obs_weak_source_t *audio_source;
-    audio_capture_data *audio_capture;
+    audio_reactive::audio_capture_data *audio_capture;
     std::mutex spectrum_mutex;
     std::array<float, 256> front_buffer;
     std::array<float, 256> back_buffer;

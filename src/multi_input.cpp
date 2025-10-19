@@ -3,8 +3,8 @@
 
 #include <obs/obs-module.h>
 #include <obs/obs-source.h>
-#include <graphics/graphics.h>
-#include <obs-enum-sources.h>
+#include <obs/graphics/graphics.h>
+#include <obs/obs-enum-sources.h>
 
 namespace multi_input {
 

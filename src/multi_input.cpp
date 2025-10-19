@@ -8,6 +8,22 @@
 
 namespace multi_input {
 
+static void populate_source_list(obs_property_t *list)
+{
+	obs_property_list_add_string(list, obs_module_text("None"), "");
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			obs_property_t *list = (obs_property_t *)param;
+			uint32_t caps = obs_source_get_output_flags(source);
+			if ((caps & OBS_SOURCE_VIDEO) != 0) {
+				const char *name = obs_source_get_name(source);
+				obs_property_list_add_string(list, name, name);
+			}
+			return true;
+		},
+		list);
+}
+
 void add_properties(obs_properties_t *props, void *data)
 {
     UNUSED_PARAMETER(data);
@@ -24,36 +40,14 @@ void add_properties(obs_properties_t *props, void *data)
         obs_module_text("SecondarySource"),
         OBS_COMBO_TYPE_LIST,
         OBS_COMBO_FORMAT_STRING);
-
-    obs_property_list_add_string(secondary, obs_module_text("None"), "");
-
-    obs_enum_sources([](void *param, obs_source_t *source) {
-        obs_property_t *list = (obs_property_t*)param;
-        uint32_t caps = obs_source_get_output_flags(source);
-        if ((caps & OBS_SOURCE_VIDEO) != 0) {
-            const char *name = obs_source_get_name(source);
-            obs_property_list_add_string(list, name, name);
-        }
-        return true;
-    }, secondary);
+	populate_source_list(secondary);
 
     obs_property_t *mask = obs_properties_add_list(multi_input_group,
         "mask_source",
         obs_module_text("MaskSource"),
         OBS_COMBO_TYPE_LIST,
         OBS_COMBO_FORMAT_STRING);
-
-    obs_property_list_add_string(mask, obs_module_text("None"), "");
-
-    obs_enum_sources([](void *param, obs_source_t *source) {
-        obs_property_t *list = (obs_property_t*)param;
-        uint32_t caps = obs_source_get_output_flags(source);
-        if ((caps & OBS_SOURCE_VIDEO) != 0) {
-            const char *name = obs_source_get_name(source);
-            obs_property_list_add_string(list, name, name);
-        }
-        return true;
-    }, mask);
+	populate_source_list(mask);
 }
 
 void set_defaults(obs_data_t *settings)

@@ -119,19 +119,19 @@ void add_properties(obs_properties_t *props, void *data)
         0.0, 2.0, 0.1);
 
     obs_properties_add_float_slider(audio_group,
-        "gain",
-        obs_module_text("Gain"),
+        "audio_gain",
+        obs_module_text("AudioGain"),
         1.0, 10.0, 0.1);
 
     obs_properties_add_float_slider(audio_group,
-        "attack",
-        obs_module_text("Attack"),
-        0.1, 1.0, 0.05);
+        "audio_attack",
+        obs_module_text("AudioAttack"),
+        0.01, 1.0, 0.01);
 
     obs_properties_add_float_slider(audio_group,
-        "release",
-        obs_module_text("Release"),
-        0.1, 1.0, 0.05);
+        "audio_release",
+        obs_module_text("AudioRelease"),
+        0.01, 1.0, 0.01);
 }
 
 void set_defaults(obs_data_t *settings)
@@ -140,9 +140,9 @@ void set_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "spectrum_bands", 128);
     obs_data_set_default_double(settings, "audio_reactivity", 1.0);
     obs_data_set_default_bool(settings, "audio_reactive", false);
-    obs_data_set_default_double(settings, "gain", 1.0);
-    obs_data_set_default_double(settings, "attack", 0.5);
-    obs_data_set_default_double(settings, "release", 0.5);
+    obs_data_set_default_double(settings, "audio_gain", 1.0);
+    obs_data_set_default_double(settings, "audio_attack", 0.5);
+    obs_data_set_default_double(settings, "audio_release", 0.3);
 }
 
 void update_settings(void *filter_data, obs_data_t *settings)
@@ -152,9 +152,9 @@ void update_settings(void *filter_data, obs_data_t *settings)
     filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
     filter->audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
     filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
-    filter->gain = (float)obs_data_get_double(settings, "gain");
-    filter->attack = (float)obs_data_get_double(settings, "attack");
-    filter->release = (float)obs_data_get_double(settings, "release");
+    filter->audio_gain = (float)obs_data_get_double(settings, "audio_gain");
+    filter->audio_attack = (float)obs_data_get_double(settings, "audio_attack");
+    filter->audio_release = (float)obs_data_get_double(settings, "audio_release");
 
     const char* audio_source_name = obs_data_get_string(settings, "audio_source");
 
@@ -224,10 +224,11 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
         float log_max = log10f(max_freq);
         float log_range = log_max - log_min;
 
+        // Use back_buffer as a temporary store for the raw spectrum
         for (int i = 0; i < (buffer_size / 2); ++i) {
             float real = capture->output_buffer[i][0];
             float imag = capture->output_buffer[i][1];
-            float magnitude = sqrtf(real * real + imag * imag) * filter->gain;
+            float magnitude = sqrtf(real * real + imag * imag);
 
             float freq = (float)i;
             if (freq < min_freq) continue;
@@ -238,23 +239,40 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
             }
         }
 
-        // Temporal Smoothing
-        float max_val = 0.001f; // Avoid division by zero
-        for (int i = 0; i < filter->spectrum_bands; ++i) {
-            float new_val = filter->back_buffer[i];
-            float old_val = filter->front_buffer[i];
-            float factor = (new_val > old_val) ? filter->attack : filter->release;
-            filter->back_buffer[i] = old_val * (1.0f - factor) + new_val * factor;
-            if (filter->back_buffer[i] > max_val) {
-                max_val = filter->back_buffer[i];
+        // Apply gain to raw FFT magnitudes
+        for (int i = 0; i < filter->spectrum_bands; i++) {
+            filter->back_buffer[i] *= filter->audio_gain;
+        }
+
+        // Apply exponential smoothing
+        for (int i = 0; i < filter->spectrum_bands; i++) {
+            float target = filter->back_buffer[i];
+            float current = filter->smoothed_spectrum[i];
+
+            // Use attack factor when rising, release when falling
+            float factor = (target > current) ? filter->audio_attack : filter->audio_release;
+
+            filter->smoothed_spectrum[i] = current + (target - current) * factor;
+        }
+
+        // Normalize to [0.0, 1.0] range
+        float max_value = 0.0f;
+        for (int i = 0; i < filter->spectrum_bands; i++) {
+            if (filter->smoothed_spectrum[i] > max_value) {
+                max_value = filter->smoothed_spectrum[i];
             }
         }
 
-        // Normalization
-        for (int i = 0; i < filter->spectrum_bands; ++i) {
-            filter->back_buffer[i] /= max_val;
+        if (max_value > 0.0f) {
+            for (int i = 0; i < filter->spectrum_bands; i++) {
+                filter->back_buffer[i] = fminf(filter->smoothed_spectrum[i] / max_value, 1.0f);
+            }
+        } else {
+            // If max is zero, just clear the buffer to prevent stale data
+            std::fill(filter->back_buffer.begin(), filter->back_buffer.end(), 0.0f);
         }
 
+        // Swap buffers to make the new data available to the render thread
         {
             std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
             filter->front_buffer.swap(filter->back_buffer);

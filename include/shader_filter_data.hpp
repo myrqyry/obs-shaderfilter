@@ -53,6 +53,9 @@ struct filter_data {
     int spectrum_bands;
     float audio_reactivity_strength;
     bool audio_reactive_enabled;
+    float attack;
+    float release;
+    float gain;
 };
 
 } // namespace shader_filter

@@ -47,20 +47,10 @@ else()
     if(NOT IN_OBS_BUILD)
         # For Ubuntu packages
         if(LINUX)
-            find_package(PkgConfig REQUIRED)
-            pkg_check_modules(LIBOBS REQUIRED libobs)
-
-            set(LibOBS_INCLUDE_DIR ${LIBOBS_INCLUDE_DIRS})
-            set(LibOBS_LIBRARY ${LIBOBS_LIBRARIES})
-
-            # Add include directories from pkg-config
-            target_include_directories(${PROJECT_NAME} PRIVATE ${LIBOBS_INCLUDE_DIRS})
-            target_link_directories(${PROJECT_NAME} PRIVATE ${LIBOBS_LIBRARY_DIRS})
+            set(LibOBS_INCLUDE_DIR "/usr/include/obs")
+            set(LibOBS_LIBRARY "/usr/lib/x86_64-linux-gnu/libobs.so")
         endif()
     endif()
-
-    # Allow manual override
-    set(OBS_DIR "" CACHE PATH "Path to OBS Studio installation")
 
     # Try to find OBS in standard locations
     if(NOT OBS_DIR)
@@ -98,7 +88,6 @@ else()
         find_path(OBS_H_PATH
             NAMES obs/obs.h
             HINTS ${OBS_DIR}/include
-            NO_DEFAULT_PATH
         )
         if(OBS_H_PATH)
             get_filename_component(LibOBS_INCLUDE_DIR "${OBS_H_PATH}" DIRECTORY)

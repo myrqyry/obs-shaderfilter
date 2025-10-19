@@ -117,6 +117,21 @@ void add_properties(obs_properties_t *props, void *data)
         "audio_reactivity",
         obs_module_text("Reactivity Strength"),
         0.0, 2.0, 0.1);
+
+    obs_properties_add_float_slider(audio_group,
+        "gain",
+        obs_module_text("Gain"),
+        1.0, 10.0, 0.1);
+
+    obs_properties_add_float_slider(audio_group,
+        "attack",
+        obs_module_text("Attack"),
+        0.1, 1.0, 0.05);
+
+    obs_properties_add_float_slider(audio_group,
+        "release",
+        obs_module_text("Release"),
+        0.1, 1.0, 0.05);
 }
 
 void set_defaults(obs_data_t *settings)
@@ -125,6 +140,9 @@ void set_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "spectrum_bands", 128);
     obs_data_set_default_double(settings, "audio_reactivity", 1.0);
     obs_data_set_default_bool(settings, "audio_reactive", false);
+    obs_data_set_default_double(settings, "gain", 1.0);
+    obs_data_set_default_double(settings, "attack", 0.5);
+    obs_data_set_default_double(settings, "release", 0.5);
 }
 
 void update_settings(void *filter_data, obs_data_t *settings)
@@ -134,6 +152,9 @@ void update_settings(void *filter_data, obs_data_t *settings)
     filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
     filter->audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
     filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
+    filter->gain = (float)obs_data_get_double(settings, "gain");
+    filter->attack = (float)obs_data_get_double(settings, "attack");
+    filter->release = (float)obs_data_get_double(settings, "release");
 
     const char* audio_source_name = obs_data_get_string(settings, "audio_source");
 
@@ -206,7 +227,7 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
         for (int i = 0; i < (buffer_size / 2); ++i) {
             float real = capture->output_buffer[i][0];
             float imag = capture->output_buffer[i][1];
-            float magnitude = sqrtf(real * real + imag * imag);
+            float magnitude = sqrtf(real * real + imag * imag) * filter->gain;
 
             float freq = (float)i;
             if (freq < min_freq) continue;
@@ -215,6 +236,23 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
             if (band >= 0 && band < filter->spectrum_bands) {
                 filter->back_buffer[band] += magnitude;
             }
+        }
+
+        // Temporal Smoothing
+        float max_val = 0.001f; // Avoid division by zero
+        for (int i = 0; i < filter->spectrum_bands; ++i) {
+            float new_val = filter->back_buffer[i];
+            float old_val = filter->front_buffer[i];
+            float factor = (new_val > old_val) ? filter->attack : filter->release;
+            filter->back_buffer[i] = old_val * (1.0f - factor) + new_val * factor;
+            if (filter->back_buffer[i] > max_val) {
+                max_val = filter->back_buffer[i];
+            }
+        }
+
+        // Normalization
+        for (int i = 0; i < filter->spectrum_bands; ++i) {
+            filter->back_buffer[i] /= max_val;
         }
 
         {

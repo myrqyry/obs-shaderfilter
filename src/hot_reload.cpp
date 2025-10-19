@@ -52,8 +52,8 @@ static void watcher_loop()
                     }
                 }
             } catch (const fs::filesystem_error &e) {
-                blog(LOG_WARNING, "[ShaderFilter Plus Next] Filesystem error for %s: %s",
-                     entry.first.c_str(), e.what());
+                blog(LOG_WARNING, "[ShaderFilter Plus Next] Watch error: %s", e.what());
+                continue;
             }
         }
     }
@@ -80,33 +80,30 @@ void shutdown()
 
 void watch_file(const char *path, void *filter_instance)
 {
-    std::lock_guard<std::mutex> lock(watch_mutex);
+    if (!path || !*path) {
+        return;
+    }
 
+    std::lock_guard<std::mutex> lock(watch_mutex);
     std::string path_str(path);
 
-    auto it = watched_files.find(path_str);
-    if (it == watched_files.end()) {
-        watch_entry entry;
-        entry.path = path_str;
+    auto& entry = watched_files[path_str];
 
+    if (entry.path.empty()) {
+        entry.path = path_str;
         try {
-            if (fs::exists(path_str)) {
-                entry.last_write_time = fs::last_write_time(path_str);
-            }
-        } catch (const fs::filesystem_error &e) {
-            blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot watch %s: %s", path, e.what());
+            entry.last_write_time = fs::last_write_time(path_str);
+        } catch (const fs::filesystem_error& e) {
+            blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot get last write time for %s: %s", path, e.what());
+            // Set to a known time to avoid constant reload attempts on error
             entry.last_write_time = fs::file_time_type::min();
         }
-
-        entry.filter_instances.push_back(filter_instance);
-        watched_files[path_str] = entry;
-
         blog(LOG_INFO, "[ShaderFilter Plus Next] Now watching: %s", path);
-    } else {
-        auto &instances = it->second.filter_instances;
-        if (std::find(instances.begin(), instances.end(), filter_instance) == instances.end()) {
-            instances.push_back(filter_instance);
-        }
+    }
+
+    auto &instances = entry.filter_instances;
+    if (std::find(instances.begin(), instances.end(), filter_instance) == instances.end()) {
+        instances.push_back(filter_instance);
     }
 }
 

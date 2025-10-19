@@ -20,6 +20,7 @@ static void filter_destroy(void *data);
 static void filter_update(void *data, obs_data_t *settings);
 static void filter_render(void *data, gs_effect_t *effect);
 static void filter_defaults(obs_data_t *settings);
+static void filter_update(void *data, obs_data_t *settings);
 
 void register_filter()
 {
@@ -67,9 +68,11 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
 
     filter->audio_source = nullptr;
     filter->audio_capture = nullptr;
-    filter->audio_spectrum = new float[256]();
-    filter->spectrum_bands = 64;
+    filter->spectrum_bands = 128;
+    filter->audio_reactivity_strength = 1.0f;
     filter->audio_reactive_enabled = false;
+    filter->front_buffer.fill(0.0f);
+    filter->back_buffer.fill(0.0f);
 
     filter_update(filter, settings);
 
@@ -113,12 +116,8 @@ static void filter_destroy(void *data)
     if (filter->audio_source) {
         obs_weak_source_release(filter->audio_source);
     }
+    delete filter->audio_capture;
 
-    if(filter->audio_capture){
-        delete filter->audio_capture;
-    }
-
-    delete[] filter->audio_spectrum;
     bfree(filter->shader_path);
 
     delete filter;
@@ -272,6 +271,14 @@ static void filter_render(void *data, gs_effect_t *effect)
             gs_effect_set_vec2(param_uv_size, &uv_size);
         }
 
+        obs_data_t *settings = obs_filter_get_settings(filter->context);
+        gs_eparam_t *trail_param = gs_effect_get_param_by_name(filter->effect, "trail_length");
+        if (trail_param) {
+            float trail_value = (float)obs_data_get_double(settings, "trail_length");
+            gs_effect_set_float(trail_param, trail_value);
+        }
+        obs_data_release(settings);
+
 		gs_eparam_t *param_previous = gs_effect_get_param_by_name(
 			filter->effect, "previous_frame");
 		if (param_previous) {
@@ -331,6 +338,9 @@ static void filter_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "expand_bottom", 0);
     obs_data_set_default_bool(settings, "override_entire_effect", false);
     obs_data_set_default_bool(settings, "hot_reload_enabled", false);
+
+    obs_data_set_default_bool(settings, "enable_feedback", false);
+    obs_data_set_default_double(settings, "trail_length", 0.85);
 
     multi_input::set_defaults(settings);
     audio_reactive::set_defaults(settings);

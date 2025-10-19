@@ -43,7 +43,7 @@ struct audio_capture_data {
 
 #ifdef USE_FFTW
         fft_plan = fftwf_plan_dft_r2c_1d(
-            (int)size,
+            static_cast<int>(size),
             input_buffer.data(),
             output_buffer.data(),
             FFTW_MEASURE

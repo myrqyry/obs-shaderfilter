@@ -6,11 +6,11 @@
 
 #include <obs/obs-module.h>
 #include <obs/media-io/audio-io.h>
-#include <util/circlebuf.h>
+#include <obs/util/circlebuf.h>
 #include <cmath>
 #include <vector>
 #include <atomic>
-#include <obs-enum-sources.h>
+#include <obs/obs-enum-sources.h>
 
 #ifdef USE_FFTW
 #include <fftw3.h>
@@ -137,26 +137,25 @@ void update_settings(void *filter_data, obs_data_t *settings)
 
     const char* audio_source_name = obs_data_get_string(settings, "audio_source");
 
-    obs_source_t *source = filter->audio_source ?
-                           obs_weak_source_get_source(filter->audio_source) :
-                           nullptr;
-
-    if (source) {
-        obs_source_remove_audio_capture_callback(source, audio_capture_callback, filter->audio_capture);
-        obs_source_release(source);
-        source = nullptr;
-    }
+    // --- Teardown ---
+    auto* old_capture = filter->audio_capture;
 
     if (filter->audio_source) {
+        obs_source_t *source = obs_weak_source_get_source(filter->audio_source);
+        if (source) {
+            obs_source_remove_audio_capture_callback(source, audio_capture_callback, old_capture);
+            obs_source_release(source);
+        }
         obs_weak_source_release(filter->audio_source);
         filter->audio_source = nullptr;
     }
 
-    delete filter->audio_capture;
     filter->audio_capture = nullptr;
+    delete old_capture;
 
+    // --- Setup ---
     if (audio_source_name && *audio_source_name && filter->audio_reactive_enabled) {
-        source = obs_get_source_by_name(audio_source_name);
+        obs_source_t* source = obs_get_source_by_name(audio_source_name);
         if (source) {
             filter->audio_source = obs_source_get_weak_source(source);
 

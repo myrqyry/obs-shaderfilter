@@ -34,26 +34,23 @@ static void watcher_loop()
         std::lock_guard<std::mutex> lock(watch_mutex);
 
         for (auto &entry : watched_files) {
-            try {
-                if (!fs::exists(entry.second.path)) {
-                    continue;
-                }
+            std::error_code ec;
+            auto current_time = fs::last_write_time(entry.second.path, ec);
 
-                auto current_time = fs::last_write_time(entry.second.path);
-
-                if (current_time != entry.second.last_write_time) {
-                    entry.second.last_write_time = current_time;
-
-                    blog(LOG_INFO, "[ShaderFilter Plus Next] File changed: %s",
-                         entry.second.path.c_str());
-
-                    for (void *filter : entry.second.filter_instances) {
-                        shader_filter::reload_shader(filter);
-                    }
-                }
-            } catch (const fs::filesystem_error &e) {
-                blog(LOG_WARNING, "[ShaderFilter Plus Next] Watch error: %s", e.what());
+            if (ec) {
+                // File might have been deleted or is inaccessible
                 continue;
+            }
+
+            if (current_time != entry.second.last_write_time) {
+                entry.second.last_write_time = current_time;
+
+                blog(LOG_INFO, "[ShaderFilter Plus Next] File changed: %s",
+                        entry.second.path.c_str());
+
+                for (void *filter : entry.second.filter_instances) {
+                    shader_filter::reload_shader(filter);
+                }
             }
         }
     }

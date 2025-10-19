@@ -5,10 +5,10 @@
 #include "audio_reactive.hpp"
 
 #include <obs/obs-module.h>
-#include <graphics/graphics.h>
-#include <graphics/image-file.h>
-#include <util/platform.h>
-#include <util/dstr.h>
+#include <obs/graphics/graphics.h>
+#include <obs/graphics/image-file.h>
+#include <obs/util/platform.h>
+#include <obs/util/dstr.h>
 
 namespace shader_filter {
 
@@ -20,7 +20,6 @@ static void filter_destroy(void *data);
 static void filter_update(void *data, obs_data_t *settings);
 static void filter_render(void *data, gs_effect_t *effect);
 static void filter_defaults(obs_data_t *settings);
-static void filter_update(void *data, obs_data_t *settings);
 
 void register_filter()
 {

@@ -272,13 +272,21 @@ static void filter_render(void *data, gs_effect_t *effect)
             gs_effect_set_vec2(param_uv_size, &uv_size);
         }
 
-        gs_eparam_t *param_previous = gs_effect_get_param_by_name(filter->effect, "previous_frame");
-        if (param_previous) {
-            gs_texture_t *prev_tex = gs_texrender_get_texture(previous_target);
-            if (prev_tex) {
-                gs_effect_set_texture(param_previous, prev_tex);
-            }
-        }
+		gs_eparam_t *param_previous = gs_effect_get_param_by_name(
+			filter->effect, "previous_frame");
+		if (param_previous) {
+			if (previous_target) {
+				gs_texture_t *prev_tex =
+					gs_texrender_get_texture(
+						previous_target);
+				if (prev_tex) {
+					gs_effect_set_texture(param_previous,
+							      prev_tex);
+				}
+			} else {
+				gs_effect_set_texture(param_previous, NULL);
+			}
+		}
 
         multi_input::bind_textures(filter, render_effect);
         audio_reactive::bind_audio_data(filter, render_effect);
@@ -296,16 +304,20 @@ static void filter_render(void *data, gs_effect_t *effect)
         gs_texrender_end(current_target);
     }
 
-    gs_texture_t *tex = gs_texrender_get_texture(current_target);
-    if (tex) {
-        gs_effect_t *pass_through = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-        gs_eparam_t *image = gs_effect_get_param_by_name(pass_through, "image");
-        gs_effect_set_texture(image, tex);
+	if (current_target) {
+		gs_texture_t *tex = gs_texrender_get_texture(current_target);
+		if (tex) {
+			gs_effect_t *pass_through =
+				obs_get_base_effect(OBS_EFFECT_DEFAULT);
+			gs_eparam_t *image = gs_effect_get_param_by_name(
+				pass_through, "image");
+			gs_effect_set_texture(image, tex);
 
-        while (gs_effect_loop(pass_through, "Draw")) {
-            gs_draw_sprite(tex, 0, width, height);
-        }
-    }
+			while (gs_effect_loop(pass_through, "Draw")) {
+				gs_draw_sprite(tex, 0, width, height);
+			}
+		}
+	}
 
     filter->use_buffer_a = !filter->use_buffer_a;
 }

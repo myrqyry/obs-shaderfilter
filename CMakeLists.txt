@@ -230,6 +230,8 @@ endif()
 
 # ===== COMPILER FLAGS =====
 if(MSVC)
+	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+	add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /W4
         /WX-
@@ -269,9 +271,7 @@ elseif(APPLE)
     )
 
     find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${COREFOUNDATION_LIBRARY}
-    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIBRARY})
 endif()
 
 # ===== INSTALLATION =====

@@ -1,7 +1,7 @@
 #include <obs/obs-module.h>
 #include <obs/obs-source.h>
 #include <obs/graphics/graphics.h>
-#include <util/platform.h>
+#include <obs/util/platform.h>
 
 #include "shader_filter.hpp"
 #include "hot_reload.hpp"

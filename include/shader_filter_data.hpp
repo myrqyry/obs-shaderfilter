@@ -4,9 +4,11 @@
 #include <obs/obs-source.h>
 #include <obs/graphics/gs_effect.h>
 #include <obs/graphics/gs_texrender.h>
+#include <mutex>
+#include <array>
 
 // Forward declarations for types used in the struct
-class AudioCapture;
+struct audio_capture_data;
 
 namespace shader_filter {
 
@@ -44,9 +46,12 @@ struct filter_data {
 
     // Audio-reactive data
     obs_weak_source_t *audio_source;
-    AudioCapture *audio_capture;
-    float *audio_spectrum;
+    audio_capture_data *audio_capture;
+    std::mutex spectrum_mutex;
+    std::array<float, 256> front_buffer;
+    std::array<float, 256> back_buffer;
     int spectrum_bands;
+    float audio_reactivity_strength;
     bool audio_reactive_enabled;
 };
 

@@ -62,6 +62,22 @@ obs_properties_t* get_properties(void* data)
         obs_module_text("ExpandBottom"),
         0, 400, 1);
 
+    // ===== FEEDBACK SETTINGS GROUP =====
+    obs_properties_t *feedback_group = obs_properties_create();
+    obs_properties_add_group(props,
+        "feedback_settings",
+        obs_module_text("Feedback Settings"),
+        OBS_GROUP_CHECKABLE,
+        feedback_group);
+
+    obs_properties_add_bool(feedback_group,
+        "enable_feedback",
+        obs_module_text("Enable Feedback"));
+    obs_properties_add_float_slider(feedback_group,
+        "trail_length",
+        obs_module_text("Trail Length"),
+        0.0, 0.99, 0.01);
+
     // ===== Subsystem Properties =====
     multi_input::add_properties(props, data);
     audio_reactive::add_properties(props, data);

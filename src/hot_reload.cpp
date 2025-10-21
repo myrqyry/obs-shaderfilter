@@ -47,7 +47,7 @@ static void watcher_loop()
 
                 if (current_time != entry.second.last_write_time) {
                     entry.second.last_write_time = current_time;
-                    reload_list.emplace_back(std::move(entry.second.path), entry.second.filter_instances);
+                    reload_list.emplace_back(entry.second.path, entry.second.filter_instances);
                 }
             }
         } // Release lock before calling reload callbacks

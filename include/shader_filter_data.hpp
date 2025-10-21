@@ -14,6 +14,7 @@ namespace shader_filter {
 
 struct filter_data {
     filter_data() = default;
+    explicit filter_data(obs_source_t* ctx) : context(ctx) {}
     // Core filter data
     obs_source_t * const context = nullptr;
     gs_effect_t *effect;

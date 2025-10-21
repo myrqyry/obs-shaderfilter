@@ -47,7 +47,7 @@ static const char *filter_get_name(void *unused)
 
 static void *filter_create(obs_data_t *settings, obs_source_t *source)
 {
-    filter_data *filter = new filter_data{ .context = source };
+    filter_data *filter = new filter_data(source);
     filter->effect = nullptr;
     filter->render_target_a = nullptr;
     filter->render_target_b = nullptr;

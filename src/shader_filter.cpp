@@ -47,8 +47,7 @@ static const char *filter_get_name(void *unused)
 
 static void *filter_create(obs_data_t *settings, obs_source_t *source)
 {
-    filter_data *filter = new filter_data();
-    filter->context = source;
+    filter_data *filter = new filter_data(source);
     filter->effect = nullptr;
     filter->render_target_a = nullptr;
     filter->render_target_b = nullptr;
@@ -130,6 +129,7 @@ static void filter_destroy(void *data)
 
 static bool load_shader_from_file(filter_data *filter, const char *path)
 {
+#ifndef TEST_HARNESS_BUILD
     obs_enter_graphics();
 
     if (filter->effect) {
@@ -143,14 +143,22 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
     if (!filter->effect) {
         blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
-        bfree(error_string);
+        if (error_string) {  // Add null check before freeing
+            bfree(error_string);
+        }
         obs_leave_graphics();
         return false;
     }
 
-    bfree(error_string);
+    if (error_string) {  // Also add null check in success case
+        bfree(error_string);
+    }
     obs_leave_graphics();
-
+#else
+    // In test harness mode, we don't have a graphics context,
+    // so we just log and pretend the shader loaded.
+    blog(LOG_INFO, "[Test Harness] Pretending to load shader: %s", path);
+#endif
     blog(LOG_INFO, "[ShaderFilter Plus Next] Loaded shader: %s", path);
     return true;
 }

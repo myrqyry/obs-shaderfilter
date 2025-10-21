@@ -11,6 +11,7 @@
 #include <vector>
 #include <atomic>
 #include <obs/obs-enum-sources.h>
+#include <thread>
 
 #ifdef USE_FFTW
 #include <fftw3.h>
@@ -26,6 +27,7 @@ struct audio_capture_data {
     std::vector<fftwf_complex> output_buffer;
     struct circlebuf audio_buffer;
     std::atomic<bool> data_ready;
+    std::atomic<bool> callback_active;
 
     audio_capture_data(size_t size)
         : samples_per_frame(size),
@@ -66,17 +68,25 @@ static void audio_capture_callback(void *param, obs_source_t *source,
                                    const struct audio_data *audio_data,
                                    bool muted)
 {
-    UNUSED_PARAMETER(source);
-
-    if (muted || !audio_data || audio_data->frames == 0) {
+    auto *capture = static_cast<audio_capture_data*>(param);
+    if (!capture) {
         return;
     }
 
-    auto *capture = static_cast<audio_capture_data*>(param);
+    capture->callback_active = true;
+
+    UNUSED_PARAMETER(source);
+
+    if (muted || !audio_data || audio_data->frames == 0) {
+        capture->callback_active = false;
+        return;
+    }
+
     circlebuf_push_back(&capture->audio_buffer,
                       audio_data->data[0],
                       audio_data->frames * sizeof(float));
     capture->data_ready = true;
+    capture->callback_active = false;
 }
 
 void add_properties(obs_properties_t *props, void *data)
@@ -160,6 +170,7 @@ void update_settings(void *filter_data, obs_data_t *settings)
 
     // --- Teardown ---
     auto* old_capture = filter->audio_capture;
+    filter->audio_capture = nullptr; // Clear pointer first
 
     if (filter->audio_source) {
         obs_source_t *source = obs_weak_source_get_source(filter->audio_source);
@@ -171,8 +182,13 @@ void update_settings(void *filter_data, obs_data_t *settings)
         filter->audio_source = nullptr;
     }
 
-    filter->audio_capture = nullptr;
-    delete old_capture;
+    if (old_capture) {
+        // Spin-wait until the callback is no longer active
+        while (old_capture->callback_active) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        delete old_capture;
+    }
 
     // --- Setup ---
     if (audio_source_name && *audio_source_name && filter->audio_reactive_enabled) {
@@ -235,7 +251,7 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
             if (freq < min_freq) continue;
 
             int band = (int)((log10f(freq) - log_min) / log_range * (filter->spectrum_bands - 1));
-            if (band >= 0 && band < filter->spectrum_bands) {
+            if (band >= 0 && band < filter->spectrum_bands && band < (int)filter->back_buffer.size()) {
                 filter->back_buffer[band] += magnitude;
             }
         }

@@ -10,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <atomic>
 
 namespace fs = std::filesystem;
 
@@ -24,33 +25,39 @@ struct watch_entry {
 static std::thread watcher_thread;
 static std::mutex watch_mutex;
 static std::unordered_map<std::string, watch_entry> watched_files;
-static bool running = false;
+static std::atomic<bool> running = false;
 
 static void watcher_loop()
 {
     while (running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        std::lock_guard<std::mutex> lock(watch_mutex);
+        std::vector<std::pair<std::string, std::vector<void*>>> reload_list;
 
-        for (auto &entry : watched_files) {
-            std::error_code ec;
-            auto current_time = fs::last_write_time(entry.second.path, ec);
+        {
+            std::lock_guard<std::mutex> lock(watch_mutex);
 
-            if (ec) {
-                // File might have been deleted or is inaccessible
-                continue;
-            }
+            for (auto &entry : watched_files) {
+                std::error_code ec;
+                auto current_time = fs::last_write_time(entry.second.path, ec);
 
-            if (current_time != entry.second.last_write_time) {
-                entry.second.last_write_time = current_time;
-
-                blog(LOG_INFO, "[ShaderFilter Plus Next] File changed: %s",
-                        entry.second.path.c_str());
-
-                for (void *filter : entry.second.filter_instances) {
-                    shader_filter::reload_shader(filter);
+                if (ec) {
+                    continue;
                 }
+
+                if (current_time != entry.second.last_write_time) {
+                    entry.second.last_write_time = current_time;
+                    reload_list.emplace_back(entry.second.path, entry.second.filter_instances);
+                }
+            }
+        } // Release lock before calling reload callbacks
+
+        // Process reloads outside of the lock to prevent deadlocks
+        for (const auto& reload_item : reload_list) {
+            blog(LOG_INFO, "[ShaderFilter Plus Next] File changed: %s", reload_item.first.c_str());
+
+            for (void *filter : reload_item.second) {
+                shader_filter::reload_shader(filter);
             }
         }
     }
@@ -78,6 +85,13 @@ void shutdown()
 void watch_file(const char *path, void *filter_instance)
 {
     if (!path || !*path) {
+        blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot watch empty file path");
+        return;
+    }
+
+    // Check if file exists before trying to watch it
+    if (!std::filesystem::exists(path)) {
+        blog(LOG_WARNING, "[ShaderFilter Plus Next] File does not exist: %s", path);
         return;
     }
 

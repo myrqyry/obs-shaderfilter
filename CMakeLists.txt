@@ -18,6 +18,15 @@ endif()
 # ===== BUILD OPTIONS =====
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for advanced features" ON)
 option(ENABLE_QT "Enable Qt-based UI features" OFF)
+option(ENABLE_TSAN "Build with ThreadSanitizer" OFF)
+
+if(ENABLE_TSAN)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+    message(STATUS "Enabling ThreadSanitizer")
+    add_compile_options(-fsanitize=thread -g -O1 -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+  endif()
+endif()
 
 # ===== LANGUAGE SETTINGS =====
 set(CMAKE_CXX_STANDARD 17)
@@ -204,10 +213,29 @@ set(PLUGIN_HEADERS
 )
 
 # ===== BUILD TARGET =====
-add_library(${PROJECT_NAME} MODULE
+if(ENABLE_TSAN)
+    set(PLUGIN_LIB_TYPE SHARED)
+else()
+    set(PLUGIN_LIB_TYPE MODULE)
+endif()
+
+add_library(${PROJECT_NAME} ${PLUGIN_LIB_TYPE}
     ${PLUGIN_SOURCES}
     ${PLUGIN_HEADERS}
 )
+
+if(ENABLE_TSAN)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_HARNESS_BUILD)
+endif()
+
+# ===== TESTING =====
+if(ENABLE_TSAN)
+    add_executable(test_hot_reload tests/test_hot_reload.cpp)
+    target_include_directories(test_hot_reload PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(test_hot_reload PRIVATE ${PROJECT_NAME})
+    target_compile_definitions(test_hot_reload PRIVATE TEST_HARNESS_BUILD)
+    set_target_properties(test_hot_reload PROPERTIES CXX_STANDARD 20)
+endif()
 
 # ===== INCLUDE DIRECTORIES =====
 target_include_directories(${PROJECT_NAME} PRIVATE

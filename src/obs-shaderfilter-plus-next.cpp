@@ -25,9 +25,7 @@ static void refresh_all_filters();
 #if __has_include(<obs/obs-frontend-api.h>)
 static void frontend_event_handler(enum obs_frontend_event event, void *private_data)
 {
-    if (event == OBS_FRONTEND_EVENT_CANVAS_ADDED ||
-        event == OBS_FRONTEND_EVENT_CANVAS_REMOVED ||
-        event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+    if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
         refresh_all_filters();
     }
     UNUSED_PARAMETER(private_data);

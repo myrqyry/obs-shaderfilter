@@ -158,6 +158,8 @@ void render_sources(void *filter_data)
 
 void bind_textures(void *filter_data, gs_effect_t *effect)
 {
+    if (!effect) return; // Add null check for effect
+
     shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
 
     if (filter->secondary_texrender) {

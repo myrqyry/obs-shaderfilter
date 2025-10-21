@@ -13,8 +13,10 @@ namespace audio_reactive { struct audio_capture_data; }
 namespace shader_filter {
 
 struct filter_data {
+    filter_data() = default;
+    explicit filter_data(obs_source_t* ctx) : context(ctx) {}
     // Core filter data
-    obs_source_t *context;
+    obs_source_t * const context = nullptr;
     gs_effect_t *effect;
     gs_texrender_t *render_target_a;
     gs_texrender_t *render_target_b;

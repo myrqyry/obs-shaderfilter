@@ -350,7 +350,7 @@ elseif(WIN32)
 elseif(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         PREFIX ""
-        SUFFIX ".so"
+        SUFFIX ".dylib"
         MACOSX_BUNDLE_GUI_IDENTIFIER "${MACOS_BUNDLEID}"
     )
 
@@ -363,12 +363,17 @@ if(IN_OBS_BUILD)
     # Use OBS's built-in installation
     setup_plugin_target(${PROJECT_NAME})
 else()
-    # Standalone installation paths
+    # Standalone installation paths compatible with OBS 32.0 Plugin Manager
     if(LINUX)
         set(PLUGIN_INSTALL_DIR "lib/obs-plugins")
         set(DATA_INSTALL_DIR "share/obs/obs-plugins/${PROJECT_NAME}")
     elseif(WIN32)
-        set(PLUGIN_INSTALL_DIR "obs-plugins/64bit")
+        # For plugin manager compatibility, prefer the structured approach
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(PLUGIN_INSTALL_DIR "obs-plugins/64bit")
+        else()
+            set(PLUGIN_INSTALL_DIR "obs-plugins/32bit")
+        endif()
         set(DATA_INSTALL_DIR "data/obs-plugins/${PROJECT_NAME}")
     elseif(APPLE)
         set(PLUGIN_INSTALL_DIR "obs-plugins")
@@ -381,7 +386,7 @@ else()
         RUNTIME DESTINATION ${PLUGIN_INSTALL_DIR}
     )
 
-    # Install data files
+    # Install data files with correct structure
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data/
         DESTINATION ${DATA_INSTALL_DIR}
         FILES_MATCHING
@@ -391,11 +396,13 @@ else()
             PATTERN "*.jpg"
     )
 
-    # Install locale files
-    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data/locale/
-        DESTINATION ${DATA_INSTALL_DIR}/locale
-        FILES_MATCHING PATTERN "*.ini"
-    )
+    # Install locale files - this is CRITICAL for plugin manager recognition
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/locale/")
+        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data/locale/
+            DESTINATION ${DATA_INSTALL_DIR}/locale
+            FILES_MATCHING PATTERN "*.ini"
+        )
+    endif()
 endif()
 
 # ===== BUILD INFO =====

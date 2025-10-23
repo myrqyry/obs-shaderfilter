@@ -1,0 +1,48 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture1d_t audio_spectrum_tex;
+uniform texture2d_t audio_spectrogram_tex;
+uniform texture1d_t audio_waveform_tex;
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertexData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VertexData VSDefault(VertexData v_in) {
+    VertexData v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv;
+    return v_out;
+}
+
+float4 PSEffect(VertexData v_in) : TARGET {
+    float4 color = image.Sample(textureSampler, v_in.uv);
+
+    // Visualize spectrum
+    float spectrum = audio_spectrum_tex.Sample(textureSampler, v_in.uv.x).r;
+    color.rgb *= 1.0 + spectrum;
+
+    // Visualize spectrogram
+    float spectrogram = audio_spectrogram_tex.Sample(textureSampler, v_in.uv).r;
+    color.rgb = lerp(color.rgb, float3(1.0, 1.0, 0.0), spectrogram);
+
+    // Visualize waveform
+    float waveform = audio_waveform_tex.Sample(textureSampler, v_in.uv.x).r;
+    color.rgb += waveform * 0.5;
+
+    return color;
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader = PSEffect(v_in);
+    }
+}

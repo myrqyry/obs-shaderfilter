@@ -323,9 +323,9 @@ static void filter_render(void *data, gs_effect_t *effect)
             gs_effect_set_texture(param_previous, prev_tex);
         }
 
-        multi_input::bind_textures(filter, render_effect);
-        audio_reactive::bind_audio_data(filter, render_effect);
-        global_uniforms::bind_to_effect(render_effect);
+        multi_input::bind_textures(filter, filter->effect);
+        audio_reactive::bind_audio_data(filter, filter->effect);
+        global_uniforms::bind_to_effect(filter->effect);
 
         if (!filter->override_entire_effect) {
              obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING);

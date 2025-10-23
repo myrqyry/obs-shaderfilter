@@ -55,6 +55,7 @@ struct filter_data {
     int spectrum_bands;
     float audio_reactivity_strength;
     bool audio_reactive_enabled;
+    bool audio_textures_enabled;
     // Named to match audio_reactive.cpp usage
     float audio_attack;
     float audio_release;
@@ -62,6 +63,23 @@ struct filter_data {
 
     // Temporally smoothed spectrum (same size as front/back buffers)
     std::array<float, 256> smoothed_spectrum;
+
+    // --- New Audio Texture Data ---
+    // CPU-side data buffers
+    static constexpr int HIGH_RES_SPECTRUM_SIZE = 1024;
+    static constexpr int SPECTROGRAM_WIDTH = 512;
+    static constexpr int SPECTROGRAM_HEIGHT = 256;
+    static constexpr int WAVEFORM_SIZE = 1024;
+
+    std::array<float, HIGH_RES_SPECTRUM_SIZE> high_res_spectrum;
+    std::array<float, SPECTROGRAM_WIDTH * SPECTROGRAM_HEIGHT> spectrogram_data;
+    std::array<float, WAVEFORM_SIZE> waveform_data;
+    int spectrogram_write_pos = 0;
+
+    // GPU-side texture resources
+    gs_texture_t *audio_spectrum_tex;
+    gs_texture_t *audio_spectrogram_tex;
+    gs_texture_t *audio_waveform_tex;
 };
 
 } // namespace shader_filter

@@ -1,4 +1,6 @@
 #include "shader_filter.hpp"
+#include "shader_filter_data.hpp"
+#include "global_uniforms.hpp"
 #include <obs/obs-module.h>
 
 // Forward declarations from other modules
@@ -63,16 +65,15 @@ obs_properties_t* get_properties(void* data)
         0, 400, 1);
 
     // ===== FEEDBACK SETTINGS GROUP =====
-    obs_properties_t *feedback_group = obs_properties_create();
-    obs_properties_add_group(props,
+    obs_property_t *feedback_group_property = obs_properties_add_group(props,
         "feedback_settings",
         obs_module_text("Feedback Settings"),
         OBS_GROUP_CHECKABLE,
-        feedback_group);
+        nullptr);
+    obs_properties_t *feedback_group = obs_property_group_content(feedback_group_property);
+    obs_property_set_long_description(feedback_group_property,
+        obs_module_text("FeedbackSettings.Description"));
 
-    obs_properties_add_bool(feedback_group,
-        "enable_feedback",
-        obs_module_text("Enable Feedback"));
     obs_properties_add_float_slider(feedback_group,
         "trail_length",
         obs_module_text("Trail Length"),
@@ -82,14 +83,30 @@ obs_properties_t* get_properties(void* data)
     multi_input::add_properties(props, data);
     audio_reactive::add_properties(props, data);
     hot_reload::add_properties(props, data);
+    global_uniforms::add_ui(props);
 
     // ===== SHADER PARAMETERS GROUP (Dynamically Populated) =====
-    obs_properties_t *shader_params = obs_properties_create();
-    obs_properties_add_group(props,
-        "shader_parameters",
-        obs_module_text("ShaderParameters"),
-        OBS_GROUP_NORMAL,
-        shader_params);
+    filter_data *filter = static_cast<filter_data*>(data);
+    if (filter) {
+        if (filter->last_error_string) {
+            obs_properties_add_text(props,
+                "last_error",
+                obs_module_text("LastError"),
+                OBS_TEXT_INFO);
+            obs_property_set_long_description(
+                obs_properties_get(props, "last_error"),
+                filter->last_error_string);
+        }
+
+        if (filter->effect) {
+            obs_properties_t *shader_params = obs_properties_create();
+            obs_properties_add_group(props,
+                "shader_parameters",
+                obs_module_text("ShaderParameters"),
+                OBS_GROUP_NORMAL,
+                shader_params);
+        }
+    }
 
     return props;
 }

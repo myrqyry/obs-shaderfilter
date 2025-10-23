@@ -45,6 +45,7 @@ struct filter_data {
     char *shader_path;
     bool use_effect_file;
     bool hot_reload_enabled;
+    char *last_error_string;
 
     // Audio-reactive data
     obs_weak_source_t *audio_source;

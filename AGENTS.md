@@ -292,16 +292,32 @@ uniform texture2d mask_image;       // Mask source (grayscale)
 
 ### Audio Reactivity Uniforms
 
-```
-uniform float audio_spectrum;  // Frequency spectrum[1]
-uniform int spectrum_bands;         // Number of active bands (e.g., 64)
+```c
+// Basic, low-resolution spectrum (up to 256 bands)
+uniform float audio_spectrum[256];
+uniform int spectrum_bands; // Number of active bands in audio_spectrum
+
+// Advanced Audio Textures (when enabled in UI)
+uniform texture1d_t audio_spectrum_tex;    // High-resolution linear spectrum (1024 bins)
+uniform texture2d_t audio_spectrogram_tex; // Spectrum over time (512x256)
+uniform texture1d_t audio_waveform_tex;    // Raw audio waveform (1024 samples)
 ```
 
-**Frequency Mapping** (logarithmic bins):
+**Frequency Mapping** (`audio_spectrum` array):
 - `audio_spectrum[0]` = 20-40 Hz (sub-bass)
 - `audio_spectrum[8]` = 80-160 Hz (bass)
 - `audio_spectrum[32]` = 1-2 kHz (midrange)
 - `audio_spectrum[56]` = 8-16 kHz (treble)
+
+#### Using Audio Textures
+
+When "Enable Advanced Audio Textures" is checked, three textures become available. They contain raw, unnormalized data that gives you more creative control.
+
+-   **`audio_spectrum_tex`**: A 1D texture containing 1024 frequency bins with linear mapping. `uv.x = 0.0` is ~0Hz, `uv.x = 1.0` is ~22050Hz. The data is the raw FFT magnitude, so you may want to apply a log scale in the shader for better visualization (e.g., `log(1.0 + texture(audio_spectrum_tex, uv).r)`).
+
+-   **`audio_spectrogram_tex`**: A 2D texture where the Y-axis represents frequency (0.0=low, 1.0=high) and the X-axis represents time. The newest audio data is on the right, scrolling to the left.
+
+-   **`audio_waveform_tex`**: A 1D texture containing the most recent 1024 raw audio samples (after the Hanning window is applied). The amplitude ranges from -1.0 to 1.0.
 
 ### Example Shader Template
 

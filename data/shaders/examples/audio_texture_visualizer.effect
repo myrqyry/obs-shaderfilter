@@ -1,0 +1,62 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 uv_size;
+
+// --- Audio Texture Uniforms ---
+uniform texture1d audio_spectrum_tex;
+uniform texture2d audio_spectrogram_tex;
+uniform texture1d audio_waveform_tex;
+
+sampler_state linear_sampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+// Helper to draw a simple line graph
+float plot(float2 uv, float p) {
+    return smoothstep(p - 0.01, p, uv.y) - smoothstep(p, p + 0.01, uv.y);
+}
+
+float4 mainImage(VertData v_in) : TARGET
+{
+    float4 final_color = float4(0.0, 0.0, 0.0, 1.0);
+    float2 uv = v_in.uv;
+
+    // --- Spectrogram (Background) ---
+    // The spectrogram texture scrolls horizontally
+    float spectrogram_sample = audio_spectrogram_tex.Sample(linear_sampler, uv).r;
+    final_color.rgb += float3(spectrogram_sample * 0.2, spectrogram_sample * 0.5, spectrogram_sample);
+
+    // --- High-Resolution Spectrum (Top Half) ---
+    if (uv.y > 0.5) {
+        float spectrum_uv_x = (uv.x - 0.05) / 0.9; // Scale to fit
+        float spectrum_val = audio_spectrum_tex.Sample(linear_sampler, spectrum_uv_x).r;
+        spectrum_val = log(1.0 + spectrum_val) / 5.0; // Log scale for better visualization
+
+        float graph = plot(float2(uv.x, (uv.y - 0.5) * 2.0), spectrum_val);
+        final_color.rgb += float3(1.0, 0.5, 0.2) * graph;
+    }
+
+    // --- Waveform (Bottom Half) ---
+    if (uv.y <= 0.5) {
+        float waveform_val = audio_waveform_tex.Sample(linear_sampler, uv.x).r;
+
+        // Scale waveform to be visible in the -0.5 to 0.5 range
+        waveform_val = (waveform_val * 0.5 + 0.5);
+
+        float graph = plot(float2(uv.x, uv.y * 2.0), waveform_val);
+        final_color.rgb += float3(0.2, 1.0, 0.5) * graph;
+    }
+
+    return final_color;
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = mainTransform(v_in);
+        pixel_shader = mainImage(v_in);
+    }
+}

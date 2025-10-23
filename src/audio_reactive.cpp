@@ -142,6 +142,10 @@ void add_properties(obs_properties_t *props, void *data)
         "audio_release",
         obs_module_text("AudioRelease"),
         0.01, 1.0, 0.01);
+
+    obs_properties_add_bool(audio_group,
+        "audio_textures_enabled",
+        obs_module_text("EnableAudioTextures"));
 }
 
 void set_defaults(obs_data_t *settings)
@@ -150,6 +154,7 @@ void set_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "spectrum_bands", 128);
     obs_data_set_default_double(settings, "audio_reactivity", 1.0);
     obs_data_set_default_bool(settings, "audio_reactive", false);
+    obs_data_set_default_bool(settings, "audio_textures_enabled", false);
     obs_data_set_default_double(settings, "audio_gain", 1.0);
     obs_data_set_default_double(settings, "audio_attack", 0.5);
     obs_data_set_default_double(settings, "audio_release", 0.3);
@@ -162,6 +167,7 @@ void update_settings(void *filter_data, obs_data_t *settings)
     filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
     filter->audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
     filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
+    filter->audio_textures_enabled = obs_data_get_bool(settings, "audio_textures_enabled");
     filter->audio_gain = (float)obs_data_get_double(settings, "audio_gain");
     filter->audio_attack = (float)obs_data_get_double(settings, "audio_attack");
     filter->audio_release = (float)obs_data_get_double(settings, "audio_release");
@@ -289,6 +295,39 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
             std::fill(filter->back_buffer.begin(), filter->back_buffer.end(), 0.0f);
         }
 
+        // --- New Audio Texture Processing ---
+        if (filter->audio_textures_enabled) {
+            std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
+
+            // 1. High-Resolution Spectrum
+            std::fill(filter->high_res_spectrum.begin(), filter->high_res_spectrum.end(), 0.0f);
+            for (size_t i = 0; i < buffer_size / 2 && i < filter->HIGH_RES_SPECTRUM_SIZE; ++i) {
+                float real = capture->output_buffer[i][0];
+                float imag = capture->output_buffer[i][1];
+                float magnitude = sqrtf(real * real + imag * imag);
+                filter->high_res_spectrum[i] = magnitude * filter->audio_gain;
+            }
+
+            // 2. Waveform Data
+            // Just copy the raw input buffer (already has Hanning window applied)
+             std::copy(capture->input_buffer.begin(),
+                  capture->input_buffer.begin() + std::min((size_t)filter->WAVEFORM_SIZE, buffer_size),
+                  filter->waveform_data.begin());
+
+            // 3. Spectrogram
+            // Write the new high-res spectrum into the current column of the spectrogram
+            int write_pos = filter->spectrogram_write_pos;
+            for (int y = 0; y < filter->SPECTROGRAM_HEIGHT; ++y) {
+                // Map spectrogram row to spectrum bin
+                int spectrum_idx = y * (filter->HIGH_RES_SPECTRUM_SIZE / filter->SPECTROGRAM_HEIGHT);
+                float value = filter->high_res_spectrum[spectrum_idx];
+                 // Normalize and clamp
+                value = fminf(value / 100.0f, 1.0f); // Ad-hoc normalization
+                filter->spectrogram_data[y * filter->SPECTROGRAM_WIDTH + write_pos] = value;
+            }
+            filter->spectrogram_write_pos = (write_pos + 1) % filter->SPECTROGRAM_WIDTH;
+        }
+
         // Swap buffers to make the new data available to the render thread
         {
             std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
@@ -296,6 +335,32 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
         }
         capture->data_ready = false;
     }
+
+    // --- Texture Updates and Binding ---
+    if (filter->audio_textures_enabled) {
+        obs_enter_graphics();
+        if (!filter->audio_spectrum_tex) {
+            filter->audio_spectrum_tex = gs_texture_create(filter->HIGH_RES_SPECTRUM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+            filter->audio_spectrogram_tex = gs_texture_create(filter->SPECTROGRAM_WIDTH, filter->SPECTROGRAM_HEIGHT, GS_R32F, 1, nullptr, GS_DYNAMIC);
+            filter->audio_waveform_tex = gs_texture_create(filter->WAVEFORM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+        }
+
+        gs_texture_set_image(filter->audio_spectrum_tex, reinterpret_cast<const uint8_t*>(filter->high_res_spectrum.data()), filter->HIGH_RES_SPECTRUM_SIZE * sizeof(float), false);
+        gs_texture_set_image(filter->audio_spectrogram_tex, reinterpret_cast<const uint8_t*>(filter->spectrogram_data.data()), filter->SPECTROGRAM_WIDTH * sizeof(float), false);
+        gs_texture_set_image(filter->audio_waveform_tex, reinterpret_cast<const uint8_t*>(filter->waveform_data.data()), filter->WAVEFORM_SIZE * sizeof(float), false);
+
+        obs_leave_graphics();
+
+        gs_eparam_t *spectrum_tex_param = gs_effect_get_param_by_name(effect, "audio_spectrum_tex");
+        if(spectrum_tex_param) gs_effect_set_texture(spectrum_tex_param, filter->audio_spectrum_tex);
+
+        gs_eparam_t *spectrogram_tex_param = gs_effect_get_param_by_name(effect, "audio_spectrogram_tex");
+        if(spectrogram_tex_param) gs_effect_set_texture(spectrogram_tex_param, filter->audio_spectrogram_tex);
+
+        gs_eparam_t *waveform_tex_param = gs_effect_get_param_by_name(effect, "audio_waveform_tex");
+        if(waveform_tex_param) gs_effect_set_texture(waveform_tex_param, filter->audio_waveform_tex);
+    }
+
 
     gs_eparam_t *spectrum_param = gs_effect_get_param_by_name(effect, "audio_spectrum");
     if (spectrum_param) {

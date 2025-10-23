@@ -77,6 +77,15 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->audio_gain = 1.0f;
     filter->smoothed_spectrum.fill(0.0f);
 
+    // New audio texture fields
+    filter->audio_textures_enabled = false;
+    filter->high_res_spectrum.fill(0.0f);
+    filter->spectrogram_data.fill(0.0f);
+    filter->waveform_data.fill(0.0f);
+    filter->audio_spectrum_tex = nullptr;
+    filter->audio_spectrogram_tex = nullptr;
+    filter->audio_waveform_tex = nullptr;
+
     filter_update(filter, settings);
 
     return filter;
@@ -102,6 +111,17 @@ static void filter_destroy(void *data)
 
     if (filter->render_target_b) {
         gs_texrender_destroy(filter->render_target_b);
+    }
+
+    // Destroy audio textures
+    if (filter->audio_spectrum_tex) {
+        gs_texture_destroy(filter->audio_spectrum_tex);
+    }
+    if (filter->audio_spectrogram_tex) {
+        gs_texture_destroy(filter->audio_spectrogram_tex);
+    }
+    if (filter->audio_waveform_tex) {
+        gs_texture_destroy(filter->audio_waveform_tex);
     }
 
     obs_leave_graphics();

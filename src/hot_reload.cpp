@@ -30,39 +30,39 @@ static std::atomic<bool> running = false;
 
 static void watcher_loop()
 {
-	while (running) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    while (running) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-		std::lock_guard<std::mutex> lock(watch_mutex);
-		for (auto &entry : watched_files) {
-			std::error_code ec;
-			auto current_time =
-				fs::last_write_time(entry.second.path, ec);
+        std::lock_guard<std::mutex> lock(watch_mutex);
+        for (auto &entry : watched_files) {
+            std::error_code ec;
+            auto current_time =
+                fs::last_write_time(entry.second.path, ec);
 
-			if (ec) {
-				// This can happen if the file is deleted or being written to.
-				// We'll just retry next time.
-				continue;
-			}
+            if (ec) {
+                // This can happen if the file is deleted or being written to.
+                // We'll just retry next time.
+                continue;
+            }
 
-			if (current_time > entry.second.last_write_time) {
-				blog(LOG_INFO,
-				     "[ShaderFilter Plus Next] File changed: %s",
-				     entry.first.c_str());
-				entry.second.last_write_time = current_time;
+            if (current_time > entry.second.last_write_time) {
+                blog(LOG_INFO,
+                     "[ShaderFilter Plus Next] File changed: %s",
+                     entry.first.c_str());
+                entry.second.last_write_time = current_time;
 
-				// Instead of calling reload directly, just set a flag.
-				// The render thread will pick this up safely.
-				for (void *filter_ptr :
-				     entry.second.filter_instances) {
-					auto *filter = static_cast<
-						shader_filter::filter_data *>(
-						filter_ptr);
-					filter->needs_reload = true;
-				}
-			}
-		}
-	}
+                // Instead of calling reload directly, just set a flag.
+                // The render thread will pick this up safely.
+                for (void *filter_ptr :
+                     entry.second.filter_instances) {
+                    auto *filter = static_cast<
+                        shader_filter::filter_data *>(
+                        filter_ptr);
+                    filter->needs_reload = true;
+                }
+            }
+        }
+    }
 }
 
 void initialize()

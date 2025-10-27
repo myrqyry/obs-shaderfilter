@@ -92,6 +92,24 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     return filter;
 }
 
+static void safe_free_texture(gs_texture_t **texture) {
+    if (texture && *texture) {
+        obs_enter_graphics();
+        gs_texture_destroy(*texture);
+        obs_leave_graphics();
+        *texture = NULL;
+    }
+}
+
+static void safe_free_effect(gs_effect_t **effect) {
+    if (effect && *effect) {
+        obs_enter_graphics();
+        gs_effect_destroy(*effect);
+        obs_leave_graphics();
+        *effect = NULL;
+    }
+}
+
 static void filter_destroy(void *data)
 {
     filter_data *filter = static_cast<filter_data*>(data);
@@ -100,11 +118,9 @@ static void filter_destroy(void *data)
         hot_reload::unwatch_file(filter->shader_path, filter);
     }
 
-    obs_enter_graphics();
+    safe_free_effect(&filter->effect);
 
-    if (filter->effect) {
-        gs_effect_destroy(filter->effect);
-    }
+    obs_enter_graphics();
 
     if (filter->render_target_a) {
         gs_texrender_destroy(filter->render_target_a);
@@ -114,18 +130,12 @@ static void filter_destroy(void *data)
         gs_texrender_destroy(filter->render_target_b);
     }
 
-    // Destroy audio textures
-    if (filter->audio_spectrum_tex) {
-        gs_texture_destroy(filter->audio_spectrum_tex);
-    }
-    if (filter->audio_spectrogram_tex) {
-        gs_texture_destroy(filter->audio_spectrogram_tex);
-    }
-    if (filter->audio_waveform_tex) {
-        gs_texture_destroy(filter->audio_waveform_tex);
-    }
-
     obs_leave_graphics();
+
+    // Destroy audio textures
+    safe_free_texture(&filter->audio_spectrum_tex);
+    safe_free_texture(&filter->audio_spectrogram_tex);
+    safe_free_texture(&filter->audio_waveform_tex);
 
     multi_input::cleanup_textures(filter);
 
@@ -170,7 +180,8 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
         blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
         if (error_string) {
-            filter->last_error_string = error_string;
+            filter->last_error_string = bstrdup(error_string);
+            bfree(error_string);
         }
         obs_leave_graphics();
         return false;
@@ -287,7 +298,6 @@ static void filter_render(void *data, gs_effect_t *effect)
     gs_effect_t *render_effect = filter->override_entire_effect ?
                                  filter->effect : obs_get_base_effect(OBS_EFFECT_DEFAULT);
 
-    gs_eparam_t *param_image = gs_effect_get_param_by_name(filter->effect, "image");
     gs_eparam_t *param_elapsed = gs_effect_get_param_by_name(filter->effect, "elapsed_time");
     gs_eparam_t *param_uv_size = gs_effect_get_param_by_name(filter->effect, "uv_size");
 
@@ -350,7 +360,9 @@ static void filter_render(void *data, gs_effect_t *effect)
 				obs_get_base_effect(OBS_EFFECT_DEFAULT);
 			gs_eparam_t *image = gs_effect_get_param_by_name(
 				pass_through, "image");
-			gs_effect_set_texture(image, tex);
+            if (image) {
+			    gs_effect_set_texture(image, tex);
+            }
 
 			while (gs_effect_loop(pass_through, "Draw")) {
 				gs_draw_sprite(tex, 0, width, height);

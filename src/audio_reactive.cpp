@@ -189,10 +189,10 @@ void update_settings(void *filter_data, obs_data_t *settings)
     }
 
     if (old_capture) {
-        // The obs_source_remove_audio_capture_callback function is a blocking
-        // call that waits for any active callbacks on other threads to finish
-        // before returning. Therefore, it is safe to delete old_capture
-        // immediately after this call without needing an additional spin-wait.
+        // Proper synchronization: wait for any active callbacks to complete
+        while (old_capture->callback_active.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         delete old_capture;
     }
 

@@ -31,7 +31,8 @@ static std::atomic<bool> running = false;
 static void watcher_loop()
 {
     while (running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        constexpr int POLLING_INTERVAL_MS = 500;
+        std::this_thread::sleep_for(std::chrono::milliseconds(POLLING_INTERVAL_MS));
 
         std::lock_guard<std::mutex> lock(watch_mutex);
         for (auto &entry : watched_files) {

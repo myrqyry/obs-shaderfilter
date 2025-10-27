@@ -46,7 +46,7 @@ struct filter_data {
     char *shader_path;
     bool use_effect_file;
     bool hot_reload_enabled;
-    std::atomic<bool> needs_reload{false};
+    char *last_error_string;
 
     // Audio-reactive data
     obs_weak_source_t *audio_source;

@@ -1,0 +1,47 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform bool enable_color_filter <
+    string label = "Enable Color Filter";
+    string widget_type = "checkbox";
+> = true;
+
+uniform float4 filter_color <
+    string label = "Filter Color";
+    string widget_type = "color";
+> = float4(1.0, 0.0, 0.0, 1.0);
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertexData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VertexData VSDefault(VertexData v_in) {
+    VertexData v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv;
+    return v_out;
+}
+
+float4 PSEffect(VertexData v_in) : TARGET {
+    float4 color = image.Sample(textureSampler, v_in.uv);
+
+    if (enable_color_filter) {
+        color.rgb = lerp(color.rgb, filter_color.rgb, filter_color.a);
+    }
+
+    return color;
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader = PSEffect(v_in);
+    }
+}

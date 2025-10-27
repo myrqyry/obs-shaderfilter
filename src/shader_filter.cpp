@@ -252,6 +252,11 @@ static void filter_render(void *data, gs_effect_t *effect)
 
     filter_data *filter = static_cast<filter_data*>(data);
 
+    // Check if a hot reload is pending
+    if (filter->needs_reload.exchange(false)) {
+        reload_shader(filter);
+    }
+
     if (!filter->effect) {
         obs_source_skip_video_filter(filter->context);
         return;

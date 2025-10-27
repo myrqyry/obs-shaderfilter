@@ -26,6 +26,7 @@ struct audio_capture_data {
     fftwf_plan fft_plan = nullptr;
     std::vector<float> input_buffer;
     std::vector<fftwf_complex> output_buffer;
+    std::vector<float> windowed_buffer;
     struct circlebuf audio_buffer;
     std::atomic<bool> data_ready;
     std::atomic<bool> callback_active;
@@ -36,6 +37,7 @@ struct audio_capture_data {
           hanning_window(size),
           input_buffer(size),
           output_buffer(size / 2 + 1),
+          windowed_buffer(size),
           data_ready(false),
           shutdown_requested(false)
     {
@@ -86,8 +88,26 @@ static void audio_capture_callback(void *param, obs_source_t *source,
         return;
     }
 
+    // Apply Hanning window during capture
+    if (capture->windowed_buffer.size() < audio_data->frames) {
+        capture->windowed_buffer.resize(audio_data->frames);
+    }
+
+    const float* input_samples = (const float*)audio_data->data[0];
+    const size_t num_frames = audio_data->frames;
+    const size_t window_size = capture->hanning_window.size();
+    const size_t common_size = std::min(num_frames, window_size);
+
+    for (size_t i = 0; i < common_size; ++i) {
+        capture->windowed_buffer[i] = input_samples[i] * capture->hanning_window[i];
+    }
+
+    if (num_frames > window_size) {
+        std::copy(input_samples + common_size, input_samples + num_frames, capture->windowed_buffer.data() + common_size);
+    }
+
     circlebuf_push_back(&capture->audio_buffer,
-                      audio_data->data[0],
+                      capture->windowed_buffer.data(),
                       audio_data->frames * sizeof(float));
     capture->data_ready = true;
     capture->callback_active = false;
@@ -171,7 +191,34 @@ void update_settings(void *filter_data, obs_data_t *settings)
     filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
     filter->audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
     filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
-    filter->audio_textures_enabled = obs_data_get_bool(settings, "audio_textures_enabled");
+
+    bool audio_textures_enabled = obs_data_get_bool(settings, "audio_textures_enabled");
+    if (audio_textures_enabled != filter->audio_textures_enabled) {
+        obs_enter_graphics();
+        if (audio_textures_enabled) {
+            if (!filter->audio_spectrum_tex) {
+                filter->audio_spectrum_tex = gs_texture_create(filter->HIGH_RES_SPECTRUM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+                filter->audio_spectrogram_tex = gs_texture_create(filter->SPECTROGRAM_WIDTH, filter->SPECTROGRAM_HEIGHT, GS_R32F, 1, nullptr, GS_DYNAMIC);
+                filter->audio_waveform_tex = gs_texture_create(filter->WAVEFORM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+            }
+        } else {
+            if (filter->audio_spectrum_tex) {
+                gs_texture_destroy(filter->audio_spectrum_tex);
+                filter->audio_spectrum_tex = nullptr;
+            }
+            if (filter->audio_spectrogram_tex) {
+                gs_texture_destroy(filter->audio_spectrogram_tex);
+                filter->audio_spectrogram_tex = nullptr;
+            }
+            if (filter->audio_waveform_tex) {
+                gs_texture_destroy(filter->audio_waveform_tex);
+                filter->audio_waveform_tex = nullptr;
+            }
+        }
+        obs_leave_graphics();
+    }
+    filter->audio_textures_enabled = audio_textures_enabled;
+
     filter->audio_gain = (float)obs_data_get_double(settings, "audio_gain");
     filter->audio_attack = (float)obs_data_get_double(settings, "audio_attack");
     filter->audio_release = (float)obs_data_get_double(settings, "audio_release");
@@ -242,10 +289,6 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
 
     if (capture->audio_buffer.size >= buffer_size * sizeof(float)) {
         circlebuf_read(&capture->audio_buffer, capture->input_buffer.data(), buffer_size * sizeof(float));
-
-        for (size_t i = 0; i < buffer_size; ++i) {
-            capture->input_buffer[i] *= capture->hanning_window[i];
-        }
 
 #ifdef USE_FFTW
         if(capture->fft_plan) {
@@ -351,13 +394,8 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
     }
 
     // --- Texture Updates and Binding ---
-    if (filter->audio_textures_enabled) {
+    if (filter->audio_textures_enabled && filter->audio_spectrum_tex) {
         obs_enter_graphics();
-        if (!filter->audio_spectrum_tex) {
-            filter->audio_spectrum_tex = gs_texture_create(filter->HIGH_RES_SPECTRUM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
-            filter->audio_spectrogram_tex = gs_texture_create(filter->SPECTROGRAM_WIDTH, filter->SPECTROGRAM_HEIGHT, GS_R32F, 1, nullptr, GS_DYNAMIC);
-            filter->audio_waveform_tex = gs_texture_create(filter->WAVEFORM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
-        }
 
         gs_texture_set_image(filter->audio_spectrum_tex, reinterpret_cast<const uint8_t*>(filter->high_res_spectrum.data()), filter->HIGH_RES_SPECTRUM_SIZE * sizeof(float), false);
         gs_texture_set_image(filter->audio_spectrogram_tex, reinterpret_cast<const uint8_t*>(filter->spectrogram_data.data()), filter->SPECTROGRAM_WIDTH * sizeof(float), false);

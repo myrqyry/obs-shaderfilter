@@ -3,6 +3,7 @@
 #include "hot_reload.hpp"
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
+#include "global_uniforms.hpp"
 
 #include <obs/obs-module.h>
 #include <obs/graphics/graphics.h>
@@ -160,11 +161,16 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
     char *error_string = nullptr;
     filter->effect = gs_effect_create_from_file(path, &error_string);
 
+    if (filter->last_error_string) {
+        bfree(filter->last_error_string);
+        filter->last_error_string = nullptr;
+    }
+
     if (!filter->effect) {
         blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
-        if (error_string) {  // Add null check before freeing
-            bfree(error_string);
+        if (error_string) {
+            filter->last_error_string = error_string;
         }
         obs_leave_graphics();
         return false;
@@ -280,65 +286,52 @@ static void filter_render(void *data, gs_effect_t *effect)
     gs_eparam_t *param_elapsed = gs_effect_get_param_by_name(filter->effect, "elapsed_time");
     gs_eparam_t *param_uv_size = gs_effect_get_param_by_name(filter->effect, "uv_size");
 
+    obs_data_t *settings = obs_source_get_settings(filter->context);
+    bool feedback_enabled = obs_data_get_bool(settings, "feedback_settings");
+    obs_data_release(settings);
+
     gs_texrender_t *current_target = filter->use_buffer_a ?
                                      filter->render_target_a : filter->render_target_b;
     gs_texrender_t *previous_target = filter->use_buffer_a ?
                                       filter->render_target_b : filter->render_target_a;
 
     if (gs_texrender_begin(current_target, width, height)) {
-
         gs_viewport_push();
         gs_projection_push();
-        gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
-        gs_set_viewport(filter->expand_left, filter->expand_top,
-                       base_width, base_height);
+
+        if (filter->override_entire_effect) {
+            gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+            gs_set_viewport(0, 0, width, height);
+        } else {
+            gs_ortho(0.0f, (float)base_width, 0.0f, (float)base_height, -100.0f, 100.0f);
+            gs_set_viewport(0, 0, base_width, base_height);
+        }
 
         struct vec2 uv_size = {(float)width, (float)height};
+        if (param_uv_size) {
+            gs_effect_set_vec2(param_uv_size, &uv_size);
+        }
 
         if (param_elapsed) {
             float time = (float)obs_get_video_frame_time() / 1000000000.0f;
             gs_effect_set_float(param_elapsed, time);
         }
 
-        if (param_uv_size) {
-            gs_effect_set_vec2(param_uv_size, &uv_size);
+        gs_eparam_t *param_previous = gs_effect_get_param_by_name(filter->effect, "previous_frame");
+        if (param_previous) {
+            gs_texture_t *prev_tex = gs_texrender_get_texture(previous_target);
+            gs_effect_set_texture(param_previous, prev_tex);
         }
 
-        // obs_filter_get_settings isn't available in all header sets; use obs_source_get_settings
-        obs_data_t *settings = obs_source_get_settings(filter->context);
-        gs_eparam_t *trail_param = gs_effect_get_param_by_name(filter->effect, "trail_length");
-        if (trail_param) {
-            float trail_value = (float)obs_data_get_double(settings, "trail_length");
-            gs_effect_set_float(trail_param, trail_value);
+        multi_input::bind_textures(filter, filter->effect);
+        audio_reactive::bind_audio_data(filter, filter->effect);
+        global_uniforms::bind_to_effect(filter->effect);
+
+        if (!filter->override_entire_effect) {
+             obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING);
         }
-        obs_data_release(settings);
 
-		gs_eparam_t *param_previous = gs_effect_get_param_by_name(
-			filter->effect, "previous_frame");
-		if (param_previous) {
-			if (previous_target) {
-				gs_texture_t *prev_tex =
-					gs_texrender_get_texture(
-						previous_target);
-				if (prev_tex) {
-					gs_effect_set_texture(param_previous,
-							      prev_tex);
-				}
-			} else {
-				gs_effect_set_texture(param_previous, NULL);
-			}
-		}
-
-        multi_input::bind_textures(filter, render_effect);
-        audio_reactive::bind_audio_data(filter, render_effect);
-
-        if (param_image) {
-            if (obs_source_process_filter_begin(filter->context, GS_RGBA,
-                                               OBS_ALLOW_DIRECT_RENDERING)) {
-                obs_source_process_filter_end(filter->context, render_effect,
-                                             width, height);
-            }
-        }
+        obs_source_process_filter_end(filter->context, filter->effect, width, height);
 
         gs_projection_pop();
         gs_viewport_pop();
@@ -373,7 +366,6 @@ static void filter_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "override_entire_effect", false);
     obs_data_set_default_bool(settings, "hot_reload_enabled", false);
 
-    obs_data_set_default_bool(settings, "enable_feedback", false);
     obs_data_set_default_double(settings, "trail_length", 0.85);
 
     multi_input::set_defaults(settings);

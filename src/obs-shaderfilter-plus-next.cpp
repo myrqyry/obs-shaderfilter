@@ -9,6 +9,7 @@
 #include "hot_reload.hpp"
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
+#include "global_uniforms.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-shaderfilter-plus-next", "en-US")
@@ -54,6 +55,7 @@ bool obs_module_load(void)
 
     // Initialize subsystems
     hot_reload::initialize();
+    global_uniforms::initialize();
     register_frontend_callbacks();
 
     blog(LOG_INFO, "[ShaderFilter Plus Next] Loaded successfully");

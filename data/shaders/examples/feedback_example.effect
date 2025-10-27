@@ -1,0 +1,43 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d previous_frame;
+
+uniform float trail_length <
+    string label = "Trail Length";
+    string widget_type = "slider";
+    float minimum = 0.0;
+    float maximum = 1.0;
+    float step = 0.01;
+> = 0.85;
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertexData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VertexData VSDefault(VertexData v_in) {
+    VertexData v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv = v_in.uv;
+    return v_out;
+}
+
+float4 PSEffect(VertexData v_in) : TARGET {
+    float4 current_color = image.Sample(textureSampler, v_in.uv);
+    float4 previous_color = previous_frame.Sample(textureSampler, v_in.uv);
+
+    return lerp(current_color, previous_color, trail_length);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader = PSEffect(v_in);
+    }
+}

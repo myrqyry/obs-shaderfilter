@@ -189,11 +189,20 @@ void update_settings(void *filter_data, obs_data_t *settings)
     }
 
     if (old_capture) {
-        // Proper synchronization: wait for any active callbacks to complete
+        auto wait_start = std::chrono::steady_clock::now();
         while (old_capture->callback_active.load(std::memory_order_acquire)) {
+            if (std::chrono::steady_clock::now() - wait_start > std::chrono::seconds(1)) {
+                blog(LOG_WARNING, "Timeout waiting for audio callback to finish. "
+                                  "Leaking audio_capture to prevent hang.");
+                old_capture = nullptr;
+                break;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        delete old_capture;
+
+        if (old_capture) {
+            delete old_capture;
+        }
     }
 
     // --- Setup ---

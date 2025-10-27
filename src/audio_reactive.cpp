@@ -12,6 +12,7 @@
 #include <atomic>
 #include <obs/obs-enum-sources.h>
 #include <thread>
+#include <algorithm>
 
 #ifdef USE_FFTW
 #include <fftw3.h>
@@ -266,9 +267,8 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
             if (freq < min_freq) continue;
 
             int band = (int)((log10f(freq) - log_min) / log_range * (filter->spectrum_bands - 1));
-            if (band >= 0 && band < filter->spectrum_bands && band < (int)filter->back_buffer.size()) {
-                filter->back_buffer[band] += magnitude;
-            }
+            band = std::max(0, std::min(band, std::min(filter->spectrum_bands - 1, (int)filter->back_buffer.size() - 1)));
+            filter->back_buffer[band] += magnitude;
         }
 
         // Apply gain to raw FFT magnitudes

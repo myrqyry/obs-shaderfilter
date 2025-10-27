@@ -6,6 +6,7 @@
 #include <obs/graphics/gs_texrender.h>
 #include <mutex>
 #include <array>
+#include <atomic>
 
 // Forward declarations for types used in the struct
 namespace audio_reactive { struct audio_capture_data; }

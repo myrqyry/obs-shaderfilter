@@ -1,5 +1,6 @@
 #include "hot_reload.hpp"
 #include "shader_filter.hpp"
+#include "shader_filter_data.hpp"
 
 #include <obs/obs-module.h>
 #include <filesystem>
@@ -30,34 +31,35 @@ static std::atomic<bool> running = false;
 static void watcher_loop()
 {
     while (running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        std::vector<std::pair<std::string, std::vector<void*>>> reload_list;
+        std::lock_guard<std::mutex> lock(watch_mutex);
+        for (auto &entry : watched_files) {
+            std::error_code ec;
+            auto current_time =
+                fs::last_write_time(entry.second.path, ec);
 
-        {
-            std::lock_guard<std::mutex> lock(watch_mutex);
-
-            for (auto &entry : watched_files) {
-                std::error_code ec;
-                auto current_time = fs::last_write_time(entry.second.path, ec);
-
-                if (ec) {
-                    continue;
-                }
-
-                if (current_time != entry.second.last_write_time) {
-                    entry.second.last_write_time = current_time;
-                    reload_list.emplace_back(entry.second.path, entry.second.filter_instances);
-                }
+            if (ec) {
+                // This can happen if the file is deleted or being written to.
+                // We'll just retry next time.
+                continue;
             }
-        } // Release lock before calling reload callbacks
 
-        // Process reloads outside of the lock to prevent deadlocks
-        for (const auto& reload_item : reload_list) {
-            blog(LOG_INFO, "[ShaderFilter Plus Next] File changed: %s", reload_item.first.c_str());
+            if (current_time > entry.second.last_write_time) {
+                blog(LOG_INFO,
+                     "[ShaderFilter Plus Next] File changed: %s",
+                     entry.first.c_str());
+                entry.second.last_write_time = current_time;
 
-            for (void *filter : reload_item.second) {
-                shader_filter::reload_shader(filter);
+                // Instead of calling reload directly, just set a flag.
+                // The render thread will pick this up safely.
+                for (void *filter_ptr :
+                     entry.second.filter_instances) {
+                    auto *filter = static_cast<
+                        shader_filter::filter_data *>(
+                        filter_ptr);
+                    filter->needs_reload = true;
+                }
             }
         }
     }

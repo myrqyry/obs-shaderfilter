@@ -29,13 +29,15 @@ struct audio_capture_data {
     struct circlebuf audio_buffer;
     std::atomic<bool> data_ready;
     std::atomic<bool> callback_active;
+    std::atomic<bool> shutdown_requested;
 
     audio_capture_data(size_t size)
         : samples_per_frame(size),
           hanning_window(size),
           input_buffer(size),
           output_buffer(size / 2 + 1),
-          data_ready(false)
+          data_ready(false),
+          shutdown_requested(false)
     {
         circlebuf_init(&audio_buffer);
         circlebuf_reserve(&audio_buffer, size * sizeof(float) * 4);
@@ -70,7 +72,8 @@ static void audio_capture_callback(void *param, obs_source_t *source,
                                    bool muted)
 {
     auto *capture = static_cast<audio_capture_data*>(param);
-    if (!capture) {
+    if (!capture || capture->shutdown_requested.load(std::memory_order_acquire)) {
+        if(capture) capture->callback_active = false;
         return;
     }
 
@@ -190,18 +193,20 @@ void update_settings(void *filter_data, obs_data_t *settings)
     }
 
     if (old_capture) {
+        old_capture->shutdown_requested.store(true, std::memory_order_release);
+
         auto wait_start = std::chrono::steady_clock::now();
+        bool timed_out = false;
         while (old_capture->callback_active.load(std::memory_order_acquire)) {
-            if (std::chrono::steady_clock::now() - wait_start > std::chrono::seconds(1)) {
-                blog(LOG_WARNING, "Timeout waiting for audio callback to finish. "
-                                  "Leaking audio_capture to prevent hang.");
-                old_capture = nullptr;
+            if (std::chrono::steady_clock::now() - wait_start > std::chrono::seconds(2)) {
+                blog(LOG_ERROR, "Audio callback cleanup timeout - potential memory leak");
+                timed_out = true;
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        if (old_capture) {
+        if (!timed_out) {
             delete old_capture;
         }
     }

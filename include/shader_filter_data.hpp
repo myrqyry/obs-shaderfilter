@@ -15,7 +15,45 @@ namespace shader_filter {
 
 struct filter_data {
     filter_data() = default;
-    explicit filter_data(obs_source_t* ctx) : context(ctx) {}
+    explicit filter_data(obs_source_t* ctx) :
+        context(ctx),
+        effect(nullptr),
+        render_target_a(nullptr),
+        render_target_b(nullptr),
+        use_buffer_a(true),
+        target_width(0),
+        target_height(0),
+        expand_left(0),
+        expand_right(0),
+        expand_top(0),
+        expand_bottom(0),
+        override_entire_effect(false),
+        secondary_source(nullptr),
+        mask_source(nullptr),
+        secondary_texrender(nullptr),
+        mask_texrender(nullptr),
+        secondary_texrender_width(0),
+        secondary_texrender_height(0),
+        mask_texrender_width(0),
+        mask_texrender_height(0),
+        shader_path(nullptr),
+        use_effect_file(false),
+        hot_reload_enabled(false),
+        last_error_string(nullptr),
+        needs_reload(false),
+        audio_source(nullptr),
+        audio_capture(nullptr),
+        spectrum_bands(0),
+        audio_reactivity_strength(0.0f),
+        audio_reactive_enabled(false),
+        audio_textures_enabled(false),
+        audio_attack(0.0f),
+        audio_release(0.0f),
+        audio_gain(0.0f),
+        audio_spectrum_tex(nullptr),
+        audio_spectrogram_tex(nullptr),
+        audio_waveform_tex(nullptr)
+    {}
     // Core filter data
     obs_source_t * const context = nullptr;
     gs_effect_t *effect;

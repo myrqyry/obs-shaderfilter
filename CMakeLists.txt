@@ -317,7 +317,7 @@ if(LINUX)
     )
 
     # Add pthread for threading (hot reload)
-    target_link_libraries(${PROJECT_NAME} PRIVATE pthread)
+    target_link_libraries(${PROJECT_NAME} PRIVATE pthread stdc++fs)
 
 elseif(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES

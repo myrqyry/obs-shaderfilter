@@ -359,7 +359,7 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
                 float real = capture->output_buffer[i][0];
                 float imag = capture->output_buffer[i][1];
                 float magnitude = sqrtf(real * real + imag * imag);
-                int band = std::clamp(computed_band, 0, max_band);
+                int band = computed_band;
                 filter->back_buffer[band] += magnitude;
             }
         }

@@ -165,7 +165,7 @@ static bool validate_shader_path(const char *path) {
 
     // Ensure the file has a valid shader extension
     std::string ext = canonical_path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return ::tolower(c); });
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     return ext == ".effect" || ext == ".shader" || ext == ".hlsl";
 }
 
@@ -258,13 +258,21 @@ static void filter_update(void *data, obs_data_t *settings)
     audio_reactive::update_settings(filter, settings);
 }
 
-static void ensure_render_targets(filter_data *filter, uint32_t width, uint32_t height)
-{
-    if (filter->render_target_a &&
-        filter->target_width == width &&
-        filter->target_height == height) {
+static void ensure_render_targets(filter_data *filter, uint32_t width, uint32_t height) {
+    // Allow some tolerance for small size changes
+    constexpr uint32_t SIZE_TOLERANCE = 8;
+
+    bool needs_recreation = !filter->render_target_a ||
+        abs((int)filter->target_width - (int)width) > SIZE_TOLERANCE ||
+        abs((int)filter->target_height - (int)height) > SIZE_TOLERANCE;
+
+    if (!needs_recreation) {
         return;
     }
+
+    // Use larger size to reduce future recreations
+    uint32_t padded_width = ((width + 31) / 32) * 32;   // Round up to 32
+    uint32_t padded_height = ((height + 31) / 32) * 32;
 
     if (filter->render_target_a) {
         gs_texrender_destroy(filter->render_target_a);
@@ -273,11 +281,8 @@ static void ensure_render_targets(filter_data *filter, uint32_t width, uint32_t 
 
     filter->render_target_a = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
     filter->render_target_b = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
-    filter->target_width = width;
-    filter->target_height = height;
-
-    blog(LOG_DEBUG, "[ShaderFilter Plus Next] Created render targets: %dx%d",
-         width, height);
+    filter->target_width = padded_width;
+    filter->target_height = padded_height;
 }
 
 static void filter_render(void *data, gs_effect_t *effect)

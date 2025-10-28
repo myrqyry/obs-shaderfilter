@@ -136,11 +136,18 @@ static void render_source(
     if (!texrender || width != tex_width || height != tex_height) {
         if (texrender) {
             gs_texrender_destroy(texrender);
+            texrender = nullptr;
         }
+
         texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+        if (!texrender) {
+            blog(LOG_ERROR, "[shader-filter-plus] Failed to create texrender %ux%u", width, height);
+            obs_source_release(source);
+            return;
+        }
+
         tex_width = width;
         tex_height = height;
-        blog(LOG_INFO, "[shader-filter-plus] Resized multi-input texture to %ux%u", width, height);
     }
 
     if (gs_texrender_begin(texrender, width, height)) {
@@ -209,13 +216,15 @@ void cleanup_textures(void *filter_data)
 
     if (filter->secondary_texrender) {
         gs_texrender_destroy(filter->secondary_texrender);
+        filter->secondary_texrender = nullptr;
     }
 
     if (filter->mask_texrender) {
         gs_texrender_destroy(filter->mask_texrender);
+        filter->mask_texrender = nullptr;
     }
 
-    obs_leave_graphics();
+    obs_leave_graphics();  // Critical: Always match enter with leave
 }
 
 } // namespace multi_input

@@ -12,6 +12,9 @@
 #include <obs/util/dstr.h>
 #include "wrappers.hpp"
 
+#include <filesystem>
+#include <algorithm>
+
 namespace shader_filter {
 
 const char *FILTER_ID = "obs_shaderfilter_plus_next_filter";
@@ -149,8 +152,29 @@ static void filter_destroy(void *data)
     delete filter;
 }
 
+static bool validate_shader_path(const char *path) {
+    if (!path || !*path) return false;
+
+    // Resolve canonical path to prevent traversal
+    std::filesystem::path canonical_path;
+    try {
+        canonical_path = std::filesystem::canonical(path);
+    } catch (const std::filesystem::filesystem_error&) {
+        return false;  // Path doesn't exist or is invalid
+    }
+
+    // Ensure the file has a valid shader extension
+    std::string ext = canonical_path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return ::tolower(c); });
+    return ext == ".effect" || ext == ".shader" || ext == ".hlsl";
+}
+
 static bool load_shader_from_file(filter_data *filter, const char *path)
 {
+    if (!validate_shader_path(path)) {
+        blog(LOG_ERROR, "[ShaderFilter Plus Next] Invalid shader path: %s", path);
+        return false;
+    }
 #ifndef TEST_HARNESS_BUILD
     obs_enter_graphics();
 

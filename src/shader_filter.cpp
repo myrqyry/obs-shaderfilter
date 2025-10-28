@@ -151,60 +151,147 @@ static void filter_destroy(void *data)
     delete filter;
 }
 
+static bool is_subdirectory(const std::filesystem::path& base, const std::filesystem::path& path) {
+    auto rel = std::filesystem::relative(path, base);
+    return !rel.empty() && rel.native().find("..") != 0;
+}
+
 static bool validate_shader_path(const char *path) {
     if (!path || !*path) return false;
 
+    // 1. Reject paths containing ".." to prevent traversal.
+    std::string path_str = path;
+    if (path_str.find("..") != std::string::npos) {
+        plugin_error("Shader path contains traversal characters: %s", path);
+        return false;
+    }
+
     // Define allowed shader directories
-    static const std::vector<std::string> allowed_directories = {
-        "data/shaders/",
-        "data/examples/",
-        obs_get_module_data_path(obs_current_module(), "shaders/"),
-        obs_get_module_data_path(obs_current_module(), "examples/")
+    const char* data_path = obs_get_module_data_path(obs_current_module(), "");
+    static const std::vector<std::filesystem::path> allowed_directories = {
+        std::filesystem::path(data_path) / "shaders",
+        std::filesystem::path(data_path) / "examples"
     };
 
     std::filesystem::path canonical_path;
     try {
         canonical_path = std::filesystem::canonical(path);
     } catch (const std::filesystem::filesystem_error&) {
-        return false;
+        return false; // Path does not exist or is invalid.
     }
 
-    // Check if path is within allowed directories
+    // 2. Check if the canonical path is a descendant of any allowed directory.
     bool in_allowed_dir = false;
     for (const auto& allowed_dir : allowed_directories) {
         std::filesystem::path allowed_canonical;
         try {
-            allowed_canonical = std::filesystem::canonical(allowed_dir);
-            auto rel_path = std::filesystem::relative(canonical_path, allowed_canonical);
-            if (!rel_path.empty() && rel_path.string().substr(0, 2) != "..") {
-                in_allowed_dir = true;
-                break;
-            }
+             if (std::filesystem::exists(allowed_dir)) {
+                allowed_canonical = std::filesystem::canonical(allowed_dir);
+                if (is_subdirectory(allowed_canonical, canonical_path)) {
+                    in_allowed_dir = true;
+                    break;
+                }
+             }
         } catch (const std::filesystem::filesystem_error&) {
             continue;
         }
     }
 
-    if (!in_allowed_dir) return false;
+    if (!in_allowed_dir) {
+        plugin_error("Shader path is not in an allowed directory: %s", path);
+        return false;
+    }
 
-    // Validate extension
+    // 3. Validate extension.
     std::string ext = canonical_path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    return ext == ".effect" || ext == ".shader" || ext == ".hlsl";
+    const std::vector<std::string> allowed_extensions = {".effect", ".shader", ".hlsl"};
+    if (std::find(allowed_extensions.begin(), allowed_extensions.end(), ext) == allowed_extensions.end()) {
+        plugin_error("Shader path has an invalid extension: %s", path);
+        return false;
+    }
+
+    return true;
+}
+
+#include <fstream>
+#include <sstream>
+
+static std::string preprocess_shader(const char *path, std::vector<std::string>& visited_files);
+
+static void process_include(const std::string& line, const std::filesystem::path& parent_path, std::vector<std::string>& visited_files, std::stringstream& buffer) {
+    size_t start = line.find('"');
+    size_t end = line.rfind('"');
+    if (start != std::string::npos && end != std::string::npos && start != end) {
+        std::string include_path_str = line.substr(start + 1, end - start - 1);
+        std::filesystem::path include_path = parent_path / include_path_str;
+        if (validate_shader_path(include_path.string().c_str())) {
+            buffer << preprocess_shader(include_path.string().c_str(), visited_files);
+        } else {
+            // Error is logged within validate_shader_path
+        }
+    } else {
+        buffer << line << std::endl;
+    }
+}
+
+static std::string preprocess_shader(const char *path, std::vector<std::string>& visited_files)
+{
+    std::string canonical_path_str;
+    try {
+        canonical_path_str = std::filesystem::canonical(path).string();
+    } catch (const std::filesystem::filesystem_error&) {
+        plugin_error("Failed to get canonical path for: %s", path);
+        return "";
+    }
+
+    if (std::find(visited_files.begin(), visited_files.end(), canonical_path_str) != visited_files.end()) {
+        plugin_error("Circular include detected: %s", path);
+        return "";
+    }
+
+    visited_files.push_back(canonical_path_str);
+
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        plugin_error("Failed to open shader file: %s", path);
+        return "";
+    }
+
+    std::stringstream buffer;
+    std::string line;
+    std::filesystem::path parent_path = std::filesystem::path(path).parent_path();
+
+    while (std::getline(file, line)) {
+        if (line.find("#include") != std::string::npos && line.find("//") != 0) {
+            process_include(line, parent_path, visited_files, buffer);
+        } else {
+            buffer << line << std::endl;
+        }
+    }
+
+    return buffer.str();
 }
 
 static bool load_shader_from_file(filter_data *filter, const char *path)
 {
     if (!validate_shader_path(path)) {
-        plugin_error("Invalid shader path: %s", path);
         return false;
     }
+
+    std::vector<std::string> visited_files;
+    std::string processed_shader = preprocess_shader(path, visited_files);
+
+    if (processed_shader.empty()) {
+        return false;
+    }
+
 #ifndef TEST_HARNESS_BUILD
     graphics_context_guard guard;
 
     gs_effect_guard new_effect;
     char *error_string = nullptr;
-    new_effect.effect = gs_effect_create_from_file(path, &error_string);
+    new_effect.effect = gs_effect_create(processed_shader.c_str(), path, &error_string);
 
     if (filter->last_error_string) {
         bfree(filter->last_error_string);

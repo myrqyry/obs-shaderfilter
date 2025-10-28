@@ -20,6 +20,13 @@
 
 namespace audio_reactive {
 
+namespace audio_constants {
+    constexpr float SPECTROGRAM_NORMALIZATION_FACTOR = 100.0f;
+    constexpr float MAX_SPECTRUM_VALUE = 1.0f;
+    constexpr std::chrono::seconds CALLBACK_TIMEOUT{2};
+    constexpr float NORMALIZATION_EPSILON = 1e-6f;
+}
+
 struct audio_capture_data {
     size_t samples_per_frame;
     std::vector<float> hanning_window;
@@ -240,7 +247,7 @@ void update_settings(void *filter_data, obs_data_t *settings)
         auto wait_start = std::chrono::steady_clock::now();
         bool timed_out = false;
         while (old_capture->callback_active.load(std::memory_order_acquire)) {
-            if (std::chrono::steady_clock::now() - wait_start > std::chrono::seconds(2)) {
+            if (std::chrono::steady_clock::now() - wait_start > audio_constants::CALLBACK_TIMEOUT) {
                 blog(LOG_ERROR, "Audio callback cleanup timeout - potential memory leak");
                 timed_out = true;
                 break;
@@ -334,9 +341,9 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
         float max_value = *std::max_element(filter->smoothed_spectrum.begin(),
                                              filter->smoothed_spectrum.begin() + filter->spectrum_bands);
 
-        if (max_value > 1e-6f) {
+        if (max_value > audio_constants::NORMALIZATION_EPSILON) {
             for (int i = 0; i < filter->spectrum_bands; i++) {
-                filter->back_buffer[i] = fminf(filter->smoothed_spectrum[i] / max_value, 1.0f);
+                filter->back_buffer[i] = fminf(filter->smoothed_spectrum[i] / max_value, audio_constants::MAX_SPECTRUM_VALUE);
             }
         } else {
             // If max is zero, just clear the buffer to prevent stale data
@@ -370,7 +377,7 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
                 int spectrum_idx = y * (filter->HIGH_RES_SPECTRUM_SIZE / filter->SPECTROGRAM_HEIGHT);
                 float value = filter->high_res_spectrum[spectrum_idx];
                  // Normalize and clamp
-                value = fminf(value / 100.0f, 1.0f); // Ad-hoc normalization
+                value = fminf(value / audio_constants::SPECTROGRAM_NORMALIZATION_FACTOR, audio_constants::MAX_SPECTRUM_VALUE); // Ad-hoc normalization
                 filter->spectrogram_data[y * filter->SPECTROGRAM_WIDTH + write_pos] = value;
             }
             filter->spectrogram_write_pos = (write_pos + 1) % filter->SPECTROGRAM_WIDTH;

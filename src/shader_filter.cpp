@@ -10,6 +10,7 @@
 #include <obs/graphics/image-file.h>
 #include <obs/util/platform.h>
 #include <obs/util/dstr.h>
+#include "wrappers.hpp"
 
 namespace shader_filter {
 
@@ -153,20 +154,16 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
 #ifndef TEST_HARNESS_BUILD
     obs_enter_graphics();
 
-    if (filter->effect) {
-        gs_effect_destroy(filter->effect);
-        filter->effect = nullptr;
-    }
-
+    gs_effect_guard new_effect;
     char *error_string = nullptr;
-    filter->effect = gs_effect_create_from_file(path, &error_string);
+    new_effect.effect = gs_effect_create_from_file(path, &error_string);
 
     if (filter->last_error_string) {
         bfree(filter->last_error_string);
         filter->last_error_string = nullptr;
     }
 
-    if (!filter->effect) {
+    if (!new_effect.effect) {
         blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
         if (error_string) {
@@ -180,6 +177,12 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
     if (error_string) {
         bfree(error_string);
     }
+
+    if (filter->effect) {
+        gs_effect_destroy(filter->effect);
+    }
+    filter->effect = new_effect.release();
+
     obs_leave_graphics();
 #else
     // In test harness mode, we don't have a graphics context,

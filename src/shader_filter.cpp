@@ -165,7 +165,7 @@ static bool validate_shader_path(const char *path) {
 
     // Ensure the file has a valid shader extension
     std::string ext = canonical_path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return ::tolower(c); });
     return ext == ".effect" || ext == ".shader" || ext == ".hlsl";
 }
 

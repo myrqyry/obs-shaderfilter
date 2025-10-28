@@ -1,5 +1,7 @@
 #include "multi_input.hpp"
 #include "shader_filter_data.hpp"
+#include "logging.hpp"
+#include "wrappers.hpp"
 
 #include <obs/obs-module.h>
 #include <obs/obs-source.h>
@@ -141,7 +143,7 @@ static void render_source(
 
         texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
         if (!texrender) {
-            blog(LOG_ERROR, "[shader-filter-plus] Failed to create texrender %ux%u", width, height);
+            plugin_error("Failed to create texrender %ux%u", width, height);
             obs_source_release(source);
             return;
         }
@@ -212,7 +214,7 @@ void cleanup_textures(void *filter_data)
     shader_filter::filter_data *filter =
         static_cast<shader_filter::filter_data*>(filter_data);
 
-    obs_enter_graphics();
+    graphics_context_guard guard;
 
     if (filter->secondary_texrender) {
         gs_texrender_destroy(filter->secondary_texrender);
@@ -223,8 +225,6 @@ void cleanup_textures(void *filter_data)
         gs_texrender_destroy(filter->mask_texrender);
         filter->mask_texrender = nullptr;
     }
-
-    obs_leave_graphics();  // Critical: Always match enter with leave
 }
 
 } // namespace multi_input

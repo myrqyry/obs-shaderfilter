@@ -93,17 +93,12 @@ static void audio_capture_callback(void *param, obs_source_t *source,
         capture->windowed_buffer.resize(audio_data->frames);
     }
 
-    const float* input_samples = (const float*)audio_data->data[0];
-    const size_t num_frames = audio_data->frames;
-    const size_t window_size = capture->hanning_window.size();
-    const size_t common_size = std::min(num_frames, window_size);
-
-    for (size_t i = 0; i < common_size; ++i) {
-        capture->windowed_buffer[i] = input_samples[i] * capture->hanning_window[i];
-    }
-
-    if (num_frames > window_size) {
-        std::copy(input_samples + common_size, input_samples + num_frames, capture->windowed_buffer.data() + common_size);
+    for (size_t i = 0; i < audio_data->frames; ++i) {
+        if (i < capture->hanning_window.size()) {
+            capture->windowed_buffer[i] = ((float*)audio_data->data[0])[i] * capture->hanning_window[i];
+        } else {
+            capture->windowed_buffer[i] = ((float*)audio_data->data[0])[i];
+        }
     }
 
     circlebuf_push_back(&capture->audio_buffer,

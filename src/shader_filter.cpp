@@ -170,13 +170,14 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
         blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
         if (error_string) {
-            filter->last_error_string = error_string;
+            filter->last_error_string = bstrdup(error_string);
+            bfree(error_string);
         }
         obs_leave_graphics();
         return false;
     }
 
-    if (error_string) {  // Also add null check in success case
+    if (error_string) {
         bfree(error_string);
     }
     obs_leave_graphics();

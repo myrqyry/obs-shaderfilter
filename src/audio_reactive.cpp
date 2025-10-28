@@ -331,20 +331,16 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
         }
 
         // Normalize to [0.0, 1.0] range
-        float max_value = 0.0f;
-        for (int i = 0; i < filter->spectrum_bands; i++) {
-            if (filter->smoothed_spectrum[i] > max_value) {
-                max_value = filter->smoothed_spectrum[i];
-            }
-        }
+        float max_value = *std::max_element(filter->smoothed_spectrum.begin(),
+                                             filter->smoothed_spectrum.begin() + filter->spectrum_bands);
 
-        if (max_value > 0.0f) {
+        if (max_value > 1e-6f) {
             for (int i = 0; i < filter->spectrum_bands; i++) {
                 filter->back_buffer[i] = fminf(filter->smoothed_spectrum[i] / max_value, 1.0f);
             }
         } else {
             // If max is zero, just clear the buffer to prevent stale data
-            std::fill(filter->back_buffer.begin(), filter->back_buffer.end(), 0.0f);
+            std::fill_n(filter->back_buffer.begin(), filter->spectrum_bands, 0.0f);
         }
 
         // --- New Audio Texture Processing ---

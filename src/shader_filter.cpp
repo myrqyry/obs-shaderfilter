@@ -154,15 +154,40 @@ static void filter_destroy(void *data)
 static bool validate_shader_path(const char *path) {
     if (!path || !*path) return false;
 
-    // Resolve canonical path to prevent traversal
+    // Define allowed shader directories
+    static const std::vector<std::string> allowed_directories = {
+        "data/shaders/",
+        "data/examples/",
+        obs_get_module_data_path(obs_current_module(), "shaders/"),
+        obs_get_module_data_path(obs_current_module(), "examples/")
+    };
+
     std::filesystem::path canonical_path;
     try {
         canonical_path = std::filesystem::canonical(path);
     } catch (const std::filesystem::filesystem_error&) {
-        return false;  // Path doesn't exist or is invalid
+        return false;
     }
 
-    // Ensure the file has a valid shader extension
+    // Check if path is within allowed directories
+    bool in_allowed_dir = false;
+    for (const auto& allowed_dir : allowed_directories) {
+        std::filesystem::path allowed_canonical;
+        try {
+            allowed_canonical = std::filesystem::canonical(allowed_dir);
+            auto rel_path = std::filesystem::relative(canonical_path, allowed_canonical);
+            if (!rel_path.empty() && rel_path.string().substr(0, 2) != "..") {
+                in_allowed_dir = true;
+                break;
+            }
+        } catch (const std::filesystem::filesystem_error&) {
+            continue;
+        }
+    }
+
+    if (!in_allowed_dir) return false;
+
+    // Validate extension
     std::string ext = canonical_path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     return ext == ".effect" || ext == ".shader" || ext == ".hlsl";
@@ -256,28 +281,39 @@ static void filter_update(void *data, obs_data_t *settings)
 }
 
 static void ensure_render_targets(filter_data *filter, uint32_t width, uint32_t height) {
-    // Allow some tolerance for small size changes
-    constexpr uint32_t SIZE_TOLERANCE = 8;
+    // Larger tolerance to reduce recreation frequency
+    constexpr uint32_t SIZE_TOLERANCE = 64;
+    constexpr uint32_t PADDING_BLOCK = 128; // Larger blocks for fewer recreations
 
     bool needs_recreation = !filter->render_target_a ||
-        abs((int)filter->target_width - (int)width) > SIZE_TOLERANCE ||
-        abs((int)filter->target_height - (int)height) > SIZE_TOLERANCE;
+        width > filter->target_width || height > filter->target_height ||
+        (filter->target_width - width) > SIZE_TOLERANCE * 2 ||
+        (filter->target_height - height) > SIZE_TOLERANCE * 2;
 
     if (!needs_recreation) {
         return;
     }
 
-    // Use larger size to reduce future recreations
-    uint32_t padded_width = ((width + 31) / 32) * 32;   // Round up to 32
-    uint32_t padded_height = ((height + 31) / 32) * 32;
+    // More aggressive padding to prevent frequent recreations
+    uint32_t padded_width = ((width + PADDING_BLOCK - 1) / PADDING_BLOCK) * PADDING_BLOCK;
+    uint32_t padded_height = ((height + PADDING_BLOCK - 1) / PADDING_BLOCK) * PADDING_BLOCK;
 
-    if (filter->render_target_a) {
-        gs_texrender_destroy(filter->render_target_a);
-        gs_texrender_destroy(filter->render_target_b);
-    }
+    // Add 25% extra padding for growth
+    padded_width = static_cast<uint32_t>(padded_width * 1.25f);
+    padded_height = static_cast<uint32_t>(padded_height * 1.25f);
+
+    // Defer destruction until after creation to avoid GPU stalls
+    gs_texrender_t *old_target_a = filter->render_target_a;
+    gs_texrender_t *old_target_b = filter->render_target_b;
 
     filter->render_target_a = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
     filter->render_target_b = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+
+    if (old_target_a) {
+        gs_texrender_destroy(old_target_a);
+        gs_texrender_destroy(old_target_b);
+    }
+
     filter->target_width = padded_width;
     filter->target_height = padded_height;
 }
@@ -331,45 +367,57 @@ static void filter_render(void *data, gs_effect_t *effect)
                                       filter->render_target_b : filter->render_target_a;
 
     if (gs_texrender_begin(current_target, width, height)) {
-        gs_viewport_push();
-        gs_projection_push();
+        bool viewport_pushed = false;
+        bool projection_pushed = false;
 
-        if (filter->override_entire_effect) {
-            gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
-            gs_set_viewport(0, 0, width, height);
-        } else {
-            gs_ortho(0.0f, (float)base_width, 0.0f, (float)base_height, -100.0f, 100.0f);
-            gs_set_viewport(0, 0, base_width, base_height);
+        try {
+            gs_viewport_push();
+            viewport_pushed = true;
+
+            gs_projection_push();
+            projection_pushed = true;
+
+            if (filter->override_entire_effect) {
+                gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+                gs_set_viewport(0, 0, width, height);
+            } else {
+                gs_ortho(0.0f, (float)base_width, 0.0f, (float)base_height, -100.0f, 100.0f);
+                gs_set_viewport(0, 0, base_width, base_height);
+            }
+
+            struct vec2 uv_size = {(float)width, (float)height};
+            if (param_uv_size) {
+                gs_effect_set_vec2(param_uv_size, &uv_size);
+            }
+
+            if (param_elapsed) {
+                float time = (float)obs_get_video_frame_time() / 1000000000.0f;
+                gs_effect_set_float(param_elapsed, time);
+            }
+
+            gs_eparam_t *param_previous = gs_effect_get_param_by_name(filter->effect, "previous_frame");
+            if (param_previous) {
+                gs_texture_t *prev_tex = gs_texrender_get_texture(previous_target);
+                gs_effect_set_texture(param_previous, prev_tex);
+            }
+
+            multi_input::bind_textures(filter, filter->effect);
+            audio_reactive::bind_audio_data(filter, filter->effect);
+            global_uniforms::bind_to_effect(filter->effect);
+
+            if (!filter->override_entire_effect) {
+                 obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING);
+            }
+
+            obs_source_process_filter_end(filter->context, filter->effect, width, height);
+
+        } catch (...) {
+            plugin_error("Graphics operation failed during shader render");
         }
 
-        struct vec2 uv_size = {(float)width, (float)height};
-        if (param_uv_size) {
-            gs_effect_set_vec2(param_uv_size, &uv_size);
-        }
-
-        if (param_elapsed) {
-            float time = (float)obs_get_video_frame_time() / 1000000000.0f;
-            gs_effect_set_float(param_elapsed, time);
-        }
-
-        gs_eparam_t *param_previous = gs_effect_get_param_by_name(filter->effect, "previous_frame");
-        if (param_previous) {
-            gs_texture_t *prev_tex = gs_texrender_get_texture(previous_target);
-            gs_effect_set_texture(param_previous, prev_tex);
-        }
-
-        multi_input::bind_textures(filter, filter->effect);
-        audio_reactive::bind_audio_data(filter, filter->effect);
-        global_uniforms::bind_to_effect(filter->effect);
-
-        if (!filter->override_entire_effect) {
-             obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING);
-        }
-
-        obs_source_process_filter_end(filter->context, filter->effect, width, height);
-
-        gs_projection_pop();
-        gs_viewport_pop();
+        // Ensure proper cleanup regardless of success/failure
+        if (projection_pushed) gs_projection_pop();
+        if (viewport_pushed) gs_viewport_pop();
         gs_texrender_end(current_target);
     }
 

@@ -80,18 +80,30 @@ static void audio_capture_callback(void *param, obs_source_t *source,
                                    const struct audio_data *audio_data,
                                    bool muted)
 {
+    // Use atomic shared_ptr or reference counting here
     auto *capture = static_cast<audio_capture_data*>(param);
+
+    // Critical: Check shutdown first, then set active atomically
     if (!capture || capture->shutdown_requested.load(std::memory_order_acquire)) {
-        if(capture) capture->callback_active = false;
         return;
     }
 
-    capture->callback_active = true;
+    // Use compare-exchange to safely set active status
+    bool expected = false;
+    if (!capture->callback_active.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        return; // Another callback is already active
+    }
+
+    // Ensure we clear active status on exit
+    struct active_guard {
+        std::atomic<bool>& active_flag;
+        active_guard(std::atomic<bool>& flag) : active_flag(flag) {}
+        ~active_guard() { active_flag.store(false, std::memory_order_release); }
+    } guard(capture->callback_active);
 
     UNUSED_PARAMETER(source);
 
     if (muted || !audio_data || audio_data->frames == 0) {
-        capture->callback_active = false;
         return;
     }
 
@@ -112,7 +124,6 @@ static void audio_capture_callback(void *param, obs_source_t *source,
                       capture->windowed_buffer.data(),
                       audio_data->frames * sizeof(float));
     capture->data_ready = true;
-    capture->callback_active = false;
 }
 
 void add_properties(obs_properties_t *props, void *data)
@@ -244,20 +255,30 @@ void update_settings(void *filter_data, obs_data_t *settings)
     if (old_capture) {
         old_capture->shutdown_requested.store(true, std::memory_order_release);
 
-        auto wait_start = std::chrono::steady_clock::now();
-        bool timed_out = false;
-        while (old_capture->callback_active.load(std::memory_order_acquire)) {
-            if (std::chrono::steady_clock::now() - wait_start > audio_constants::CALLBACK_TIMEOUT) {
-                blog(LOG_ERROR, "Audio callback cleanup timeout - potential memory leak");
-                timed_out = true;
-                break;
+        // Force callback completion by removing from OBS first
+        if (filter->audio_source) {
+            obs_source_t *source = obs_weak_source_get_source(filter->audio_source);
+            if (source) {
+                obs_source_remove_audio_capture_callback(source, audio_capture_callback, old_capture);
+                obs_source_release(source);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        if (!timed_out) {
-            delete old_capture;
+        // Use a more robust cleanup approach
+        auto wait_start = std::chrono::steady_clock::now();
+        constexpr auto MAX_WAIT = std::chrono::milliseconds(100);
+
+        while (old_capture->callback_active.load(std::memory_order_acquire)) {
+            if (std::chrono::steady_clock::now() - wait_start > MAX_WAIT) {
+                // Log detailed information for debugging
+                blog(LOG_WARNING, "Audio callback taking longer than expected to complete");
+                break;
+            }
+            std::this_thread::yield(); // More efficient than sleep
         }
+
+        // Always clean up - the callback removal above should have ensured safety
+        delete old_capture;
     }
 
     // --- Setup ---
@@ -300,25 +321,47 @@ void bind_audio_data(void *filter_data, gs_effect_t *effect)
 
         std::fill(filter->back_buffer.begin(), filter->back_buffer.end(), 0.0f);
 
-        // Logarithmic scaling for frequency bands
-        float min_freq = 1.0f;
-        float max_freq = (float)(buffer_size / 2);
-        float log_min = log10f(min_freq);
-        float log_max = log10f(max_freq);
-        float log_range = log_max - log_min;
+        // Pre-compute logarithmic mapping table
+        static thread_local std::vector<int> freq_to_band_map;
+        static thread_local size_t last_buffer_size = 0;
+        static thread_local int last_spectrum_bands = 0;
 
-        // Use back_buffer as a temporary store for the raw spectrum
-        for (int i = 0; i < (buffer_size / 2); ++i) {
-            float real = capture->output_buffer[i][0];
-            float imag = capture->output_buffer[i][1];
-            float magnitude = sqrtf(real * real + imag * imag);
+        if (buffer_size != last_buffer_size || filter->spectrum_bands != last_spectrum_bands) {
+            freq_to_band_map.resize(buffer_size / 2);
 
-            float freq = (float)i;
-            if (freq < min_freq) continue;
+            float min_freq = 1.0f;
+            float max_freq = (float)(buffer_size / 2);
+            float log_min = log10f(min_freq);
+            float log_max = log10f(max_freq);
+            float log_range = log_max - log_min;
 
-            int band = (int)((log10f(freq) - log_min) / log_range * (filter->spectrum_bands - 1));
-            band = std::max(0, std::min(band, std::min(filter->spectrum_bands - 1, (int)filter->back_buffer.size() - 1)));
-            filter->back_buffer[band] += magnitude;
+            for (size_t i = 0; i < buffer_size / 2; ++i) {
+                float freq = (float)i;
+                if (freq < min_freq) {
+                    freq_to_band_map[i] = -1; // Skip this bin
+                } else {
+                    int band = (int)((log10f(freq) - log_min) / log_range * (filter->spectrum_bands - 1));
+                    freq_to_band_map[i] = std::max(0, std::min(band, filter->spectrum_bands - 1));
+                }
+            }
+
+            last_buffer_size = buffer_size;
+            last_spectrum_bands = filter->spectrum_bands;
+        }
+
+        // Fast processing using pre-computed mapping
+        const int max_band = std::min(filter->spectrum_bands - 1, (int)filter->back_buffer.size() - 1);
+        if (max_band < 0) return; // Early exit if invalid state
+
+        for (size_t i = 0; i < buffer_size / 2; ++i) {
+            int computed_band = freq_to_band_map[i];
+            if (computed_band >= 0) {
+                float real = capture->output_buffer[i][0];
+                float imag = capture->output_buffer[i][1];
+                float magnitude = sqrtf(real * real + imag * imag);
+                int band = computed_band;
+                filter->back_buffer[band] += magnitude;
+            }
         }
 
         // Apply gain to raw FFT magnitudes

@@ -59,7 +59,9 @@ static void watcher_loop()
                     auto *filter = static_cast<
                         shader_filter::filter_data *>(
                         filter_ptr);
-                    filter->needs_reload = true;
+                    if (filter && filter->context) {  // Validate filter is still alive
+                        filter->needs_reload.store(true, std::memory_order_release);
+                    }
                 }
             }
         }

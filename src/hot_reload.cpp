@@ -1,6 +1,7 @@
 #include "hot_reload.hpp"
 #include "shader_filter.hpp"
 #include "shader_filter_data.hpp"
+#include "logging.hpp"
 
 #include <obs/obs-module.h>
 #include <filesystem>
@@ -17,6 +18,12 @@ namespace fs = std::filesystem;
 
 namespace hot_reload {
 
+namespace hot_reload_config {
+    constexpr std::chrono::milliseconds POLLING_INTERVAL{500};
+    constexpr std::chrono::seconds CALLBACK_TIMEOUT{2};
+    constexpr size_t MAX_WATCHED_FILES = 100;
+}
+
 struct watch_entry {
     std::string path;
     fs::file_time_type last_write_time;
@@ -31,8 +38,7 @@ static std::atomic<bool> running = false;
 static void watcher_loop()
 {
     while (running) {
-        constexpr int POLLING_INTERVAL_MS = 500;
-        std::this_thread::sleep_for(std::chrono::milliseconds(POLLING_INTERVAL_MS));
+        std::this_thread::sleep_for(hot_reload_config::POLLING_INTERVAL);
 
         std::lock_guard<std::mutex> lock(watch_mutex);
         for (auto &entry : watched_files) {
@@ -47,9 +53,7 @@ static void watcher_loop()
             }
 
             if (current_time > entry.second.last_write_time) {
-                blog(LOG_INFO,
-                     "[ShaderFilter Plus Next] File changed: %s",
-                     entry.first.c_str());
+                plugin_info("File changed: %s", entry.first.c_str());
                 entry.second.last_write_time = current_time;
 
                 // Instead of calling reload directly, just set a flag.
@@ -70,14 +74,14 @@ static void watcher_loop()
 
 void initialize()
 {
-    blog(LOG_INFO, "[ShaderFilter Plus Next] Initializing hot reload system");
+    plugin_info("Initializing hot reload system");
     running = true;
     watcher_thread = std::thread(watcher_loop);
 }
 
 void shutdown()
 {
-    blog(LOG_INFO, "[ShaderFilter Plus Next] Shutting down hot reload system");
+    plugin_info("Shutting down hot reload system");
     running = false;
     if (watcher_thread.joinable()) {
         watcher_thread.join();
@@ -90,13 +94,13 @@ void shutdown()
 void watch_file(const char *path, void *filter_instance)
 {
     if (!path || !*path) {
-        blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot watch empty file path");
+        plugin_warn("Cannot watch empty file path");
         return;
     }
 
     // Check if file exists before trying to watch it
     if (!std::filesystem::exists(path)) {
-        blog(LOG_WARNING, "[ShaderFilter Plus Next] File does not exist: %s", path);
+        plugin_warn("File does not exist: %s", path);
         return;
     }
 
@@ -110,11 +114,11 @@ void watch_file(const char *path, void *filter_instance)
         try {
             entry.last_write_time = fs::last_write_time(path_str);
         } catch (const fs::filesystem_error& e) {
-            blog(LOG_WARNING, "[ShaderFilter Plus Next] Cannot get last write time for %s: %s", path, e.what());
+            plugin_warn("Cannot get last write time for %s: %s", path, e.what());
             // Set to a known time to avoid constant reload attempts on error
             entry.last_write_time = fs::file_time_type::min();
         }
-        blog(LOG_INFO, "[ShaderFilter Plus Next] Now watching: %s", path);
+        plugin_info("Now watching: %s", path);
     }
 
     auto &instances = entry.filter_instances;
@@ -139,7 +143,7 @@ void unwatch_file(const char *path, void *filter_instance)
 
         if (instances.empty()) {
             watched_files.erase(it);
-            blog(LOG_INFO, "[ShaderFilter Plus Next] Stopped watching: %s", path);
+            plugin_info("Stopped watching: %s", path);
         }
     }
 }

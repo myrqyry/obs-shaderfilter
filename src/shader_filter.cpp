@@ -4,6 +4,7 @@
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
 #include "global_uniforms.hpp"
+#include "logging.hpp"
 
 #include <obs/obs-module.h>
 #include <obs/graphics/graphics.h>
@@ -104,7 +105,7 @@ static void filter_destroy(void *data)
         hot_reload::unwatch_file(filter->shader_path, filter);
     }
 
-    obs_enter_graphics();
+    graphics_context_guard guard;
 
     if (filter->effect) {
         gs_effect_destroy(filter->effect);
@@ -128,8 +129,6 @@ static void filter_destroy(void *data)
     if (filter->audio_waveform_tex) {
         gs_texture_destroy(filter->audio_waveform_tex);
     }
-
-    obs_leave_graphics();
 
     multi_input::cleanup_textures(filter);
 
@@ -172,11 +171,11 @@ static bool validate_shader_path(const char *path) {
 static bool load_shader_from_file(filter_data *filter, const char *path)
 {
     if (!validate_shader_path(path)) {
-        blog(LOG_ERROR, "[ShaderFilter Plus Next] Invalid shader path: %s", path);
+        plugin_error("Invalid shader path: %s", path);
         return false;
     }
 #ifndef TEST_HARNESS_BUILD
-    obs_enter_graphics();
+    graphics_context_guard guard;
 
     gs_effect_guard new_effect;
     char *error_string = nullptr;
@@ -188,13 +187,12 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
     }
 
     if (!new_effect.effect) {
-        blog(LOG_ERROR, "[ShaderFilter Plus Next] Failed to load shader '%s': %s",
+        plugin_error("Failed to load shader '%s': %s",
              path, error_string ? error_string : "unknown error");
         if (error_string) {
             filter->last_error_string = bstrdup(error_string);
             bfree(error_string);
         }
-        obs_leave_graphics();
         return false;
     }
 
@@ -207,13 +205,12 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
     }
     filter->effect = new_effect.release();
 
-    obs_leave_graphics();
 #else
     // In test harness mode, we don't have a graphics context,
     // so we just log and pretend the shader loaded.
     blog(LOG_INFO, "[Test Harness] Pretending to load shader: %s", path);
 #endif
-    blog(LOG_INFO, "[ShaderFilter Plus Next] Loaded shader: %s", path);
+    plugin_info("Loaded shader: %s", path);
     return true;
 }
 
@@ -414,7 +411,7 @@ void reload_shader(void *data)
 {
     filter_data *filter = static_cast<filter_data*>(data);
     if (filter->shader_path) {
-        blog(LOG_INFO, "[ShaderFilter Plus Next] Hot-reloading shader: %s",
+        plugin_info("Hot-reloading shader: %s",
              filter->shader_path);
         load_shader_from_file(filter, filter->shader_path);
     }

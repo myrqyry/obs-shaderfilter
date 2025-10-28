@@ -6,22 +6,39 @@
 #include <obs/graphics/graphics.h>
 #include <obs/obs-enum-sources.h>
 
+#include <vector>
+#include <string>
+#include <chrono>
+
 namespace multi_input {
 
-static void populate_source_list(obs_property_t *list)
-{
-	obs_property_list_add_string(list, obs_module_text("None"), "");
-	obs_enum_sources(
-		[](void *param, obs_source_t *source) {
-			obs_property_t *list = (obs_property_t *)param;
-			uint32_t caps = obs_source_get_output_flags(source);
-			if ((caps & OBS_SOURCE_VIDEO) != 0) {
-				const char *name = obs_source_get_name(source);
-				obs_property_list_add_string(list, name, name);
-			}
-			return true;
-		},
-		list);
+static void populate_source_list(obs_property_t *list) {
+    obs_property_list_add_string(list, obs_module_text("None"), "");
+
+    // Cache source list with periodic refresh
+    static std::vector<std::string> cached_sources;
+    static std::chrono::steady_clock::time_point last_refresh;
+    auto now = std::chrono::steady_clock::now();
+
+    if (cached_sources.empty() ||
+         now - last_refresh > std::chrono::seconds(2)) {
+
+        cached_sources.clear();
+        obs_enum_sources([](void *param, obs_source_t *source) {
+            auto *sources = static_cast<std::vector<std::string>*>(param);
+            uint32_t caps = obs_source_get_output_flags(source);
+            if ((caps & OBS_SOURCE_VIDEO) != 0) {
+                sources->emplace_back(obs_source_get_name(source));
+            }
+            return true;
+        }, &cached_sources);
+
+        last_refresh = now;
+    }
+
+    for (const auto& name : cached_sources) {
+        obs_property_list_add_string(list, name.c_str(), name.c_str());
+    }
 }
 
 void add_properties(obs_properties_t *props, void *data)

@@ -6,17 +6,17 @@
 namespace shader_filter {
 
 struct shader_state {
-    gs_effect_t *effect;
-    gs_texrender_t *render_target_a;
-    gs_texrender_t *render_target_b;
-    bool use_buffer_a;
-    uint32_t target_width;
-    uint32_t target_height;
-    int expand_left;
-    int expand_right;
-    int expand_top;
-    int expand_bottom;
-    bool override_entire_effect;
+    gs_effect_t *effect = nullptr;
+    gs_texrender_t *render_target_a = nullptr;
+    gs_texrender_t *render_target_b = nullptr;
+    bool use_buffer_a = true;
+    uint32_t target_width = 0;
+    uint32_t target_height = 0;
+    int expand_left = 0;
+    int expand_right = 0;
+    int expand_top = 0;
+    int expand_bottom = 0;
+    bool override_entire_effect = false;
 };
 
 } // namespace shader_filter

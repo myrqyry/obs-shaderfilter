@@ -7,11 +7,11 @@ namespace shader_filter { struct filter_data; }
 namespace hot_reload {
 
 struct hot_reload_data {
-    char *shader_path;
-    bool use_effect_file;
-    bool hot_reload_enabled;
-    char *last_error_string;
-    std::atomic<bool> needs_reload;
+    char *shader_path = nullptr;
+    bool use_effect_file = false;
+    bool hot_reload_enabled = false;
+    char *last_error_string = nullptr;
+    std::atomic<bool> needs_reload{false};
 };
 
 void initialize();

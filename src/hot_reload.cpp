@@ -27,7 +27,7 @@ namespace hot_reload_config {
 struct watch_entry {
     std::string path;
     fs::file_time_type last_write_time;
-    std::vector<void*> filter_instances;
+    std::vector<shader_filter::filter_data*> filter_instances;
 };
 
 static std::thread watcher_thread;
@@ -58,13 +58,9 @@ static void watcher_loop()
 
                 // Instead of calling reload directly, just set a flag.
                 // The render thread will pick this up safely.
-                for (void *filter_ptr :
-                     entry.second.filter_instances) {
-                    auto *filter = static_cast<
-                        shader_filter::filter_data *>(
-                        filter_ptr);
+                for (auto *filter : entry.second.filter_instances) {
                     if (filter && filter->context) {  // Validate filter is still alive
-                        filter->needs_reload.store(true, std::memory_order_release);
+                        filter->hot_reload.needs_reload.store(true, std::memory_order_release);
                     }
                 }
             }
@@ -91,8 +87,9 @@ void shutdown()
     watched_files.clear();
 }
 
-void watch_file(const char *path, void *filter_instance)
+void watch_file(shader_filter::filter_data *filter)
 {
+    const char *path = filter->hot_reload.shader_path;
     if (!path || !*path) {
         plugin_warn("Cannot watch empty file path");
         return;
@@ -122,13 +119,16 @@ void watch_file(const char *path, void *filter_instance)
     }
 
     auto &instances = entry.filter_instances;
-    if (std::find(instances.begin(), instances.end(), filter_instance) == instances.end()) {
-        instances.push_back(filter_instance);
+    if (std::find(instances.begin(), instances.end(), filter) == instances.end()) {
+        instances.push_back(filter);
     }
 }
 
-void unwatch_file(const char *path, void *filter_instance)
+void unwatch_file(shader_filter::filter_data *filter)
 {
+    const char *path = filter->hot_reload.shader_path;
+    if (!path || !*path) return;
+
     std::lock_guard<std::mutex> lock(watch_mutex);
 
     std::string path_str(path);
@@ -137,7 +137,7 @@ void unwatch_file(const char *path, void *filter_instance)
     if (it != watched_files.end()) {
         auto &instances = it->second.filter_instances;
         instances.erase(
-            std::remove(instances.begin(), instances.end(), filter_instance),
+            std::remove(instances.begin(), instances.end(), filter),
             instances.end()
         );
 
@@ -148,10 +148,8 @@ void unwatch_file(const char *path, void *filter_instance)
     }
 }
 
-void add_properties(obs_properties_t *props, void *data)
+void add_properties(obs_properties_t *props)
 {
-    UNUSED_PARAMETER(data);
-
     obs_properties_t *hot_reload_group = obs_properties_create();
     obs_properties_add_group(props,
         "hot_reload",

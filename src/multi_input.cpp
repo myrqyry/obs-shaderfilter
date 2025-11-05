@@ -43,10 +43,8 @@ static void populate_source_list(obs_property_t *list) {
     }
 }
 
-void add_properties(obs_properties_t *props, void *data)
+void add_properties(obs_properties_t *props)
 {
-    UNUSED_PARAMETER(data);
-
     obs_properties_t *multi_input_group = obs_properties_create();
     obs_properties_add_group(props,
         "multi_input",
@@ -75,25 +73,23 @@ void set_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "mask_source", "");
 }
 
-void update_sources(void *filter_data, obs_data_t *settings)
+void update_sources(shader_filter::filter_data *filter, obs_data_t *settings)
 {
-    shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
-
     const char *secondary_name = obs_data_get_string(settings, "secondary_source");
     if (secondary_name && *secondary_name) {
         obs_source_t *source = obs_get_source_by_name(secondary_name);
         if (source) {
             obs_weak_source_t *weak = obs_source_get_weak_source(source);
-            if (filter->secondary_source) {
-                obs_weak_source_release(filter->secondary_source);
+            if (filter->multi_input.secondary_source) {
+                obs_weak_source_release(filter->multi_input.secondary_source);
             }
-            filter->secondary_source = weak;
+            filter->multi_input.secondary_source = weak;
             obs_source_release(source);
         }
     } else {
-        if (filter->secondary_source) {
-            obs_weak_source_release(filter->secondary_source);
-            filter->secondary_source = nullptr;
+        if (filter->multi_input.secondary_source) {
+            obs_weak_source_release(filter->multi_input.secondary_source);
+            filter->multi_input.secondary_source = nullptr;
         }
     }
 
@@ -102,16 +98,16 @@ void update_sources(void *filter_data, obs_data_t *settings)
         obs_source_t *source = obs_get_source_by_name(mask_name);
         if (source) {
             obs_weak_source_t *weak = obs_source_get_weak_source(source);
-            if (filter->mask_source) {
-                obs_weak_source_release(filter->mask_source);
+            if (filter->multi_input.mask_source) {
+                obs_weak_source_release(filter->multi_input.mask_source);
             }
-            filter->mask_source = weak;
+            filter->multi_input.mask_source = weak;
             obs_source_release(source);
         }
     } else {
-        if (filter->mask_source) {
-            obs_weak_source_release(filter->mask_source);
-            filter->mask_source = nullptr;
+        if (filter->multi_input.mask_source) {
+            obs_weak_source_release(filter->multi_input.mask_source);
+            filter->multi_input.mask_source = nullptr;
         }
     }
 }
@@ -161,47 +157,43 @@ static void render_source(
     obs_source_release(source);
 }
 
-void render_sources(void *filter_data)
+void render_sources(shader_filter::filter_data *filter)
 {
-    shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
-
-    if (filter->secondary_source) {
+    if (filter->multi_input.secondary_source) {
         render_source(
-            filter->secondary_source,
-            filter->secondary_texrender,
-            filter->secondary_texrender_width,
-            filter->secondary_texrender_height);
+            filter->multi_input.secondary_source,
+            filter->multi_input.secondary_texrender,
+            filter->multi_input.secondary_texrender_width,
+            filter->multi_input.secondary_texrender_height);
     }
 
-    if (filter->mask_source) {
+    if (filter->multi_input.mask_source) {
         render_source(
-            filter->mask_source,
-            filter->mask_texrender,
-            filter->mask_texrender_width,
-            filter->mask_texrender_height);
+            filter->multi_input.mask_source,
+            filter->multi_input.mask_texrender,
+            filter->multi_input.mask_texrender_width,
+            filter->multi_input.mask_texrender_height);
     }
 }
 
-void bind_textures(void *filter_data, gs_effect_t *effect)
+void bind_textures(shader_filter::filter_data *filter, gs_effect_t *effect)
 {
     if (!effect) return; // Add null check for effect
 
-    shader_filter::filter_data *filter = static_cast<shader_filter::filter_data*>(filter_data);
-
-    if (filter->secondary_texrender) {
+    if (filter->multi_input.secondary_texrender) {
         gs_eparam_t *param = gs_effect_get_param_by_name(effect, "secondary_image");
         if (param) {
-            gs_texture_t *tex = gs_texrender_get_texture(filter->secondary_texrender);
+            gs_texture_t *tex = gs_texrender_get_texture(filter->multi_input.secondary_texrender);
             if (tex) {
                 gs_effect_set_texture(param, tex);
             }
         }
     }
 
-    if (filter->mask_texrender) {
+    if (filter->multi_input.mask_texrender) {
         gs_eparam_t *param = gs_effect_get_param_by_name(effect, "mask_image");
         if (param) {
-            gs_texture_t *tex = gs_texrender_get_texture(filter->mask_texrender);
+            gs_texture_t *tex = gs_texrender_get_texture(filter->multi_input.mask_texrender);
             if (tex) {
                 gs_effect_set_texture(param, tex);
             }
@@ -209,21 +201,18 @@ void bind_textures(void *filter_data, gs_effect_t *effect)
     }
 }
 
-void cleanup_textures(void *filter_data)
+void cleanup_textures(shader_filter::filter_data *filter)
 {
-    shader_filter::filter_data *filter =
-        static_cast<shader_filter::filter_data*>(filter_data);
-
     graphics_context_guard guard;
 
-    if (filter->secondary_texrender) {
-        gs_texrender_destroy(filter->secondary_texrender);
-        filter->secondary_texrender = nullptr;
+    if (filter->multi_input.secondary_texrender) {
+        gs_texrender_destroy(filter->multi_input.secondary_texrender);
+        filter->multi_input.secondary_texrender = nullptr;
     }
 
-    if (filter->mask_texrender) {
-        gs_texrender_destroy(filter->mask_texrender);
-        filter->mask_texrender = nullptr;
+    if (filter->multi_input.mask_texrender) {
+        gs_texrender_destroy(filter->multi_input.mask_texrender);
+        filter->multi_input.mask_texrender = nullptr;
     }
 }
 

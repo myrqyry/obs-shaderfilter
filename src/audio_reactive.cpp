@@ -197,63 +197,63 @@ void set_defaults(obs_data_t *settings)
 
 void update_settings(shader_filter::filter_data *filter, obs_data_t *settings)
 {
-    filter->audio.spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
-    filter->audio.audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
-    filter->audio.audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
+    filter->spectrum_bands = (int)obs_data_get_int(settings, "spectrum_bands");
+    filter->audio_reactivity_strength = (float)obs_data_get_double(settings, "audio_reactivity");
+    filter->audio_reactive_enabled = obs_data_get_bool(settings, "audio_reactive");
 
     bool audio_textures_enabled = obs_data_get_bool(settings, "audio_textures_enabled");
-    if (audio_textures_enabled != filter->audio.audio_textures_enabled) {
+    if (audio_textures_enabled != filter->audio_textures_enabled) {
         obs_enter_graphics();
         if (audio_textures_enabled) {
-            if (!filter->audio.audio_spectrum_tex) {
-                filter->audio.audio_spectrum_tex = gs_texture_create(filter->audio.HIGH_RES_SPECTRUM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
-                filter->audio.audio_spectrogram_tex = gs_texture_create(filter->audio.SPECTROGRAM_WIDTH, filter->audio.SPECTROGRAM_HEIGHT, GS_R32F, 1, nullptr, GS_DYNAMIC);
-                filter->audio.audio_waveform_tex = gs_texture_create(filter->audio.WAVEFORM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+            if (!filter->audio_spectrum_tex) {
+                filter->audio_spectrum_tex = gs_texture_create(filter->HIGH_RES_SPECTRUM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
+                filter->audio_spectrogram_tex = gs_texture_create(filter->SPECTROGRAM_WIDTH, filter->SPECTROGRAM_HEIGHT, GS_R32F, 1, nullptr, GS_DYNAMIC);
+                filter->audio_waveform_tex = gs_texture_create(filter->WAVEFORM_SIZE, 1, GS_R32F, 1, nullptr, GS_DYNAMIC);
             }
         } else {
-            if (filter->audio.audio_spectrum_tex) {
-                gs_texture_destroy(filter->audio.audio_spectrum_tex);
-                filter->audio.audio_spectrum_tex = nullptr;
+            if (filter->audio_spectrum_tex) {
+                gs_texture_destroy(filter->audio_spectrum_tex);
+                filter->audio_spectrum_tex = nullptr;
             }
-            if (filter->audio.audio_spectrogram_tex) {
-                gs_texture_destroy(filter->audio.audio_spectrogram_tex);
-                filter->audio.audio_spectrogram_tex = nullptr;
+            if (filter->audio_spectrogram_tex) {
+                gs_texture_destroy(filter->audio_spectrogram_tex);
+                filter->audio_spectrogram_tex = nullptr;
             }
-            if (filter->audio.audio_waveform_tex) {
-                gs_texture_destroy(filter->audio.audio_waveform_tex);
-                filter->audio.audio_waveform_tex = nullptr;
+            if (filter->audio_waveform_tex) {
+                gs_texture_destroy(filter->audio_waveform_tex);
+                filter->audio_waveform_tex = nullptr;
             }
         }
         obs_leave_graphics();
     }
-    filter->audio.audio_textures_enabled = audio_textures_enabled;
+    filter->audio_textures_enabled = audio_textures_enabled;
 
-    filter->audio.audio_gain = (float)obs_data_get_double(settings, "audio_gain");
-    filter->audio.audio_attack = (float)obs_data_get_double(settings, "audio_attack");
-    filter->audio.audio_release = (float)obs_data_get_double(settings, "audio_release");
+    filter->audio_gain = (float)obs_data_get_double(settings, "audio_gain");
+    filter->audio_attack = (float)obs_data_get_double(settings, "audio_attack");
+    filter->audio_release = (float)obs_data_get_double(settings, "audio_release");
 
     const char* audio_source_name = obs_data_get_string(settings, "audio_source");
 
     // --- Teardown ---
-    auto* old_capture = filter->audio.audio_capture;
-    filter->audio.audio_capture = nullptr; // Clear pointer first
+    auto* old_capture = filter->audio_capture;
+    filter->audio_capture = nullptr; // Clear pointer first
 
-    if (filter->audio.audio_source) {
-        obs_source_t *source = obs_weak_source_get_source(filter->audio.audio_source);
+    if (filter->audio_source) {
+        obs_source_t *source = obs_weak_source_get_source(filter->audio_source);
         if (source) {
             obs_source_remove_audio_capture_callback(source, audio_capture_callback, old_capture);
             obs_source_release(source);
         }
-        obs_weak_source_release(filter->audio.audio_source);
-        filter->audio.audio_source = nullptr;
+        obs_weak_source_release(filter->audio_source);
+        filter->audio_source = nullptr;
     }
 
     if (old_capture) {
         old_capture->shutdown_requested.store(true, std::memory_order_release);
 
         // Force callback completion by removing from OBS first
-        if (filter->audio.audio_source) {
-            obs_source_t *source = obs_weak_source_get_source(filter->audio.audio_source);
+        if (filter->audio_source) {
+            obs_source_t *source = obs_weak_source_get_source(filter->audio_source);
             if (source) {
                 obs_source_remove_audio_capture_callback(source, audio_capture_callback, old_capture);
                 obs_source_release(source);
@@ -278,18 +278,18 @@ void update_settings(shader_filter::filter_data *filter, obs_data_t *settings)
     }
 
     // --- Setup ---
-    if (audio_source_name && *audio_source_name && filter->audio.audio_reactive_enabled) {
+    if (audio_source_name && *audio_source_name && filter->audio_reactive_enabled) {
         obs_source_t* source = obs_get_source_by_name(audio_source_name);
         if (source) {
-            filter->audio.audio_source = obs_source_get_weak_source(source);
+            filter->audio_source = obs_source_get_weak_source(source);
 
             // Older/newer OBS APIs expose audio capture via callbacks; instead of
             // depending on a specific audio_io_t API we fall back to the
             // configured audio output block size constant.
             // AUDIO_OUTPUT_FRAMES is defined in audio-io.h and is a safe default.
             size_t mix_buffer_size = AUDIO_OUTPUT_FRAMES;
-            filter->audio.audio_capture = new audio_capture_data(mix_buffer_size);
-            obs_source_add_audio_capture_callback(source, audio_capture_callback, filter->audio.audio_capture);
+            filter->audio_capture = new audio_capture_data(mix_buffer_size);
+            obs_source_add_audio_capture_callback(source, audio_capture_callback, filter->audio_capture);
             obs_source_release(source);
         }
     }
@@ -297,11 +297,11 @@ void update_settings(shader_filter::filter_data *filter, obs_data_t *settings)
 
 void bind_audio_data(shader_filter::filter_data *filter, gs_effect_t *effect)
 {
-    if (!filter->audio.audio_reactive_enabled || !filter->audio.audio_capture || !filter->audio.audio_capture->data_ready) {
+    if (!filter->audio_reactive_enabled || !filter->audio_capture || !filter->audio_capture->data_ready) {
         return;
     }
 
-    auto *capture = filter->audio.audio_capture;
+    auto *capture = filter->audio_capture;
     size_t buffer_size = capture->samples_per_frame;
 
     if (capture->audio_buffer.size >= buffer_size * sizeof(float)) {
@@ -313,14 +313,14 @@ void bind_audio_data(shader_filter::filter_data *filter, gs_effect_t *effect)
         }
 #endif
 
-        std::fill(filter->audio.back_buffer.begin(), filter->audio.back_buffer.end(), 0.0f);
+        std::fill(filter->back_buffer.begin(), filter->back_buffer.end(), 0.0f);
 
         // Pre-compute logarithmic mapping table
         static thread_local std::vector<int> freq_to_band_map;
         static thread_local size_t last_buffer_size = 0;
         static thread_local int last_spectrum_bands = 0;
 
-        if (buffer_size != last_buffer_size || filter->audio.spectrum_bands != last_spectrum_bands) {
+        if (buffer_size != last_buffer_size || filter->spectrum_bands != last_spectrum_bands) {
             freq_to_band_map.resize(buffer_size / 2);
 
             float min_freq = 1.0f;
@@ -334,17 +334,17 @@ void bind_audio_data(shader_filter::filter_data *filter, gs_effect_t *effect)
                 if (freq < min_freq) {
                     freq_to_band_map[i] = -1; // Skip this bin
                 } else {
-                    int band = (int)((log10f(freq) - log_min) / log_range * (filter->audio.spectrum_bands - 1));
-                    freq_to_band_map[i] = std::max(0, std::min(band, filter->audio.spectrum_bands - 1));
+                    int band = (int)((log10f(freq) - log_min) / log_range * (filter->spectrum_bands - 1));
+                    freq_to_band_map[i] = std::max(0, std::min(band, filter->spectrum_bands - 1));
                 }
             }
 
             last_buffer_size = buffer_size;
-            last_spectrum_bands = filter->audio.spectrum_bands;
+            last_spectrum_bands = filter->spectrum_bands;
         }
 
         // Fast processing using pre-computed mapping
-        const int max_band = std::min(filter->audio.spectrum_bands - 1, (int)filter->audio.back_buffer.size() - 1);
+        const int max_band = std::min(filter->spectrum_bands - 1, (int)filter->back_buffer.size() - 1);
         if (max_band < 0) return; // Early exit if invalid state
 
         for (size_t i = 0; i < buffer_size / 2; ++i) {
@@ -354,112 +354,112 @@ void bind_audio_data(shader_filter::filter_data *filter, gs_effect_t *effect)
                 float imag = capture->output_buffer[i][1];
                 float magnitude = sqrtf(real * real + imag * imag);
                 int band = computed_band;
-                filter->audio.back_buffer[band] += magnitude;
+                filter->back_buffer[band] += magnitude;
             }
         }
 
         // Apply gain to raw FFT magnitudes
-        for (int i = 0; i < filter->audio.spectrum_bands; i++) {
-            filter->audio.back_buffer[i] *= filter->audio.audio_gain;
+        for (int i = 0; i < filter->spectrum_bands; i++) {
+            filter->back_buffer[i] *= filter->audio_gain;
         }
 
         // Apply exponential smoothing
-        for (int i = 0; i < filter->audio.spectrum_bands; i++) {
-            float target = filter->audio.back_buffer[i];
-            float current = filter->audio.smoothed_spectrum[i];
+        for (int i = 0; i < filter->spectrum_bands; i++) {
+            float target = filter->back_buffer[i];
+            float current = filter->smoothed_spectrum[i];
 
             // Use attack factor when rising, release when falling
-            float factor = (target > current) ? filter->audio.audio_attack : filter->audio.audio_release;
+            float factor = (target > current) ? filter->audio_attack : filter->audio_release;
 
-            filter->audio.smoothed_spectrum[i] = current + (target - current) * factor;
+            filter->smoothed_spectrum[i] = current + (target - current) * factor;
         }
 
         // Normalize to [0.0, 1.0] range
-        float max_value = *std::max_element(filter->audio.smoothed_spectrum.begin(),
-                                             filter->audio.smoothed_spectrum.begin() + filter->audio.spectrum_bands);
+        float max_value = *std::max_element(filter->smoothed_spectrum.begin(),
+                                             filter->smoothed_spectrum.begin() + filter->spectrum_bands);
 
         if (max_value > audio_constants::NORMALIZATION_EPSILON) {
-            for (int i = 0; i < filter->audio.spectrum_bands; i++) {
-                filter->audio.back_buffer[i] = fminf(filter->audio.smoothed_spectrum[i] / max_value, audio_constants::MAX_SPECTRUM_VALUE);
+            for (int i = 0; i < filter->spectrum_bands; i++) {
+                filter->back_buffer[i] = fminf(filter->smoothed_spectrum[i] / max_value, audio_constants::MAX_SPECTRUM_VALUE);
             }
         } else {
             // If max is zero, just clear the buffer to prevent stale data
-            std::fill_n(filter->audio.back_buffer.begin(), filter->audio.spectrum_bands, 0.0f);
+            std::fill_n(filter->back_buffer.begin(), filter->spectrum_bands, 0.0f);
         }
 
         // --- New Audio Texture Processing ---
-        if (filter->audio.audio_textures_enabled) {
-            std::lock_guard<std::mutex> lock(filter->audio.spectrum_mutex);
+        if (filter->audio_textures_enabled) {
+            std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
 
             // 1. High-Resolution Spectrum
-            std::fill(filter->audio.high_res_spectrum.begin(), filter->audio.high_res_spectrum.end(), 0.0f);
-            for (size_t i = 0; i < buffer_size / 2 && i < filter->audio.HIGH_RES_SPECTRUM_SIZE; ++i) {
+            std::fill(filter->high_res_spectrum.begin(), filter->high_res_spectrum.end(), 0.0f);
+            for (size_t i = 0; i < buffer_size / 2 && i < filter->HIGH_RES_SPECTRUM_SIZE; ++i) {
                 float real = capture->output_buffer[i][0];
                 float imag = capture->output_buffer[i][1];
                 float magnitude = sqrtf(real * real + imag * imag);
-                filter->audio.high_res_spectrum[i] = magnitude * filter->audio.audio_gain;
+                filter->high_res_spectrum[i] = magnitude * filter->audio_gain;
             }
 
             // 2. Waveform Data
             // Just copy the raw input buffer (already has Hanning window applied)
              std::copy(capture->input_buffer.begin(),
-                  capture->input_buffer.begin() + std::min((size_t)filter->audio.WAVEFORM_SIZE, buffer_size),
-                  filter->audio.waveform_data.begin());
+                  capture->input_buffer.begin() + std::min((size_t)filter->WAVEFORM_SIZE, buffer_size),
+                  filter->waveform_data.begin());
 
             // 3. Spectrogram
             // Write the new high-res spectrum into the current column of the spectrogram
-            int write_pos = filter->audio.spectrogram_write_pos;
-            for (int y = 0; y < filter->audio.SPECTROGRAM_HEIGHT; ++y) {
+            int write_pos = filter->spectrogram_write_pos;
+            for (int y = 0; y < filter->SPECTROGRAM_HEIGHT; ++y) {
                 // Map spectrogram row to spectrum bin
-                int spectrum_idx = y * (filter->audio.HIGH_RES_SPECTRUM_SIZE / filter->audio.SPECTROGRAM_HEIGHT);
-                float value = filter->audio.high_res_spectrum[spectrum_idx];
+                int spectrum_idx = y * (filter->HIGH_RES_SPECTRUM_SIZE / filter->SPECTROGRAM_HEIGHT);
+                float value = filter->high_res_spectrum[spectrum_idx];
                  // Normalize and clamp
                 value = fminf(value / audio_constants::SPECTROGRAM_NORMALIZATION_FACTOR, audio_constants::MAX_SPECTRUM_VALUE); // Ad-hoc normalization
-                filter->audio.spectrogram_data[y * filter->audio.SPECTROGRAM_WIDTH + write_pos] = value;
+                filter->spectrogram_data[y * filter->SPECTROGRAM_WIDTH + write_pos] = value;
             }
-            filter->audio.spectrogram_write_pos = (write_pos + 1) % filter->audio.SPECTROGRAM_WIDTH;
+            filter->spectrogram_write_pos = (write_pos + 1) % filter->SPECTROGRAM_WIDTH;
         }
 
         // Swap buffers to make the new data available to the render thread
         {
-            std::lock_guard<std::mutex> lock(filter->audio.spectrum_mutex);
-            filter->audio.front_buffer.swap(filter->audio.back_buffer);
+            std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
+            filter->front_buffer.swap(filter->back_buffer);
         }
         capture->data_ready = false;
     }
 
     // --- Texture Updates and Binding ---
-    if (filter->audio.audio_textures_enabled && filter->audio.audio_spectrum_tex) {
+    if (filter->audio_textures_enabled && filter->audio_spectrum_tex) {
         obs_enter_graphics();
 
-        gs_texture_set_image(filter->audio.audio_spectrum_tex, reinterpret_cast<const uint8_t*>(filter->audio.high_res_spectrum.data()), filter->audio.HIGH_RES_SPECTRUM_SIZE * sizeof(float), false);
-        gs_texture_set_image(filter->audio.audio_spectrogram_tex, reinterpret_cast<const uint8_t*>(filter->audio.spectrogram_data.data()), filter->audio.SPECTROGRAM_WIDTH * sizeof(float), false);
-        gs_texture_set_image(filter->audio.audio_waveform_tex, reinterpret_cast<const uint8_t*>(filter->audio.waveform_data.data()), filter->audio.WAVEFORM_SIZE * sizeof(float), false);
+        gs_texture_set_image(filter->audio_spectrum_tex, reinterpret_cast<const uint8_t*>(filter->high_res_spectrum.data()), filter->HIGH_RES_SPECTRUM_SIZE * sizeof(float), false);
+        gs_texture_set_image(filter->audio_spectrogram_tex, reinterpret_cast<const uint8_t*>(filter->spectrogram_data.data()), filter->SPECTROGRAM_WIDTH * sizeof(float), false);
+        gs_texture_set_image(filter->audio_waveform_tex, reinterpret_cast<const uint8_t*>(filter->waveform_data.data()), filter->WAVEFORM_SIZE * sizeof(float), false);
 
         obs_leave_graphics();
 
         gs_eparam_t *spectrum_tex_param = gs_effect_get_param_by_name(effect, "audio_spectrum_tex");
-        if(spectrum_tex_param) gs_effect_set_texture(spectrum_tex_param, filter->audio.audio_spectrum_tex);
+        if(spectrum_tex_param) gs_effect_set_texture(spectrum_tex_param, filter->audio_spectrum_tex);
 
         gs_eparam_t *spectrogram_tex_param = gs_effect_get_param_by_name(effect, "audio_spectrogram_tex");
-        if(spectrogram_tex_param) gs_effect_set_texture(spectrogram_tex_param, filter->audio.audio_spectrogram_tex);
+        if(spectrogram_tex_param) gs_effect_set_texture(spectrogram_tex_param, filter->audio_spectrogram_tex);
 
         gs_eparam_t *waveform_tex_param = gs_effect_get_param_by_name(effect, "audio_waveform_tex");
-        if(waveform_tex_param) gs_effect_set_texture(waveform_tex_param, filter->audio.audio_waveform_tex);
+        if(waveform_tex_param) gs_effect_set_texture(waveform_tex_param, filter->audio_waveform_tex);
     }
 
 
     gs_eparam_t *spectrum_param = gs_effect_get_param_by_name(effect, "audio_spectrum");
     if (spectrum_param) {
-        std::lock_guard<std::mutex> lock(filter->audio.spectrum_mutex);
+        std::lock_guard<std::mutex> lock(filter->spectrum_mutex);
         /* gs_effect_set_float_array is not available in all OBS versions; use
          * the generic gs_effect_set_val to upload the float array data. */
-        gs_effect_set_val(spectrum_param, filter->audio.front_buffer.data(), sizeof(float) * filter->audio.spectrum_bands);
+        gs_effect_set_val(spectrum_param, filter->front_buffer.data(), sizeof(float) * filter->spectrum_bands);
     }
 
     gs_eparam_t *reactivity_param = gs_effect_get_param_by_name(effect, "audio_reactivity");
     if (reactivity_param) {
-        gs_effect_set_float(reactivity_param, filter->audio.audio_reactivity_strength);
+        gs_effect_set_float(reactivity_param, filter->audio_reactivity_strength);
     }
 }
 

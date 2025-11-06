@@ -53,92 +53,27 @@ if(IN_OBS_BUILD)
     endif()
 else()
     # Standalone build
-    if(LINUX)
-        # Use pkg-config on Linux for simplicity and robustness
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(OBS REQUIRED libobs)
-        if(NOT OBS_FOUND)
-            message(FATAL_ERROR "OBS Studio development files (libobs-dev) not found.")
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND AND LINUX)
+        pkg_check_modules(LIBOBS QUIET libobs)
+        if(LIBOBS_FOUND)
+            message(STATUS "Found OBS via pkg-config")
+            set(OBS_FOUND TRUE)
+            set(LibOBS_INCLUDE_DIR ${LIBOBS_INCLUDE_DIRS})
+            set(LibOBS_LIBRARY ${LIBOBS_LIBRARIES})
         endif()
+    endif()
 
-        set(LibOBS_INCLUDE_DIR ${OBS_INCLUDE_DIRS})
-        set(LibOBS_LIBRARY ${OBS_LIBRARIES})
-
-        if(ENABLE_FRONTEND_API)
-            pkg_check_modules(OBS_FRONTEND QUIET obs-frontend-api)
-            if(OBS_FRONTEND_FOUND)
-                list(APPEND LibOBS_LIBRARY ${OBS_FRONTEND_LIBRARIES})
-            endif()
-        endif()
-        message(STATUS "Found OBS (via pkg-config) Includes: ${LibOBS_INCLUDE_DIR}")
-        message(STATUS "Found OBS (via pkg-config) Libraries: ${LibOBS_LIBRARY}")
-    else() # For Windows and macOS
-        # Try to find OBS in standard locations
+    if(NOT OBS_FOUND)
         if(NOT OBS_DIR)
-            if(WIN32)
-                set(OBS_SEARCH_PATHS
-                    "C:/Program Files/obs-studio"
-                    "C:/Program Files (x86)/obs-studio"
-                    "$ENV{ProgramFiles}/obs-studio"
-                )
-            elseif(APPLE)
-                set(OBS_SEARCH_PATHS
-                    "/Applications/OBS.app/Contents/Resources"
-                    "/usr/local/opt/obs"
-                )
-            endif()
-
-            foreach(SEARCH_PATH ${OBS_SEARCH_PATHS})
-                if(EXISTS "${SEARCH_PATH}/include/obs-module.h" OR
-                   EXISTS "${SEARCH_PATH}/include/obs/obs-module.h")
-                    set(OBS_DIR ${SEARCH_PATH})
-                    message(STATUS "Found OBS at: ${OBS_DIR}")
-                    break()
-                endif()
-            endforeach()
+            message(WARNING "OBS not found automatically. Please set OBS_DIR to your OBS installation path")
+            message(STATUS "Example: cmake -DOBS_DIR=\"C:/Program Files/obs-studio\" ..")
         endif()
+    endif()
 
-        # Set include and library paths
-        if(WIN32)
-            if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-                set(OBS_ARCH_DIR "64bit")
-            else()
-                set(OBS_ARCH_DIR "32bit")
-            endif()
-
-            set(LibOBS_INCLUDE_DIR "${OBS_DIR}/include")
-            set(LibOBS_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs.lib")
-            if(ENABLE_FRONTEND_API)
-                set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/${OBS_ARCH_DIR}/obs-frontend-api.lib")
-            endif()
-        elseif(APPLE)
-            set(LibOBS_INCLUDE_DIR "${OBS_DIR}/include")
-            set(LibOBS_LIBRARY "${OBS_DIR}/bin/libobs.dylib")
-            if(ENABLE_FRONTEND_API)
-                set(LibOBS_Frontend_LIBRARY "${OBS_DIR}/bin/libobs-frontend-api.dylib")
-            endif()
-        endif()
-
-        # Verify we found everything
-        if(NOT LibOBS_INCLUDE_DIR OR NOT EXISTS "${LibOBS_INCLUDE_DIR}")
-            message(FATAL_ERROR
-                "Could not find OBS Studio headers.\n"
-                "Please install OBS Studio or set OBS_DIR to your OBS installation path.\n"
-                "Current OBS_DIR: ${OBS_DIR}\n"
-                "Looking for: obs-module.h"
-            )
-        endif()
-
-        if(NOT LibOBS_LIBRARY OR NOT EXISTS "${LibOBS_LIBRARY}")
-            message(FATAL_ERROR
-                "Could not find OBS Studio library.\n"
-                "Please install OBS Studio development files or set OBS_DIR correctly.\n"
-                "Looking for: libobs"
-            )
-        endif()
-
-        message(STATUS "OBS Include Dir: ${LibOBS_INCLUDE_DIR}")
-        message(STATUS "OBS Library: ${LibOBS_LIBRARY}")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(STATUS "Debug build - enabling verbose logging")
+        target_compile_definitions(${PROJECT_NAME} PRIVATE DEBUG_BUILD)
     endif()
 endif()
 

@@ -22,13 +22,62 @@ namespace hot_reload_config {
     constexpr std::chrono::milliseconds POLLING_INTERVAL{500};
     constexpr std::chrono::seconds CALLBACK_TIMEOUT{2};
     constexpr size_t MAX_WATCHED_FILES = 100;
+    constexpr std::chrono::milliseconds RELOAD_DEBOUNCE_MS(500);
 }
 
 struct watch_entry {
     std::string path;
     fs::file_time_type last_write_time;
+    std::chrono::steady_clock::time_point last_reload_check;
     std::vector<shader_filter::filter_data*> filter_instances;
 };
+
+bool should_reload_shader(shader_filter::filter_data *filter) {
+    if (!filter->hot_reload_enabled || !filter->shader_path) {
+        return false;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    auto time_since_last_check = now - filter->last_reload_check;
+
+    if (time_since_last_check < hot_reload_config::RELOAD_DEBOUNCE_MS) {
+        return false;
+    }
+
+    filter->last_reload_check = now;
+
+    struct stat file_stat;
+    if (stat(filter->shader_path, &file_stat) != 0) {
+        blog(LOG_WARNING, "[ShaderFilter Plus Next] Shader file not found: %s",
+             filter->shader_path);
+        return false;
+    }
+
+    return true;
+}
+
+void perform_hot_reload(shader_filter::filter_data *filter) {
+    if (!should_reload_shader(filter)) {
+        return;
+    }
+
+    blog(LOG_INFO, "[ShaderFilter Plus Next] Hot-reloading shader: %s",
+         filter->shader_path);
+
+    char *old_error = filter->last_error.empty() ? nullptr : bstrdup(filter->last_error.c_str());
+
+    if (shader_filter_plugin::load_shader_from_file(filter, filter->shader_path)) {
+        filter->error_count = 0;
+        filter->last_error.clear();
+        blog(LOG_INFO, "[ShaderFilter Plus Next] Shader reloaded successfully");
+    } else {
+        filter->error_count++;
+        blog(LOG_ERROR, "[ShaderFilter Plus Next] Shader reload failed (attempt %d)",
+             filter->error_count);
+    }
+
+    bfree(old_error);
+}
 
 static std::thread watcher_thread;
 static std::mutex watch_mutex;
@@ -52,15 +101,21 @@ static void watcher_loop()
                 continue;
             }
 
+            auto now = std::chrono::steady_clock::now();
+            auto time_since_last_check = now - entry.second.last_reload_check;
+
+            if (time_since_last_check < hot_reload_config::RELOAD_DEBOUNCE_MS) {
+                continue;
+            }
+
             if (current_time > entry.second.last_write_time) {
                 plugin_info("File changed: %s", entry.first.c_str());
                 entry.second.last_write_time = current_time;
+                entry.second.last_reload_check = now;
 
-                // Instead of calling reload directly, just set a flag.
-                // The render thread will pick this up safely.
                 for (auto *filter : entry.second.filter_instances) {
-                    if (filter && filter->context) {  // Validate filter is still alive
-                        filter->hot_reload.needs_reload.store(true, std::memory_order_release);
+                    if (filter && filter->context) {
+                        filter->needs_reload.store(true, std::memory_order_release);
                     }
                 }
             }
@@ -89,7 +144,7 @@ void shutdown()
 
 void watch_file(shader_filter::filter_data *filter)
 {
-    const char *path = filter->hot_reload.shader_path;
+    const char *path = filter->shader_path;
     if (!path || !*path) {
         plugin_warn("Cannot watch empty file path");
         return;
@@ -126,7 +181,7 @@ void watch_file(shader_filter::filter_data *filter)
 
 void unwatch_file(shader_filter::filter_data *filter)
 {
-    const char *path = filter->hot_reload.shader_path;
+    const char *path = filter->shader_path;
     if (!path || !*path) return;
 
     std::lock_guard<std::mutex> lock(watch_mutex);

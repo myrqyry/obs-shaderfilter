@@ -11,6 +11,8 @@
 #include "audio_reactive.hpp"
 #include "global_uniforms.hpp"
 
+using namespace shader_filter_plugin;
+
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-shaderfilter-plus-next", "en-US")
 
@@ -51,7 +53,7 @@ bool obs_module_load(void)
     blog(LOG_INFO, "[ShaderFilter Plus Next] Version 1.0.0 loading...");
 
     // Register main shader filter
-    shader_filter::register_filter();
+    register_filter();
 
     // Initialize subsystems
     hot_reload::initialize();

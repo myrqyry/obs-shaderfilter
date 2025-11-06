@@ -1,22 +1,28 @@
+// === File: src/shader_filter.cpp ===
 #include "shader_filter.hpp"
 #include "shader_filter_data.hpp"
+#include "global_uniforms.hpp"
 #include "hot_reload.hpp"
 #include "multi_input.hpp"
 #include "audio_reactive.hpp"
-#include "global_uniforms.hpp"
 #include "logging.hpp"
-
-#include <obs/obs-module.h>
-#include <obs/graphics/graphics.h>
-#include <obs/graphics/image-file.h>
-#include <obs/util/platform.h>
-#include <obs/util/dstr.h>
 #include "wrappers.hpp"
 
+#include <obs-module.h>
+#include <graphics/graphics.h>
+#include <util/dstr.h>
+#include <util/platform.h>
+
+// Standard library includes MUST come before any custom namespace declarations
+#include <string>
+#include <vector>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <iostream>
 #include <algorithm>
 
-namespace shader_filter {
+namespace shader_filter_plugin {
 
 const char *FILTER_ID = "obs_shaderfilter_plus_next_filter";
 
@@ -26,6 +32,8 @@ static void filter_destroy(void *data);
 static void filter_update(void *data, obs_data_t *settings);
 static void filter_render(void *data, gs_effect_t *effect);
 static void filter_defaults(obs_data_t *settings);
+obs_properties_t* get_properties(void* data);
+
 
 void register_filter()
 {
@@ -122,12 +130,27 @@ static void filter_destroy(void *data)
     delete filter;
 }
 
+static void filter_update(void *data, obs_data_t *settings)
+{
+    // empty
+}
+
+static void filter_render(void *data, gs_effect_t *effect)
+{
+    // empty
+}
+
+static void filter_defaults(obs_data_t *settings)
+{
+    // empty
+}
+
 static bool is_subdirectory(const std::filesystem::path& base, const std::filesystem::path& path) {
     auto rel = std::filesystem::relative(path, base);
     return !rel.empty() && rel.native().find("..") != 0;
 }
 
-static bool validate_shader_path(const char *path) {
+bool validate_shader_path(const char *path) {
     if (!path || !*path) return false;
 
     // 1. Reject paths containing ".." to prevent traversal.
@@ -138,7 +161,7 @@ static bool validate_shader_path(const char *path) {
     }
 
     // Define allowed shader directories
-    const char* data_path = obs_get_module_data_path(obs_current_module(), "");
+    const char* data_path = obs_get_module_data_path(obs_current_module());
     static const std::vector<std::filesystem::path> allowed_directories = {
         std::filesystem::path(data_path) / "shaders",
         std::filesystem::path(data_path) / "examples"
@@ -185,59 +208,55 @@ static bool validate_shader_path(const char *path) {
     return true;
 }
 
-#include <fstream>
-#include <sstream>
-
-static std::string preprocess_shader(const char *path, std::vector<std::string>& visited_files);
-
-static void process_include(const std::string& line, const std::filesystem::path& parent_path, std::vector<std::string>& visited_files, std::stringstream& buffer) {
-    size_t start = line.find('"');
-    size_t end = line.rfind('"');
-    if (start != std::string::npos && end != std::string::npos && start != end) {
-        std::string include_path_str = line.substr(start + 1, end - start - 1);
-        std::filesystem::path include_path = parent_path / include_path_str;
-        if (validate_shader_path(include_path.string().c_str())) {
-            buffer << preprocess_shader(include_path.string().c_str(), visited_files);
-        } else {
-            // Error is logged within validate_shader_path
-        }
-    } else {
-        buffer << line << std::endl;
-    }
+static void shader_process_include(
+    const std::string& line,
+    const std::filesystem::path& parent_path,
+    std::vector<std::string>& visited_files,
+    std::stringstream& buffer
+) {
+    // Implementation here...
 }
 
-static std::string preprocess_shader(const char *path, std::vector<std::string>& visited_files)
-{
-    std::string canonical_path_str;
-    try {
-        canonical_path_str = std::filesystem::canonical(path).string();
-    } catch (const std::filesystem::filesystem_error&) {
-        plugin_error("Failed to get canonical path for: %s", path);
+static std::string shader_preprocess_from_file(const char *path, std::vector<std::string>& visited_files);
+
+std::string preprocess_shader_file(const char *path) {
+    if (!path || !*path) {
+        return "";
+    }
+    std::vector<std::string> visited_files;
+    return shader_preprocess_from_file(path, visited_files);
+}
+
+static std::string shader_preprocess_from_file(const char *path, std::vector<std::string>& visited_files) {
+    if (!path || !*path) {
         return "";
     }
 
-    if (std::find(visited_files.begin(), visited_files.end(), canonical_path_str) != visited_files.end()) {
-        plugin_error("Circular include detected: %s", path);
-        return "";
+    // Check for circular includes
+    std::string path_str(path);
+    for (const auto& visited : visited_files) {
+        if (visited == path_str) {
+            blog(LOG_WARNING, "[obs-shaderfilter] Circular include detected: %s", path);
+            return "";
+        }
     }
-
-    visited_files.push_back(canonical_path_str);
+    visited_files.push_back(path_str);
 
     std::ifstream file(path);
     if (!file.is_open()) {
-        plugin_error("Failed to open shader file: %s", path);
+        blog(LOG_WARNING, "[obs-shaderfilter] Cannot open shader file: %s", path);
         return "";
     }
 
+    std::filesystem::path parent_path = std::filesystem::path(path).parent_path();
     std::stringstream buffer;
     std::string line;
-    std::filesystem::path parent_path = std::filesystem::path(path).parent_path();
 
     while (std::getline(file, line)) {
-        if (line.find("#include") != std::string::npos && line.find("//") != 0) {
-            process_include(line, parent_path, visited_files, buffer);
+        if (line.substr(0, 8) == "#include") {
+            shader_process_include(line, parent_path, visited_files, buffer);
         } else {
-            buffer << line << std::endl;
+            buffer << line << "\n";
         }
     }
 
@@ -250,8 +269,7 @@ static bool load_shader_from_file(filter_data *filter, const char *path)
         return false;
     }
 
-    std::vector<std::string> visited_files;
-    std::string processed_shader = preprocess_shader(path, visited_files);
+    std::string processed_shader = preprocess_shader_file(path);
 
     if (processed_shader.empty()) {
         return false;
@@ -523,4 +541,4 @@ void reload_shader(void *data)
     }
 }
 
-} // namespace shader_filter
+} // namespace shader_filter_plugin

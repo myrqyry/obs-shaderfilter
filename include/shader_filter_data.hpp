@@ -8,7 +8,7 @@
 #include "hot_reload.hpp"
 #include "shader_state.hpp"
 
-namespace shader_filter {
+
 
 struct filter_data {
     filter_data() = default;
@@ -30,5 +30,3 @@ struct filter_data {
     // Audio-reactive data
     audio_reactive::audio_reactive_data audio;
 };
-
-} // namespace shader_filter

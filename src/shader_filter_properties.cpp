@@ -8,7 +8,7 @@ namespace multi_input { void add_properties(obs_properties_t*, void*); }
 namespace audio_reactive { void add_properties(obs_properties_t*, void*); }
 namespace hot_reload { void add_properties(obs_properties_t*, void*); }
 
-namespace shader_filter {
+namespace shader_filter_plugin {
 
 obs_properties_t* get_properties(void* data)
 {
@@ -111,4 +111,4 @@ obs_properties_t* get_properties(void* data)
     return props;
 }
 
-} // namespace shader_filter
+} // namespace shader_filter_plugin

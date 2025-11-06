@@ -1,15 +1,34 @@
-#pragma once
-#include <obs/obs.h>
+// === File: include/shader_filter.hpp ===
+#ifndef SHADER_FILTER_HPP
+#define SHADER_FILTER_HPP
 
-namespace shader_filter {
+// System includes first (critical for avoiding namespace conflicts)
+#include <string>
+#include <vector>
+#include <memory>
+#include <filesystem>
 
-// Main registration function
+// OBS includes second
+#include <obs-module.h>
+#include <graphics/graphics.h>
+
+// Forward declarations to avoid circular dependencies
+struct filter_data;
+struct effect_data;
+
+namespace shader_filter_plugin {  // Use more specific namespace name
+
+// Core functionality
+bool validate_shader_path(const char* path);
+bool load_shader_from_file(filter_data* filter, const char* path);
+bool reload_shader(filter_data* filter);
+
+// Utility functions
+std::string preprocess_shader_file(const char* path);
+bool compile_shader_effect(filter_data* filter, const std::string& shader_text);
+
+} // namespace shader_filter_plugin
+
 void register_filter();
 
-// Callback for hot-reloading
-void reload_shader(void *data);
-
-// UI properties function (defined in shader_filter_properties.cpp)
-obs_properties_t* get_properties(void* data);
-
-} // namespace shader_filter
+#endif // SHADER_FILTER_HPP

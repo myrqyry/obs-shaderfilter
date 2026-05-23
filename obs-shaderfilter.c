@@ -2274,26 +2274,24 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_set_param(props, filter, NULL);
 
-	if (!filter || !filter->transition) {
-		obs_properties_add_int(props, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_top", obs_module_text("ShaderFilter.ExpandTop"), 0, 9999, 1);
-		obs_properties_add_int(props, "expand_bottom", obs_module_text("ShaderFilter.ExpandBottom"), 0, 9999, 1);
-	}
+	obs_properties_t *source_group = obs_properties_create();
+	obs_properties_add_group(props, "shader_source_group", obs_module_text("ShaderFilter.ShaderSource"),
+				 OBS_GROUP_NORMAL, source_group);
 
-	obs_properties_add_bool(props, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
+	obs_properties_add_bool(source_group, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
 
-	obs_property_t *from_file = obs_properties_add_bool(props, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
+	obs_property_t *from_file = obs_properties_add_bool(source_group, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
 	obs_property_set_modified_callback(from_file, shader_filter_from_file_changed);
 
 	obs_property_t *shader_text =
-		obs_properties_add_text(props, "shader_text", obs_module_text("ShaderFilter.ShaderText"), OBS_TEXT_MULTILINE);
+		obs_properties_add_text(source_group, "shader_text", obs_module_text("ShaderFilter.ShaderText"), OBS_TEXT_MULTILINE);
 	obs_property_set_modified_callback(shader_text, shader_filter_text_changed);
 
-	obs_properties_add_button2(props, "shader_convert", obs_module_text("ShaderFilter.Convert"), shader_filter_convert, data);
+	obs_properties_add_button2(source_group, "shader_convert", obs_module_text("ShaderFilter.Convert"), shader_filter_convert,
+				   data);
 
 	char *abs_path = os_get_abs_path_ptr(examples_path.array);
-	obs_property_t *file_name = obs_properties_add_path(props, "shader_file_name",
+	obs_property_t *file_name = obs_properties_add_path(source_group, "shader_file_name",
 							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
 							    abs_path ? abs_path : examples_path.array);
 	if (abs_path)
@@ -2306,22 +2304,26 @@ static obs_properties_t *shader_filter_properties(void *data)
 		const char *last_error = obs_data_get_string(settings, "last_error");
 		if (last_error && strlen(last_error)) {
 			obs_property_t *error =
-				obs_properties_add_text(props, "last_error", obs_module_text("ShaderFilter.Error"), OBS_TEXT_INFO);
+				obs_properties_add_text(source_group, "last_error", obs_module_text("ShaderFilter.Error"), OBS_TEXT_INFO);
 			obs_property_text_set_info_type(error, OBS_TEXT_INFO_ERROR);
 		}
 		obs_data_release(settings);
 	}
 
-	obs_properties_add_button2(props, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
+	obs_properties_add_button2(source_group, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
 				   shader_filter_reload_effect_clicked, data);
 
 	if (filter && (filter->param_audio_magnitude || filter->param_audio_peak)) {
-		obs_property_t *audio_source = obs_properties_add_list(props, "audio_source", "Audio source", OBS_COMBO_TYPE_LIST,
-								       OBS_COMBO_FORMAT_STRING);
+		obs_property_t *audio_source = obs_properties_add_list(source_group, "audio_source", "Audio source",
+								       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 		obs_property_list_add_string(audio_source, "None", "");
 
 		obs_enum_sources(shader_filter_enum_audio_sources, audio_source);
 	}
+
+	obs_properties_t *shader_params_group = obs_properties_create();
+	obs_properties_add_group(props, "shader_params_group", obs_module_text("ShaderFilter.ShaderParameters"),
+				 OBS_GROUP_NORMAL, shader_params_group);
 
 	DARRAY(obs_property_t *) groups;
 	da_init(groups);
@@ -2357,12 +2359,12 @@ static obs_properties_t *shader_filter_properties(void *data)
 			if (!group) {
 				group = obs_properties_create();
 				obs_property_t *p =
-					obs_properties_add_group(props, group_name, group_name, OBS_GROUP_NORMAL, group);
+					obs_properties_add_group(shader_params_group, group_name, group_name, OBS_GROUP_NORMAL, group);
 				da_push_back(groups, &p);
 			}
 		}
 		if (!group)
-			group = props;
+			group = shader_params_group;
 		obs_property_t *p = NULL;
 		switch (param->type) {
 		case GS_SHADER_PARAM_BOOL:
@@ -2558,6 +2560,21 @@ static obs_properties_t *shader_filter_properties(void *data)
 		dstr_free(&display_name);
 	}
 	da_free(groups);
+
+	if (!filter || !filter->transition) {
+		obs_properties_t *expand_group = obs_properties_create();
+		obs_properties_add_group(props, "expand_group", obs_module_text("ShaderFilter.ExpandPixels"),
+					 OBS_GROUP_NORMAL, expand_group);
+
+		obs_properties_add_int(expand_group, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999,
+					   1);
+		obs_properties_add_int(expand_group, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999,
+					   1);
+		obs_properties_add_int(expand_group, "expand_top", obs_module_text("ShaderFilter.ExpandTop"), 0, 9999,
+					   1);
+		obs_properties_add_int(expand_group, "expand_bottom", obs_module_text("ShaderFilter.ExpandBottom"), 0,
+					   9999, 1);
+	}
 
 	obs_properties_add_text(
 		props, "plugin_info",

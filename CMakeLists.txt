@@ -64,6 +64,15 @@ if(BUILD_OUT_OF_TREE)
     install(DIRECTORY data/examples data/internal data/locale data/textures
         DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_OUT_DIR})
     setup_plugin_target(${PROJECT_NAME})
+    if(OS_POSIX AND NOT OS_MACOS)
+        set(OBS_USER_PLUGIN_DIR $ENV{HOME}/.config/obs-studio/plugins/${PROJECT_NAME})
+        add_custom_target(install-user
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${OBS_USER_PLUGIN_DIR}/bin/64bit
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${OBS_USER_PLUGIN_DIR}/bin/64bit/${PROJECT_NAME}.so
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data ${OBS_USER_PLUGIN_DIR}/data
+            COMMENT "Installing to OBS user plugin directory: ${OBS_USER_PLUGIN_DIR}"
+            VERBATIM)
+    endif()
 else()
     if(OBS_CMAKE_VERSION VERSION_GREATER_EQUAL 3.0.0)
         set_target_properties_obs(${PROJECT_NAME} PROPERTIES FOLDER "plugins/exeldro" PREFIX "")

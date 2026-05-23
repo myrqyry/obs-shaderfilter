@@ -2706,7 +2706,7 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 					param->default_value.vec4 = rgba;
 					param->has_default = true;
 				} else {
-					// Hack to ensure we have a default...(white)
+					// Ensure color parameters have a white fallback value.
 					obs_data_set_default_int(settings, param_name, 0xffffffff);
 				}
 				vec4_from_rgba(&param->value.vec4, (uint32_t)obs_data_get_int(settings, param_name));
@@ -2732,7 +2732,7 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 					param->default_value.vec4 = *rgba;
 					param->has_default = true;
 				} else {
-					// Hack to ensure we have a default...(white)
+					// Ensure color parameters have a white fallback value.
 					obs_data_set_default_int(settings, param_name, 0xffffffff);
 				}
 				vec4_from_rgba(&param->value.vec4, (uint32_t)obs_data_get_int(settings, param_name));

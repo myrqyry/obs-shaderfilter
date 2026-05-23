@@ -28,7 +28,7 @@ necessary files should look like this:
     |               |---pulse.effect
     |               |---rectangular_drop_shadow.shader
     |               |---rounded_rect.shader
-    |               |---many more...
+    |               |---additional shader examples
     |           |---locale
     |               |---en-US.ini
     |---obs-plugins

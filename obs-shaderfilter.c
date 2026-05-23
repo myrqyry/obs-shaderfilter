@@ -2339,7 +2339,6 @@ static obs_properties_t *shader_filter_properties(void *data)
 	size_t param_count = filter->stored_param_list.num;
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
-		//gs_eparam_t *annot = gs_param_get_annotation_by_idx(param->param, param_index);
 		const char *param_name = param->name.array;
 		const char *label = param->display_name.array;
 		const char *widget_type = param->widget_type.array;

@@ -309,11 +309,14 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 		char *line = lines[line_i];
 		line_i++;
 		if (strncmp(line, "#include", 8) == 0) {
-			// Open the included file, place contents here.
-			char *pos = strrchr(file_name, '/');
-			const size_t length = pos - file_name + 1;
 			struct dstr include_path = {0};
-			dstr_ncopy(&include_path, file_name, length);
+			char *pos = strrchr(file_name, '/');
+			if (!pos)
+				pos = strrchr(file_name, '\\');
+			if (pos) {
+				size_t length = pos - file_name + 1;
+				dstr_ncopy(&include_path, file_name, length);
+			}
 			char *start = strchr(line, '"') + 1;
 			char *end = strrchr(line, '"');
 
@@ -1603,8 +1606,13 @@ static void convert_define(struct dstr *effect_text)
 			end++;
 		char *t = strstr(start, "(");
 		if (t && t < end) {
-			// don't replace macro
-			pos = strstr(effect_text->array + diff + 8, "#define ");
+			// Function-like macro not supported by HLSL — remove line
+			char *line_end = strstr(pos, "\n");
+			if (line_end)
+				dstr_remove(effect_text, diff, line_end - pos + 1);
+			else
+				dstr_remove(effect_text, diff, effect_text->len - diff);
+			pos = strstr(effect_text->array + diff, "#define ");
 			continue;
 		}
 

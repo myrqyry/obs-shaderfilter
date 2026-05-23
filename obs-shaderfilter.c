@@ -292,7 +292,7 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 		}
 	}
 	char *dup = bstrdup(file_name);
-	da_push_back(*visited, &dup);
+	darray_push_back(sizeof(char *), &visited->da, &dup);
 
 	char *file_ptr = os_quick_read_utf8_file(file_name);
 	if (file_ptr == NULL) {

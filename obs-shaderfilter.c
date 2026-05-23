@@ -166,6 +166,8 @@ struct effect_param_data {
 	} step;
 };
 
+typedef DARRAY(char *) shader_path_array_t;
+
 struct shader_filter_data {
 	obs_source_t *context;
 	gs_effect_t *effect;
@@ -279,11 +281,23 @@ static unsigned int rand_interval(unsigned int min, unsigned int max)
 	return min + (r / buckets);
 }
 
-static char *load_shader_from_file(const char *file_name) // add input of visited files
+static char *load_shader_from_file_internal(const char *file_name, shader_path_array_t *visited)
 {
+	for (size_t i = 0; i < visited->num; i++) {
+		if (strcmp(visited->array[i], file_name) == 0) {
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] circular include detected: %s",
+			     file_name);
+			return bstrdup("");
+		}
+	}
+	char *dup = bstrdup(file_name);
+	da_push_back(*visited, &dup);
+
 	char *file_ptr = os_quick_read_utf8_file(file_name);
 	if (file_ptr == NULL) {
-		blog(LOG_WARNING, "[obs-shaderfilter] failed to read file: %s", file_name);
+		blog(LOG_WARNING, "[obs-shaderfilter] failed to read file: %s",
+		     file_name);
 		return NULL;
 	}
 	char **lines = strlist_split(file_ptr, '\n', true);
@@ -304,8 +318,10 @@ static char *load_shader_from_file(const char *file_name) // add input of visite
 			char *end = strrchr(line, '"');
 
 			dstr_ncat(&include_path, start, end - start);
-			char *abs_include_path = os_get_abs_path_ptr(include_path.array);
-			char *file_contents = load_shader_from_file(abs_include_path);
+			char *abs_include_path =
+				os_get_abs_path_ptr(include_path.array);
+			char *file_contents = load_shader_from_file_internal(
+				abs_include_path, visited);
 			dstr_cat(&shader_file, file_contents);
 			dstr_cat(&shader_file, "\n");
 			bfree(abs_include_path);
@@ -318,22 +334,25 @@ static char *load_shader_from_file(const char *file_name) // add input of visite
 		}
 	}
 
-	// Add file_name to visited files
-	// Do stuff with the file, and populate shader_file
-	/*
-
-		for line in file:
-		   if line starts with #include
-		       get path
-		       if path is not in visited files
-			   include_file_contents = load_shader_from_file(path)
-	                   concat include_file_contents onto shader_file
-	           else
-		       concat line onto shader_file
-	*/
 	bfree(file_ptr);
 	strlist_free(lines);
+
 	return shader_file.array;
+}
+
+/**
+ * Returns a heap-allocated string (owned by caller, free with bfree()).
+ * Returns NULL on failure.
+ */
+static char *load_shader_from_file(const char *file_name)
+{
+	shader_path_array_t visited;
+	da_init(visited);
+	char *result = load_shader_from_file_internal(file_name, &visited);
+	for (size_t i = 0; i < visited.num; i++)
+		bfree(visited.array[i]);
+	da_free(visited);
+	return result;
 }
 
 static void shader_filter_clear_params(struct shader_filter_data *filter)
@@ -400,6 +419,12 @@ static void shader_filter_clear_params(struct shader_filter_data *filter)
 			gs_texrender_destroy(param->render);
 			obs_leave_graphics();
 			param->render = NULL;
+		}
+		if (param->type == GS_SHADER_PARAM_STRING) {
+			bfree(param->value.string);
+			param->value.string = NULL;
+			bfree(param->default_value.string);
+			param->default_value.string = NULL;
 		}
 		dstr_free(&param->name);
 		dstr_free(&param->display_name);
@@ -669,25 +694,55 @@ static void shader_filter_reload_effect(struct shader_filter_data *filter)
 				} else if (strcmp(info.name, "tooltip") == 0 && info.type == GS_SHADER_PARAM_STRING) {
 					dstr_copy(&cached_data->tooltip, (const char *)annotation_default);
 				} else if (strcmp(info.name, "minimum") == 0) {
-					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
-					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
-						cached_data->minimum.f = *(float *)annotation_default;
-					} else if (info.type == GS_SHADER_PARAM_INT) {
-						cached_data->minimum.i = *(int *)annotation_default;
+					if (info.type == GS_SHADER_PARAM_FLOAT ||
+					    info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 ||
+					    info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->minimum.f =
+							*(float *)annotation_default;
+					} else if (info.type ==
+						   GS_SHADER_PARAM_INT) {
+						cached_data->minimum.i =
+							*(int *)annotation_default;
+					} else {
+						blog(LOG_WARNING,
+						     "[obs-shaderfilter] 'minimum' annotation on '%s' has unexpected type %d",
+						     cached_data->name.array,
+						     info.type);
 					}
 				} else if (strcmp(info.name, "maximum") == 0) {
-					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
-					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
-						cached_data->maximum.f = *(float *)annotation_default;
-					} else if (info.type == GS_SHADER_PARAM_INT) {
-						cached_data->maximum.i = *(int *)annotation_default;
+					if (info.type == GS_SHADER_PARAM_FLOAT ||
+					    info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 ||
+					    info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->maximum.f =
+							*(float *)annotation_default;
+					} else if (info.type ==
+						   GS_SHADER_PARAM_INT) {
+						cached_data->maximum.i =
+							*(int *)annotation_default;
+					} else {
+						blog(LOG_WARNING,
+						     "[obs-shaderfilter] 'maximum' annotation on '%s' has unexpected type %d",
+						     cached_data->name.array,
+						     info.type);
 					}
 				} else if (strcmp(info.name, "step") == 0) {
-					if (info.type == GS_SHADER_PARAM_FLOAT || info.type == GS_SHADER_PARAM_VEC2 ||
-					    info.type == GS_SHADER_PARAM_VEC3 || info.type == GS_SHADER_PARAM_VEC4) {
-						cached_data->step.f = *(float *)annotation_default;
-					} else if (info.type == GS_SHADER_PARAM_INT) {
-						cached_data->step.i = *(int *)annotation_default;
+					if (info.type == GS_SHADER_PARAM_FLOAT ||
+					    info.type == GS_SHADER_PARAM_VEC2 ||
+					    info.type == GS_SHADER_PARAM_VEC3 ||
+					    info.type == GS_SHADER_PARAM_VEC4) {
+						cached_data->step.f =
+							*(float *)annotation_default;
+					} else if (info.type ==
+						   GS_SHADER_PARAM_INT) {
+						cached_data->step.i =
+							*(int *)annotation_default;
+					} else {
+						blog(LOG_WARNING,
+						     "[obs-shaderfilter] 'step' annotation on '%s' has unexpected type %d",
+						     cached_data->name.array,
+						     info.type);
 					}
 				} else if (strncmp(info.name, "option_", 7) == 0) {
 					int id = atoi(info.name + 7);
@@ -877,52 +932,50 @@ static void convert_atan(struct dstr *effect_text)
 {
 	char *pos = strstr(effect_text->array, "atan(");
 	while (pos) {
-		if (is_var_char(*(pos - 1))) {
+		if (pos > effect_text->array && is_var_char(*(pos - 1))) {
 			pos = strstr(pos + 5, "atan(");
 			continue;
 		}
+
 		size_t diff = pos - effect_text->array;
-		char *comma = strstr(pos + 5, ",");
-		char *divide = strstr(pos + 5, "/");
-		if (!comma && !divide)
-			return;
+		size_t comma_off = SIZE_MAX;
+		size_t divide_off = SIZE_MAX;
+		size_t close_off = SIZE_MAX;
 
-		int depth = 0;
-		char *open = strstr(pos + 5, "(");
-		char *close = strstr(pos + 5, ")");
-		if (!close)
-			return;
-		do {
-			while (open && open < close) {
+		int depth = 1;
+		char *p = effect_text->array + diff + 5;
+		while (*p && depth > 0) {
+			if (*p == '(') {
 				depth++;
-				open = strstr(open + 1, "(");
-			}
-			while (depth > 0 && close && (!open || close < open)) {
+			} else if (*p == ')') {
 				depth--;
-				if (depth == 0 && (!comma || comma < close))
-					comma = strstr(close + 1, ",");
-				if (depth == 0 && (!divide || divide < close))
-					divide = strstr(close + 1, "/");
-				if (comma && open && comma > open && comma < close)
-					comma = NULL;
-				if (divide && open && divide > open && divide < close)
-					divide = NULL;
-
-				open = strstr(close + 1, "(");
-				close = strstr(close + 1, ")");
+				if (depth == 0)
+					close_off = p - effect_text->array;
+			} else if (*p == ',' && depth == 1) {
+				if (comma_off == SIZE_MAX)
+					comma_off = p - effect_text->array;
+			} else if (*p == '/' && depth == 1) {
+				if (divide_off == SIZE_MAX)
+					divide_off = p - effect_text->array;
 			}
-		} while (depth > 0 && close);
-
-		if (close && comma && comma < close && (!open || comma < open)) {
-			//*comma = '/';
-			dstr_insert(effect_text, diff + 4, "2");
-		}
-		if (close && divide && divide < close && (!open || divide < open)) {
-			*divide = ',';
-			dstr_insert(effect_text, diff + 4, "2");
+			p++;
 		}
 
-		pos = strstr(effect_text->array + diff + 5, "atan(");
+		if (close_off == SIZE_MAX) {
+			pos = strstr(effect_text->array + diff + 5, "atan(");
+			continue;
+		}
+
+		if (comma_off != SIZE_MAX && comma_off < close_off) {
+			dstr_insert(effect_text, diff + 4, "2");
+			pos = strstr(effect_text->array + diff + 6, "atan(");
+		} else if (divide_off != SIZE_MAX && divide_off < close_off) {
+			effect_text->array[divide_off] = ',';
+			dstr_insert(effect_text, diff + 4, "2");
+			pos = strstr(effect_text->array + diff + 6, "atan(");
+		} else {
+			pos = strstr(effect_text->array + diff + 5, "atan(");
+		}
 	}
 }
 
@@ -2784,10 +2837,19 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 			break;
 		case GS_SHADER_PARAM_STRING:
 			if (default_value != NULL) {
-				obs_data_set_default_string(settings, param_name, (const char *)default_value);
+				obs_data_set_default_string(settings, param_name,
+							    (const char *)default_value);
 				param->has_default = true;
+				bfree(param->default_value.string);
+				param->default_value.string =
+					bstrdup((const char *)default_value);
 			}
-			param->value.string = (char *)obs_data_get_string(settings, param_name);
+			{
+				const char *str =
+					obs_data_get_string(settings, param_name);
+				bfree(param->value.string);
+				param->value.string = str ? bstrdup(str) : NULL;
+			}
 			break;
 		default:;
 		}
@@ -3188,8 +3250,8 @@ static void render_shader(struct shader_filter_data *filter, float f, obs_source
 				if (!param->param)
 					continue;
 
-				for (size_t j = 0; j < filter->stored_param_list.num; j++) {
-					struct effect_param_data *param2 = (filter2->stored_param_list.array + i);
+				for (size_t j = 0; j < filter2->stored_param_list.num; j++) {
+					struct effect_param_data *param2 = (filter2->stored_param_list.array + j);
 					if (!param2->param)
 						continue;
 					if (param->type != param2->type)
@@ -3526,6 +3588,7 @@ static void shader_transition_video_callback(void *data, gs_texture_t *a, gs_tex
 		return;
 
 	struct shader_filter_data *filter = data;
+	filter->transitioning = true;
 	if (filter->effect == NULL || filter->rendering)
 		return;
 
@@ -3535,7 +3598,6 @@ static void shader_transition_video_callback(void *data, gs_texture_t *a, gs_tex
 		if (obs_source_showing(filter->context))
 			shader_filter_param_source_action(data, obs_source_inc_showing);
 	}
-	filter->transitioning = true;
 
 	const bool previous = gs_framebuffer_srgb_enabled();
 	gs_enable_framebuffer_srgb(true);

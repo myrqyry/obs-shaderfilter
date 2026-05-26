@@ -856,6 +856,9 @@ static bool shader_filter_text_changed(obs_properties_t *props, obs_property_t *
 	if (!filter)
 		return false;
 
+	filter->auto_reload_pending = true;
+	filter->auto_reload_deadline = os_gettime_ns() + 300000000ULL;
+
 	const char *shader_text = obs_data_get_string(settings, "shader_text");
 	bool can_convert = strstr(shader_text, "void mainImage( out vec4") || strstr(shader_text, "void mainImage(out vec4") ||
 			   strstr(shader_text, "void main()") || strstr(shader_text, "vec4 effect(vec4");

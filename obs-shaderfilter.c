@@ -2893,6 +2893,16 @@ static void shader_filter_tick(void *data, float seconds)
 	obs_source_t *target = filter->transition ? filter->context : obs_filter_get_target(filter->context);
 	if (!target)
 		return;
+
+	if (filter->auto_reload_pending) {
+		uint64_t now = os_gettime_ns();
+		if (now >= filter->auto_reload_deadline) {
+			filter->auto_reload_pending = false;
+			filter->reload_effect = true;
+			obs_source_update(filter->context, NULL);
+		}
+	}
+
 	// Determine offsets from expansion values.
 	int base_width = obs_source_get_base_width(target);
 	int base_height = obs_source_get_base_height(target);

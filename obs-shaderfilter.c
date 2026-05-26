@@ -243,6 +243,7 @@ struct shader_filter_data {
 
 	bool auto_reload_pending;
 	uint64_t auto_reload_deadline;
+	bool auto_triggered_reload;
 
 	float last_render_f;
 
@@ -2657,7 +2658,9 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 	if (filter->reload_effect) {
 		filter->reload_effect = false;
 		shader_filter_reload_effect(filter);
-		obs_source_update_properties(filter->context);
+		if (!filter->auto_triggered_reload)
+			obs_source_update_properties(filter->context);
+		filter->auto_triggered_reload = false;
 	}
 
 	if (filter->param_audio_magnitude || filter->param_audio_peak) {
@@ -2944,6 +2947,7 @@ static void shader_filter_tick(void *data, float seconds)
 		if (now >= filter->auto_reload_deadline) {
 			filter->auto_reload_pending = false;
 			filter->reload_effect = true;
+			filter->auto_triggered_reload = true;
 			obs_source_update(filter->context, NULL);
 		}
 	}

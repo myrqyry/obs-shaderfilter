@@ -25,6 +25,7 @@
 #endif
 
 #include "version.h"
+#include "obs-shaderfilter.h"
 
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
 
@@ -245,6 +246,8 @@ struct shader_filter_data {
 	bool auto_reload_pending;
 	uint64_t auto_reload_deadline;
 
+	float last_render_f;
+
 	struct vec2 uv_offset;
 	struct vec2 uv_scale;
 	struct vec2 uv_pixel_interval;
@@ -294,15 +297,17 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 	char *dup = bstrdup(file_name);
 	darray_push_back(sizeof(char *), &visited->da, &dup);
 
+	struct dstr shader_file;
+	dstr_init(&shader_file);
+
 	char *file_ptr = os_quick_read_utf8_file(file_name);
 	if (file_ptr == NULL) {
 		blog(LOG_WARNING, "[obs-shaderfilter] failed to read file: %s",
 		     file_name);
+		dstr_free(&shader_file);
 		return NULL;
 	}
 	char **lines = strlist_split(file_ptr, '\n', true);
-	struct dstr shader_file;
-	dstr_init(&shader_file);
 
 	size_t line_i = 0;
 	while (lines[line_i] != NULL) {
@@ -351,6 +356,7 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 	bfree(file_ptr);
 	strlist_free(lines);
 
+	/* Caller owns this pointer; it is shader_file.array with dstr not freed. */
 	return shader_file.array;
 }
 
@@ -962,6 +968,11 @@ static void convert_atan(struct dstr *effect_text)
 		int depth = 1;
 		char *p = effect_text->array + diff + 5;
 		while (*p && depth > 0) {
+			if (*p == '/' && *(p + 1) == '/') {
+				while (*p && *p != '\n')
+					p++;
+				continue;
+			}
 			if (*p == '(') {
 				depth++;
 			} else if (*p == ')') {
@@ -1620,7 +1631,12 @@ static void convert_define(struct dstr *effect_text)
 			end++;
 		char *t = strstr(start, "(");
 		if (t && t < end) {
-			// Function-like macro not supported by HLSL — remove line
+			struct dstr macro_name = {0};
+			dstr_ncat(&macro_name, start, end - start);
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] Dropping unsupported function-like macro: %s(...)",
+			     macro_name.array);
+			dstr_free(&macro_name);
 			char *line_end = strstr(pos, "\n");
 			if (line_end)
 				dstr_remove(effect_text, diff, line_end - pos + 1);
@@ -2438,7 +2454,9 @@ static obs_properties_t *shader_filter_properties(void *data)
 			break;
 		}
 		case GS_SHADER_PARAM_INT3:
-
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] Parameter '%s' is unsupported type int3; skipping UI.",
+			     param_name);
 			break;
 		case GS_SHADER_PARAM_VEC2: {
 			double range_min = param->minimum.f;
@@ -2980,6 +2998,7 @@ static void shader_filter_tick(void *data, float seconds)
 
 	filter->output_rendered = false;
 	filter->input_rendered = false;
+	filter->last_render_f = -1.0f;
 }
 
 static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render)
@@ -3435,10 +3454,11 @@ static void shader_filter_render(void *data, gs_effect_t *effect)
 	if (move_get_transition_filter)
 		f = move_get_transition_filter(filter->context, &filter_to);
 
-	if (f == 0.0f && filter->output_rendered) {
+	if (f == filter->last_render_f) {
 		draw_output(filter);
 		return;
 	}
+	filter->last_render_f = f;
 
 	if (filter->effect == NULL || filter->rendering) {
 		obs_source_skip_video_filter(filter->context);

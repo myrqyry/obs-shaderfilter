@@ -355,8 +355,12 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 	bfree(file_ptr);
 	strlist_free(lines);
 
-	/* Caller owns this pointer; it is shader_file.array with dstr not freed. */
-	return shader_file.array;
+	/* Transfer ownership: null out dstr's array so dstr_free is a no-op
+	 * on the buffer; caller owns and must bfree() the returned pointer. */
+	char *result = shader_file.array;
+	shader_file.array = NULL;
+	dstr_free(&shader_file);
+	return result;
 }
 
 /**

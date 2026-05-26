@@ -2304,15 +2304,6 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_add_button2(source_group, "shader_convert", obs_module_text("ShaderFilter.Convert"), shader_filter_convert,
 				   data);
 
-	char *abs_path = os_get_abs_path_ptr(examples_path.array);
-	obs_property_t *file_name = obs_properties_add_path(source_group, "shader_file_name",
-							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
-							    abs_path ? abs_path : examples_path.array);
-	if (abs_path)
-		bfree(abs_path);
-	dstr_free(&examples_path);
-	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
-
 	if (filter) {
 		obs_data_t *settings = obs_source_get_settings(filter->context);
 		const char *last_error = obs_data_get_string(settings, "last_error");
@@ -2323,6 +2314,15 @@ static obs_properties_t *shader_filter_properties(void *data)
 		}
 		obs_data_release(settings);
 	}
+
+	char *abs_path = os_get_abs_path_ptr(examples_path.array);
+	obs_property_t *file_name = obs_properties_add_path(source_group, "shader_file_name",
+							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
+							    abs_path ? abs_path : examples_path.array);
+	if (abs_path)
+		bfree(abs_path);
+	dstr_free(&examples_path);
+	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
 
 	obs_properties_add_button2(source_group, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
 				   shader_filter_reload_effect_clicked, data);

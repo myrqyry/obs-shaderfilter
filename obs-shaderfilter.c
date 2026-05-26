@@ -29,8 +29,6 @@
 
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
 
-#define nullptr ((void *)0)
-
 static const char *effect_template_begin = "\
 uniform float4x4 ViewProj;\n\
 uniform texture2d image;\n\
@@ -266,6 +264,7 @@ struct shader_filter_data {
 	obs_volmeter_t *volmeter;
 	float current_audio_peak;
 	float current_audio_magnitude;
+	pthread_mutex_t audio_mutex;
 
 	DARRAY(struct effect_param_data) stored_param_list;
 };
@@ -805,6 +804,8 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
+	pthread_mutex_init(&filter->audio_mutex, NULL);
+
 	da_init(filter->stored_param_list);
 	load_output_effect(filter);
 	obs_source_update(source, settings);
@@ -841,6 +842,8 @@ static void shader_filter_destroy(void *data)
 		obs_volmeter_destroy(filter->volmeter);
 	if (filter->audio_source_name)
 		bfree(filter->audio_source_name);
+
+	pthread_mutex_destroy(&filter->audio_mutex);
 
 	bfree(filter);
 }
@@ -2266,6 +2269,8 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 	UNUSED_PARAMETER(input_peak);
 	struct shader_filter_data *filter = (struct shader_filter_data *)data;
 
+	pthread_mutex_lock(&filter->audio_mutex);
+
 	float max_peak = MIN_AUDIO_THRESHOLD;
 	for (int i = 0; i < MAX_AUDIO_CHANNELS; i++) {
 		if (peak[i] > max_peak) {
@@ -2282,6 +2287,8 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 
 	filter->current_audio_peak = convert_db_to_linear(max_peak);
 	filter->current_audio_magnitude = convert_db_to_linear(max_magnitude);
+
+	pthread_mutex_unlock(&filter->audio_mutex);
 }
 
 static bool shader_filter_enum_audio_sources(void *data, obs_source_t *source)
@@ -2989,8 +2996,10 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->rand_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
 	if (filter->volmeter) {
+		pthread_mutex_lock(&filter->audio_mutex);
 		filter->audio_peak = filter->current_audio_peak;
 		filter->audio_magnitude = filter->current_audio_magnitude;
+		pthread_mutex_unlock(&filter->audio_mutex);
 	} else {
 		filter->audio_peak = 0.0f;
 		filter->audio_magnitude = 0.0f;
@@ -3623,6 +3632,8 @@ static void *shader_transition_create(obs_data_t *settings, obs_source_t *source
 	filter->last_from_file = obs_data_get_bool(settings, "from_file");
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
+
+	pthread_mutex_init(&filter->audio_mutex, NULL);
 
 	da_init(filter->stored_param_list);
 

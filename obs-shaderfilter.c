@@ -242,6 +242,9 @@ struct shader_filter_data {
 	bool no_repeat;
 	bool rendering;
 
+	bool auto_reload_pending;
+	uint64_t auto_reload_deadline;
+
 	struct vec2 uv_offset;
 	struct vec2 uv_scale;
 	struct vec2 uv_pixel_interval;

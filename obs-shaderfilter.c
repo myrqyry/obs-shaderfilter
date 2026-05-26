@@ -1080,7 +1080,8 @@ static void convert_mat_mul_var(struct dstr *effect_text, struct dstr *var_funct
 {
 	char *pos = strstr(effect_text->array, var_function_name->array);
 	while (pos) {
-		if (is_var_char(*(pos - 1)) || is_var_char(*(pos + var_function_name->len))) {
+		if ((pos > effect_text->array && is_var_char(*(pos - 1))) ||
+		    is_var_char(*(pos + var_function_name->len))) {
 			pos = strstr(pos + var_function_name->len, var_function_name->array);
 			continue;
 		}
@@ -1147,13 +1148,13 @@ static void convert_mat_mul(struct dstr *effect_text, char *var_type)
 	size_t len = strlen(var_type);
 	char *pos = strstr(effect_text->array, var_type);
 	while (pos) {
-		if (is_var_char(*(pos - 1))) {
+		if (pos > effect_text->array && is_var_char(*(pos - 1))) {
 			pos = strstr(pos + len, var_type);
 			continue;
 		}
 		size_t diff = pos - effect_text->array;
 		char *begin = pos + len;
-		if (*begin == '(') {
+		if (diff > 0 && *begin == '(') {
 			char *ch = pos - 1;
 			while ((*ch == ' ' || *ch == '\t') && ch > effect_text->array)
 				ch--;
@@ -1683,7 +1684,8 @@ static void convert_return(struct dstr *effect_text, struct dstr *var_name, size
 	size_t count = 0;
 	char *pos = strstr(effect_text->array + main_diff, var_name->array);
 	while (pos) {
-		if (is_var_char(*(pos - 1)) || (*(pos - 1) == '/' && *(pos - 2) == '/')) {
+		if ((pos > effect_text->array && is_var_char(*(pos - 1))) ||
+		    (pos > effect_text->array + 1 && *(pos - 1) == '/' && *(pos - 2) == '/')) {
 			pos = strstr(pos + var_name->len, var_name->array);
 			continue;
 		}
@@ -1699,7 +1701,8 @@ static void convert_return(struct dstr *effect_text, struct dstr *var_name, size
 
 		if (*ch == '=' || (*(ch + 1) == '=' && (*ch == '*' || *ch == '/' || *ch == '+' || *ch == '-'))) {
 			char *bpos = pos - 1;
-			while (*bpos != '\n' && (*bpos != '/' || *(bpos + 1) != '/') && bpos > effect_text->array)
+			while (bpos > effect_text->array && *bpos != '\n' &&
+			       (*bpos != '/' || *(bpos + 1) != '/'))
 				bpos--;
 			if (*bpos == '/' && *(bpos + 1) == '/') {
 				//comment line
@@ -1715,12 +1718,13 @@ static void convert_return(struct dstr *effect_text, struct dstr *var_name, size
 	if (count == 1) {
 		pos = strstr(effect_text->array + main_diff, var_name->array);
 		while (pos) {
-			if (is_var_char(*(pos - 1))) {
+			if (pos > effect_text->array && is_var_char(*(pos - 1))) {
 				pos = strstr(pos + var_name->len, var_name->array);
 				continue;
 			}
 			char *bpos = pos - 1;
-			while (*bpos != '\n' && (*bpos != '/' || *(bpos + 1) != '/') && bpos > effect_text->array)
+			while (bpos > effect_text->array && *bpos != '\n' &&
+			       (*bpos != '/' || *(bpos + 1) != '/'))
 				bpos--;
 			if (*bpos == '/' && *(bpos + 1) == '/') {
 				pos = strstr(pos + var_name->len, var_name->array);
@@ -1989,7 +1993,8 @@ static bool shader_filter_convert(obs_properties_t *props, obs_property_t *prope
 			char *pos = strstr(effect_text.array, coord_name.array);
 			while (pos) {
 				size_t diff = pos - effect_text.array;
-				if (((main_no_args || diff < main_diff) || diff > main_diff + 24) && !is_var_char(*(pos - 1)) &&
+				if (((main_no_args || diff < main_diff) || diff > main_diff + 24) &&
+				    (pos == effect_text.array || !is_var_char(*(pos - 1))) &&
 				    !is_var_char(*(pos + coord_name.len))) {
 					dstr_remove(&effect_text, diff, coord_name.len);
 					dstr_insert(&effect_text, diff, "fragCoord");

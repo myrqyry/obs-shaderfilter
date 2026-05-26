@@ -616,8 +616,6 @@ static void shader_filter_reload_effect(struct shader_filter_data *filter)
 	}
 
 	// Store references to the new effect's parameters.
-	da_free(filter->stored_param_list);
-
 	size_t effect_count = gs_effect_get_num_params(filter->effect);
 	for (size_t effect_index = 0; effect_index < effect_count; effect_index++) {
 		gs_eparam_t *param = gs_effect_get_param_by_idx(filter->effect, effect_index);
@@ -2266,8 +2264,10 @@ static const char *shader_filter_texture_file_filter = "Textures (*.bmp *.tga *.
 
 static float convert_db_to_linear(float db_value)
 {
-	if (db_value <= MIN_AUDIO_THRESHOLD || db_value > 0.0f)
+	if (db_value <= MIN_AUDIO_THRESHOLD)
 		return 0.0f;
+	if (db_value > 0.0f)
+		return 1.0f;
 
 	return fmaxf(0.0f, fminf(1.0f, (db_value - MIN_AUDIO_THRESHOLD) / (-MIN_AUDIO_THRESHOLD)));
 }
@@ -2970,10 +2970,10 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->uv_pixel_interval.x = 1.0f / base_width;
 	filter->uv_pixel_interval.y = 1.0f / base_height;
 
-	if (filter->shader_start_time == 0.0f) {
-		filter->shader_start_time = filter->elapsed_time + seconds;
-	}
 	filter->elapsed_time += seconds;
+	if (filter->shader_start_time == 0.0f) {
+		filter->shader_start_time = filter->elapsed_time;
+	}
 	filter->elapsed_time_loop += seconds;
 	if (filter->elapsed_time_loop > 1.0f) {
 		filter->elapsed_time_loop -= 1.0f;

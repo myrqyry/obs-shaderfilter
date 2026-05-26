@@ -274,11 +274,8 @@ static unsigned int rand_interval(unsigned int min, unsigned int max)
 	const unsigned int buckets = RAND_MAX / range;
 	const unsigned int limit = buckets * range;
 
-	/* Create equal size buckets all in a row, then fire randomly towards
-	 * the buckets until you land in one of them. All buckets are equally
-	 * likely. If you land off the end of the line of buckets, try again. */
 	do {
-		r = rand();
+		r = (unsigned int)rand();
 	} while (r >= limit);
 
 	return min + (r / buckets);
@@ -320,18 +317,29 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 				size_t length = pos - file_name + 1;
 				dstr_ncopy(&include_path, file_name, length);
 			}
-			char *start = strchr(line, '"') + 1;
-			char *end = strrchr(line, '"');
+			char *q1 = strchr(line, '"');
+			char *q2 = q1 ? strrchr(line, '"') : NULL;
+			if (!q1 || !q2 || q2 <= q1) {
+				blog(LOG_WARNING,
+				     "[obs-shaderfilter] malformed #include line: %s",
+				     line);
+				dstr_free(&include_path);
+				continue;
+			}
+			char *start = q1 + 1;
+			char *end = q2;
 
 			dstr_ncat(&include_path, start, end - start);
 			char *abs_include_path =
 				os_get_abs_path_ptr(include_path.array);
 			char *file_contents = load_shader_from_file_internal(
 				abs_include_path, visited);
-			dstr_cat(&shader_file, file_contents);
-			dstr_cat(&shader_file, "\n");
+			if (file_contents) {
+				dstr_cat(&shader_file, file_contents);
+				dstr_cat(&shader_file, "\n");
+				bfree(file_contents);
+			}
 			bfree(abs_include_path);
-			bfree(file_contents);
 			dstr_free(&include_path);
 		} else {
 			// else place current line here.
@@ -1832,6 +1840,9 @@ static bool shader_filter_convert(obs_properties_t *props, obs_property_t *prope
 	struct dstr effect_text = {0};
 	dstr_init_copy(&effect_text, obs_data_get_string(settings, "shader_text"));
 
+	//convert_define is disabled because it removes function-like macro
+	//definitions but leaves their call sites intact, producing broken HLSL.
+	//Re-enable only after implementing call-site substitution.
 	//convert_define(&effect_text);
 
 	size_t start_diff = 24;
@@ -2241,14 +2252,14 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 
 	float max_peak = MIN_AUDIO_THRESHOLD;
 	for (int i = 0; i < MAX_AUDIO_CHANNELS; i++) {
-		if (peak[i] > max_peak && peak[i] != 0.0f) {
+		if (peak[i] > max_peak) {
 			max_peak = peak[i];
 		}
 	}
 
 	float max_magnitude = MIN_AUDIO_THRESHOLD;
 	for (int i = 0; i < MAX_AUDIO_CHANNELS; i++) {
-		if (magnitude[i] > max_magnitude && magnitude[i] != 0.0f) {
+		if (magnitude[i] > max_magnitude) {
 			max_magnitude = magnitude[i];
 		}
 	}
@@ -2907,6 +2918,9 @@ static void shader_filter_tick(void *data, float seconds)
 	int base_width = obs_source_get_base_width(target);
 	int base_height = obs_source_get_base_height(target);
 
+	if (base_width == 0 || base_height == 0)
+		return;
+
 	filter->total_width = filter->expand_left + base_width + filter->expand_right;
 	filter->total_height = filter->expand_top + base_height + filter->expand_bottom;
 
@@ -2968,7 +2982,7 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->input_rendered = false;
 }
 
-gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render)
+static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render)
 {
 	if (!render) {
 		render = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
@@ -3065,7 +3079,7 @@ static void draw_output(struct shader_filter_data *filter)
 	obs_source_process_filter_end(filter->context, pass_through, filter->total_width, filter->total_height);
 }
 
-void shader_filter_set_effect_params(struct shader_filter_data *filter)
+static void shader_filter_set_effect_params(struct shader_filter_data *filter)
 {
 
 	if (filter->param_uv_scale != NULL) {
@@ -3474,7 +3488,7 @@ static enum gs_color_space shader_filter_get_color_space(void *data, size_t coun
 	return obs_source_get_color_space(target, OBS_COUNTOF(potential_spaces), potential_spaces);
 }
 
-void shader_filter_param_source_action(void *data, void (*action)(obs_source_t *source))
+static void shader_filter_param_source_action(void *data, void (*action)(obs_source_t *source))
 {
 	struct shader_filter_data *filter = data;
 	size_t param_count = filter->stored_param_list.num;

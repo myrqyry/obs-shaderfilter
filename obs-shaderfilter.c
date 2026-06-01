@@ -238,6 +238,8 @@ struct shader_filter_data {
 
 	int total_width;
 	int total_height;
+	int width;
+	int height;
 	bool no_repeat;
 	bool rendering;
 
@@ -800,6 +802,12 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 	struct shader_filter_data *filter = bzalloc(sizeof(struct shader_filter_data));
 	filter->context = source;
 	filter->reload_effect = true;
+	filter->width = 1920;
+	filter->height = 1080;
+	filter->uv_scale.x = 1.0f;
+	filter->uv_scale.y = 1.0f;
+	filter->uv_offset.x = 0.0f;
+	filter->uv_offset.y = 0.0f;
 
 	dstr_init(&filter->last_path);
 	dstr_copy(&filter->last_path, obs_data_get_string(settings, "shader_file_name"));
@@ -2939,8 +2947,6 @@ static void shader_filter_tick(void *data, float seconds)
 {
 	struct shader_filter_data *filter = data;
 	obs_source_t *target = filter->transition ? filter->context : obs_filter_get_target(filter->context);
-	if (!target)
-		return;
 
 	if (filter->auto_reload_pending) {
 		uint64_t now = os_gettime_ns();
@@ -2952,27 +2958,39 @@ static void shader_filter_tick(void *data, float seconds)
 		}
 	}
 
-	// Determine offsets from expansion values.
-	int base_width = obs_source_get_base_width(target);
-	int base_height = obs_source_get_base_height(target);
+	int base_width, base_height;
+	if (target) {
+		base_width = obs_source_get_base_width(target);
+		base_height = obs_source_get_base_height(target);
+		if (base_width == 0 || base_height == 0) {
+			obs_source_skip_video_filter(filter->context);
+			return;
+		}
+		filter->total_width = filter->expand_left + base_width + filter->expand_right;
+		filter->total_height = filter->expand_top + base_height + filter->expand_bottom;
 
-	if (base_width == 0 || base_height == 0)
-		return;
-
-	filter->total_width = filter->expand_left + base_width + filter->expand_right;
-	filter->total_height = filter->expand_top + base_height + filter->expand_bottom;
+		filter->uv_scale.x = (float)filter->total_width / base_width;
+		filter->uv_scale.y = (float)filter->total_height / base_height;
+		filter->uv_offset.x = (float)(-filter->expand_left) / base_width;
+		filter->uv_offset.y = (float)(-filter->expand_top) / base_height;
+		filter->uv_pixel_interval.x = 1.0f / base_width;
+		filter->uv_pixel_interval.y = 1.0f / base_height;
+	} else {
+		// Pure generative source path
+		base_width = filter->width;
+		base_height = filter->height;
+		filter->total_width = base_width;
+		filter->total_height = base_height;
+		filter->uv_scale.x = 1.0f;
+		filter->uv_scale.y = 1.0f;
+		filter->uv_offset.x = 0.0f;
+		filter->uv_offset.y = 0.0f;
+		filter->uv_pixel_interval.x = 1.0f / base_width;
+		filter->uv_pixel_interval.y = 1.0f / base_height;
+	}
 
 	filter->uv_size.x = (float)filter->total_width;
 	filter->uv_size.y = (float)filter->total_height;
-
-	filter->uv_scale.x = (float)filter->total_width / base_width;
-	filter->uv_scale.y = (float)filter->total_height / base_height;
-
-	filter->uv_offset.x = (float)(-filter->expand_left) / base_width;
-	filter->uv_offset.y = (float)(-filter->expand_top) / base_height;
-
-	filter->uv_pixel_interval.x = 1.0f / base_width;
-	filter->uv_pixel_interval.y = 1.0f / base_height;
 
 	filter->elapsed_time += seconds;
 	if (filter->shader_start_time == 0.0f) {
@@ -3065,8 +3083,10 @@ static void get_input_source(struct shader_filter_data *filter)
 	// Start the rendering process with our correct color space params,
 	// And set up your texrender to recieve the created texture.
 	if (!filter->transition &&
-	    !obs_source_process_filter_begin_with_color_space(filter->context, format, source_space, OBS_NO_DIRECT_RENDERING))
+	    !obs_source_process_filter_begin_with_color_space(filter->context, format, source_space, OBS_NO_DIRECT_RENDERING)) {
+		obs_source_skip_video_filter(filter->context);
 		return;
+	}
 
 	if (gs_texrender_begin(filter->input_texrender, filter->total_width, filter->total_height)) {
 
@@ -3105,6 +3125,7 @@ static void draw_output(struct shader_filter_data *filter)
 	const enum gs_color_format format = gs_get_format_from_space(source_space);
 
 	if (!obs_source_process_filter_begin_with_color_space(filter->context, format, source_space, OBS_NO_DIRECT_RENDERING)) {
+		obs_source_skip_video_filter(filter->context);
 		return;
 	}
 
@@ -3501,14 +3522,15 @@ static uint32_t shader_filter_getwidth(void *data)
 {
 	struct shader_filter_data *filter = data;
 
-	return filter->total_width;
+	// Prefer explicit source dimensions only when filter path hasn't computed total yet
+	return (filter->total_width > 0) ? filter->total_width : filter->width;
 }
 
 static uint32_t shader_filter_getheight(void *data)
 {
 	struct shader_filter_data *filter = data;
 
-	return filter->total_height;
+	return (filter->total_height > 0) ? filter->total_height : filter->height;
 }
 
 static void shader_filter_defaults(obs_data_t *settings)
@@ -3527,6 +3549,8 @@ static enum gs_color_space shader_filter_get_color_space(void *data, size_t coun
 		GS_CS_SRGB_16F,
 		GS_CS_709_EXTENDED,
 	};
+	if (!target)
+		return GS_CS_SRGB;  // generative source has no target
 	return obs_source_get_color_space(target, OBS_COUNTOF(potential_spaces), potential_spaces);
 }
 
@@ -3786,6 +3810,44 @@ struct obs_source_info shader_transition = {
 	.missing_files = shader_filter_missing_files,
 };
 
+static void shader_source_render(void *data, gs_effect_t *effect)
+{
+	UNUSED_PARAMETER(effect);
+	struct shader_filter_data *filter = data;
+	if (!filter->effect)
+		return;
+	shader_filter_set_effect_params(filter);
+	gs_blend_state_push();
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+	while (gs_effect_loop(filter->effect, "Draw")) {
+		gs_draw_sprite(NULL, 0, filter->width, filter->height);
+	}
+	gs_blend_state_pop();
+}
+
+struct obs_source_info shader_source = {
+	.id = "shader_source",
+	.type = OBS_SOURCE_TYPE_INPUT,
+	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_SRGB | OBS_SOURCE_CUSTOM_DRAW,
+	.create = shader_filter_create,
+	.destroy = shader_filter_destroy,
+	.update = shader_filter_update,
+	.load = shader_filter_update,
+	.video_tick = shader_filter_tick,
+	.get_name = shader_filter_get_name,
+	.get_defaults = shader_filter_defaults,
+	.get_width = shader_filter_getwidth,
+	.get_height = shader_filter_getheight,
+	.video_render = shader_source_render,
+	.get_properties = shader_filter_properties,
+	.video_get_color_space = shader_filter_get_color_space,
+	.activate = shader_filter_activate,
+	.deactivate = shader_filter_deactivate,
+	.show = shader_filter_show,
+	.hide = shader_filter_hide,
+	.missing_files = shader_filter_missing_files,
+};
+
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-shaderfilter", "en-US")
 
@@ -3794,6 +3856,7 @@ bool obs_module_load(void)
 	blog(LOG_INFO, "[obs-shaderfilter] loaded version %s", PROJECT_VERSION);
 	obs_register_source(&shader_filter);
 	obs_register_source(&shader_transition);
+	obs_register_source(&shader_source);
 
 	return true;
 }

@@ -14,3 +14,16 @@
 obs-shaderfilter.rc
 version.h
 docs/superpowers/
+
+# Proactive Agent files (local only)
+ONBOARDING.md
+AGENTS.md
+SOUL.md
+USER.md
+MEMORY.md
+HEARTBEAT.md
+TOOLS.md
+SESSION-STATE.md
+memory/
+notes/
+data/examples/myrqyry/

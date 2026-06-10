@@ -18,4 +18,18 @@
 - Verified full parameter path in shader_filter_tick + shader_filter_set_effect_params
 - Restructured tick: sources now get proper uv_size/scale/offset/pixel_interval + elapsed_time accumulation (no early return when !target)
 - Created data/examples/3d_text_sdf.shader (MQR 2.5D extruded text with bevel, Curve Simplify, and bob animation) — fixed cross-platform (removed unsupported `uniform string` + indexing)
-- Created data/examples/outline_canny.shader — modern single-pass Sobel outline with threshold, thickness, color, and glow
+- Created data/examples/canny_true.shader — proper single-pass Canny (gradient + direction + NMS + hysteresis + thickness)
+- Initialized full proactive agent file set (AGENTS.md, SOUL.md, USER.md, MEMORY.md, HEARTBEAT.md, TOOLS.md, working-buffer.md) and added to .gitignore
+
+## 2026-06-01 (This Session)
+- Completed full proactive agent v3.0.0 architecture setup:
+  - Created ONBOARDING.md (first-run setup tracker)
+  - Upgraded SOUL.md (full identity + boundaries + ADL priorities)
+  - Upgraded USER.md (detailed preferences, focus, communication style)
+  - Upgraded MEMORY.md (structured learnings + anti-patterns + open questions)
+  - Upgraded HEARTBEAT.md (full checklist from skill spec)
+  - Upgraded TOOLS.md (comprehensive OBS/shaders/git/cmake/debug tooling)
+  - Created memory/2026-06-01.md (daily log)
+  - Reset memory/working-buffer.md to STANDBY
+  - Created notes/areas/ (proactive-tracker, recurring-patterns, outcome-journal)
+  - Updated AGENTS.md with all six pillars + protocols

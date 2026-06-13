@@ -214,3 +214,23 @@
 - Installed rebuilt plugin to `/home/myrqyry/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so`.
 - `ldd /home/myrqyry/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so | rg 'not found|libonnxruntime'` only reports the local ONNX Runtime path, confirming no unresolved dependencies in that focused check.
 - Caveat: `ENABLE_QT=false` and `ENABLE_FRONTEND_API=false` remain in the current local preset, so the advanced dock is still unavailable unless the build is reconfigured with dock support.
+
+## 2026-06-13 HyperShaderFX Dock Support Probe
+- User approved proceeding with the advanced Shader Builder dock path.
+- Wrote local plan file `/home/myrqyry/MQR/hyperShaderFX/docs/superpowers/plans/2026-06-13-enable-shader-builder-dock.md`.
+- Probed dock build dependencies with:
+  - `cmake --preset ubuntu-local-install-x86_64 -DENABLE_FRONTEND_API=ON -DENABLE_QT=ON -DUSE_ONNX_RUNTIME=ON -DONNXRUNTIME_INCLUDE=/home/myrqyry/MQR/live-latent-lab-sound/build_x86_64/_deps/onnxruntime-src/include -DONNXRUNTIME_LIB=/home/myrqyry/MQR/live-latent-lab-sound/build_x86_64/_deps/onnxruntime-src/lib/libonnxruntime.so`
+- Probe result: configuration failed at `CMakeLists.txt:123` with `ENABLE_QT is ON, but Qt6 was not found`.
+- Decision: Do not persist `ENABLE_QT=ON` or `ENABLE_FRONTEND_API=ON` in the local preset because it would break local builds on this machine.
+- Restored local non-dock configuration with `ENABLE_QT=OFF` and `ENABLE_FRONTEND_API=OFF` while keeping ONNX Runtime enabled.
+- Patched `/home/myrqyry/MQR/hyperShaderFX/src/hyper_ui.c` so **Open Shader Dock** logs the exact needed flags when dock support is not built: `ENABLE_QT=ON` and `ENABLE_FRONTEND_API=ON`.
+- Verification passed:
+  - `cmake --build --preset ubuntu-local-install-x86_64 --target hyperShaderFX --parallel`
+  - `npm run verify:settings`
+  - `npm run verify:mediapipe`
+  - `./build-aux/run-clang-format --fail-error --check src/filter-hypershader.c src/mediapipe/mp_wrapper.cpp`
+  - `git diff --check -- src/hyper_ui.c`
+  - `cmake --install build_x86_64`
+  - `ldd /home/myrqyry/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so | rg 'not found|libonnxruntime|Qt6|obs-frontend'`
+- HyperShaderFX commit: `b6b9005 fix(ui): explain missing shader builder dock support`.
+- Remaining blocker for actual dock support: install/discover Qt6 components required by CMake: `Qt6::Widgets`, `Qt6::WebEngineWidgets`, and `Qt6::WebChannel`, then re-run the dock-enabled configure probe.

@@ -234,3 +234,24 @@
   - `ldd /home/myrqyry/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so | rg 'not found|libonnxruntime|Qt6|obs-frontend'`
 - HyperShaderFX commit: `b6b9005 fix(ui): explain missing shader builder dock support`.
 - Remaining blocker for actual dock support: install/discover Qt6 components required by CMake: `Qt6::Widgets`, `Qt6::WebEngineWidgets`, and `Qt6::WebChannel`, then re-run the dock-enabled configure probe.
+
+## 2026-06-13 HyperShaderFX Dock Support Enabled
+- User installed missing Qt6 dev packages: `qt6-webchannel-dev`, `qt6-webengine-dev`, `qt6-webengine-dev-tools`.
+- Re-probed dock configuration: CMake configured successfully with `ENABLE_QT=ON` and `ENABLE_FRONTEND_API=ON`.
+- Persisted `ENABLE_FRONTEND_API=true` and `ENABLE_QT=true` in the `ubuntu-local-install-x86_64` preset.
+- First build failed with three errors in `src/ui/shader_builder_dock.hpp`:
+  - Missing `#include <obs-frontend-api.h>` caused `obs_frontend_event`, `obs_source_t`, and `obs_hotkey_id` to be undeclared.
+  - Hotkey callback signature was `bool (*)(void*, obs_hotkey_id, bool)` but OBS expects `void (*)(void*, obs_hotkey_id, obs_hotkey_t*, bool)`.
+- Fixed `src/ui/shader_builder_dock.hpp`: added `#include <obs-frontend-api.h>`.
+- Fixed `src/ui/shader_builder_dock.cpp`: changed hotkey callback to `void` return with correct OBS signature and `UNUSED_PARAMETER` guards.
+- Second build passed with dock support compiled in.
+- Verification passed:
+  - `cmake --build --preset ubuntu-local-install-x86_64 --target hyperShaderFX --parallel`
+  - `npm run verify:settings`
+  - `npm run verify:mediapipe`
+  - `./build-aux/run-clang-format --fail-error --check src/filter-hypershader.c src/mediapipe/mp_wrapper.cpp`
+  - `git diff --check -- CMakePresets.json src/ui/shader_builder_dock.hpp src/ui/shader_builder_dock.cpp`
+  - `cmake --install build_x86_64`
+  - `ldd /home/myrqyry/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so | rg 'not found|libonnxruntime|Qt6|obs-frontend'` — all Qt6, frontend API, and ONNX Runtime libraries resolve with no `not found` lines.
+- HyperShaderFX commit: `b675162 build(plugin): enable local shader builder dock`.
+- Installed plugin now includes the Shader Builder dock; **Open Shader Dock** button in filter properties will call `shader_builder_dock_show()` at runtime.

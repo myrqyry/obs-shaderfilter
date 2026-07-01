@@ -797,6 +797,12 @@ static const char *shader_filter_get_name(void *unused)
 	return obs_module_text("ShaderFilter");
 }
 
+static void shader_filter_init_source_mode(obs_data_t *settings)
+{
+	if (!obs_data_has_user_value(settings, "from_file") && !obs_data_has_user_value(settings, "shader_text"))
+		obs_data_set_bool(settings, "from_file", true);
+}
+
 static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 {
 	struct shader_filter_data *filter = bzalloc(sizeof(struct shader_filter_data));
@@ -808,6 +814,7 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 	filter->uv_scale.y = 1.0f;
 	filter->uv_offset.x = 0.0f;
 	filter->uv_offset.y = 0.0f;
+	shader_filter_init_source_mode(settings);
 
 	dstr_init(&filter->last_path);
 	dstr_copy(&filter->last_path, obs_data_get_string(settings, "shader_file_name"));
@@ -859,6 +866,26 @@ static void shader_filter_destroy(void *data)
 	bfree(filter);
 }
 
+static void shader_filter_update_shader_source_visibility(obs_properties_t *props, obs_data_t *settings, bool from_file)
+{
+	obs_property_t *shader_text = obs_properties_get(props, "shader_text");
+	obs_property_t *shader_convert = obs_properties_get(props, "shader_convert");
+	obs_property_t *shader_file_name = obs_properties_get(props, "shader_file_name");
+
+	if (shader_text)
+		obs_property_set_visible(shader_text, !from_file);
+	if (shader_file_name)
+		obs_property_set_visible(shader_file_name, from_file);
+
+	if (shader_convert) {
+		const char *shader_text_value = obs_data_get_string(settings, "shader_text");
+		bool can_convert = strstr(shader_text_value, "void mainImage( out vec4") ||
+				   strstr(shader_text_value, "void mainImage(out vec4") || strstr(shader_text_value, "void main()") ||
+				   strstr(shader_text_value, "vec4 effect(vec4");
+		obs_property_set_visible(shader_convert, can_convert && !from_file);
+	}
+}
+
 static bool shader_filter_from_file_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
 {
 	UNUSED_PARAMETER(p);
@@ -866,8 +893,31 @@ static bool shader_filter_from_file_changed(obs_properties_t *props, obs_propert
 
 	bool from_file = obs_data_get_bool(settings, "from_file");
 
-	obs_property_set_visible(obs_properties_get(props, "shader_text"), !from_file);
-	obs_property_set_visible(obs_properties_get(props, "shader_file_name"), from_file);
+	obs_data_set_bool(settings, "raw_shader", !from_file);
+	shader_filter_update_shader_source_visibility(props, settings, from_file);
+
+	if (!filter)
+		return true;
+
+	if (from_file != filter->last_from_file) {
+		filter->reload_effect = true;
+	}
+	filter->last_from_file = from_file;
+
+	return true;
+}
+
+static bool shader_filter_raw_shader_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
+{
+	UNUSED_PARAMETER(p);
+	struct shader_filter_data *filter = obs_properties_get_param(props);
+
+	bool from_file = !obs_data_get_bool(settings, "raw_shader");
+	obs_data_set_bool(settings, "from_file", from_file);
+	shader_filter_update_shader_source_visibility(props, settings, from_file);
+
+	if (!filter)
+		return true;
 
 	if (from_file != filter->last_from_file) {
 		filter->reload_effect = true;
@@ -891,7 +941,8 @@ static bool shader_filter_text_changed(obs_properties_t *props, obs_property_t *
 	bool can_convert = strstr(shader_text, "void mainImage( out vec4") || strstr(shader_text, "void mainImage(out vec4") ||
 			   strstr(shader_text, "void main()") || strstr(shader_text, "vec4 effect(vec4");
 	obs_property_t *shader_convert = obs_properties_get(props, "shader_convert");
-	bool visible = obs_property_visible(obs_properties_get(props, "shader_text"));
+	obs_property_t *shader_text_property = obs_properties_get(props, "shader_text");
+	bool visible = shader_text_property && obs_property_visible(shader_text_property);
 	if (obs_property_visible(shader_convert) != (can_convert && visible)) {
 		obs_property_set_visible(shader_convert, can_convert && visible);
 		return true;
@@ -2343,11 +2394,20 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_t *source_group = obs_properties_create();
 	obs_properties_add_group(props, "shader_source_group", obs_module_text("ShaderFilter.ShaderSource"),
 				 OBS_GROUP_NORMAL, source_group);
+	obs_data_t *settings = filter ? obs_source_get_settings(filter->context) : NULL;
+	bool from_file = settings ? obs_data_get_bool(settings, "from_file") : true;
+	if (settings)
+		obs_data_set_bool(settings, "raw_shader", !from_file);
 
-	obs_properties_add_bool(source_group, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
+	obs_property_t *override_effect = obs_properties_add_bool(source_group, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
+	obs_property_set_long_description(override_effect, obs_module_text("ShaderFilter.OverrideEntireEffect.Tooltip"));
 
-	obs_property_t *from_file = obs_properties_add_bool(source_group, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
-	obs_property_set_modified_callback(from_file, shader_filter_from_file_changed);
+	obs_property_t *from_file_property = obs_properties_add_bool(source_group, "from_file", obs_module_text("ShaderFilter.LoadFromFile"));
+	obs_property_set_modified_callback(from_file_property, shader_filter_from_file_changed);
+	obs_property_set_visible(from_file_property, false);
+
+	obs_property_t *raw_shader = obs_properties_add_bool(source_group, "raw_shader", obs_module_text("ShaderFilter.RawShader"));
+	obs_property_set_modified_callback(raw_shader, shader_filter_raw_shader_changed);
 
 	obs_property_t *shader_text =
 		obs_properties_add_text(source_group, "shader_text", obs_module_text("ShaderFilter.ShaderText"), OBS_TEXT_MULTILINE);
@@ -2356,15 +2416,13 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_add_button2(source_group, "shader_convert", obs_module_text("ShaderFilter.Convert"), shader_filter_convert,
 				   data);
 
-	if (filter) {
-		obs_data_t *settings = obs_source_get_settings(filter->context);
+	if (settings) {
 		const char *last_error = obs_data_get_string(settings, "last_error");
 		if (last_error && strlen(last_error)) {
 			obs_property_t *error =
 				obs_properties_add_text(source_group, "last_error", obs_module_text("ShaderFilter.Error"), OBS_TEXT_INFO);
 			obs_property_text_set_info_type(error, OBS_TEXT_INFO_ERROR);
 		}
-		obs_data_release(settings);
 	}
 
 	char *abs_path = os_get_abs_path_ptr(examples_path.array);
@@ -2375,6 +2433,10 @@ static obs_properties_t *shader_filter_properties(void *data)
 		bfree(abs_path);
 	dstr_free(&examples_path);
 	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
+	if (settings) {
+		shader_filter_update_shader_source_visibility(source_group, settings, from_file);
+		obs_data_release(settings);
+	}
 
 	obs_properties_add_button2(source_group, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
 				   shader_filter_reload_effect_clicked, data);
@@ -2630,8 +2692,9 @@ static obs_properties_t *shader_filter_properties(void *data)
 
 	if (!filter || !filter->transition) {
 		obs_properties_t *expand_group = obs_properties_create();
-		obs_properties_add_group(props, "expand_group", obs_module_text("ShaderFilter.ExpandPixels"),
+		obs_property_t *expand_prop = obs_properties_add_group(props, "expand_group", obs_module_text("ShaderFilter.ExpandPixels"),
 					 OBS_GROUP_NORMAL, expand_group);
+		obs_property_set_long_description(expand_prop, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
 
 		obs_properties_add_int(expand_group, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999,
 					   1);
@@ -3663,6 +3726,7 @@ static void *shader_transition_create(obs_data_t *settings, obs_source_t *source
 	filter->context = source;
 	filter->reload_effect = true;
 	filter->transition = true;
+	shader_filter_init_source_mode(settings);
 
 	dstr_init(&filter->last_path);
 	dstr_copy(&filter->last_path, obs_data_get_string(settings, "shader_file_name"));

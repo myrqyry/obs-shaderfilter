@@ -42,9 +42,9 @@ necessary files should look like this:
 The filter can be added to any source through the "Filters" option when right-clicking on a source. The name
 of the filter is "User-defined shader." 
 
-Shaders can either be entered directly in a text box in the filter properties, or loaded from a file. To change 
-between the two modes, use the "Load shader text from file" toggle. If you are entering your shader text directly,
-note that you will need to use the "Reload effect" button to apply your changes. This can also be used to reload an external file if changes have been made. 
+Shaders load from a file by default, or they can be entered directly in a text box in the filter properties. To enter
+shader text directly, enable the "Raw Shader Text" toggle. If you are entering your shader text directly, note that you
+will need to use the "Reload effect" button to apply your changes. This can also be used to reload an external file if changes have been made.
 OBS shaders are written in OBS version of HLSL.
 
 The option is provided to render extra pixels on each side of the source. This is useful for effects like shadows
@@ -52,7 +52,7 @@ that need to render outside the bounds of the original source.
 
 Normally, all that's required for OBS purposes is a pixel shader, so the plugin will wrap your shader text with a 
 standard template to add a basic vertex shader and other boilerplate. If you wish to customize the vertex shader
-or other parts of the effect for some reason, you can check the "Use Effect File (.effect)" option. 
+or other parts of the effect for some reason, you can check the "Full Vertex Shader (.effect)" option. 
 
 Any parameters you add to your shader (defined as `uniform` variables) will be detected by the plugin and exposed
 in the properties window to have their values set. Currently, only `int`, `float`, `bool`, `string`, `texture2d`, and `float4`
@@ -170,7 +170,7 @@ useful common tasks, or used as a reference in developing your own shaders. Note
 extensions are for clarity only, and have no specific meaning to the plugin. Text files with any extension can be
 loaded. In a standard, *.effect* files include a vertex shader and *.shader* only has a pixel shader.
 
-I recommend *.shader* as they do not require `Use Effect File (.effect)` as pixel shaders, while *.effect* signifies vertex shaders with `Use Effect File (.effect)` required.
+I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as pixel shaders, while *.effect* signifies vertex shaders with `Full Vertex Shader (.effect)` required.
 | File                            | Description                                                                                                                                                                                                                                                                                                                                                                                             | Example                                                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | 3d-panel.shader                 |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/user-attachments/assets/c8486d30-2ee2-46e8-bb57-fe8491b469b3)                 |

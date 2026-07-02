@@ -983,6 +983,15 @@ static bool shader_filter_reload_effect_clicked(obs_properties_t *props, obs_pro
 	return false;
 }
 
+static bool shader_filter_noop_button_clicked(obs_properties_t *props, obs_property_t *property, void *data)
+{
+	UNUSED_PARAMETER(props);
+	UNUSED_PARAMETER(property);
+	UNUSED_PARAMETER(data);
+
+	return false;
+}
+
 static bool add_source_to_list(void *data, obs_source_t *source)
 {
 	obs_property_t *p = data;
@@ -2399,6 +2408,15 @@ static obs_properties_t *shader_filter_properties(void *data)
 	if (settings)
 		obs_data_set_bool(settings, "raw_shader", !from_file);
 
+	char *abs_path = os_get_abs_path_ptr(examples_path.array);
+	obs_property_t *file_name = obs_properties_add_path(source_group, "shader_file_name",
+							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
+							    abs_path ? abs_path : examples_path.array);
+	if (abs_path)
+		bfree(abs_path);
+	dstr_free(&examples_path);
+	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
+
 	obs_property_t *override_effect = obs_properties_add_bool(source_group, "override_entire_effect", obs_module_text("ShaderFilter.OverrideEntireEffect"));
 	obs_property_set_long_description(override_effect, obs_module_text("ShaderFilter.OverrideEntireEffect.Tooltip"));
 
@@ -2425,14 +2443,6 @@ static obs_properties_t *shader_filter_properties(void *data)
 		}
 	}
 
-	char *abs_path = os_get_abs_path_ptr(examples_path.array);
-	obs_property_t *file_name = obs_properties_add_path(source_group, "shader_file_name",
-							    obs_module_text("ShaderFilter.ShaderFileName"), OBS_PATH_FILE, NULL,
-							    abs_path ? abs_path : examples_path.array);
-	if (abs_path)
-		bfree(abs_path);
-	dstr_free(&examples_path);
-	obs_property_set_modified_callback(file_name, shader_filter_file_name_changed);
 	if (settings) {
 		shader_filter_update_shader_source_visibility(source_group, settings, from_file);
 		obs_data_release(settings);
@@ -2695,6 +2705,10 @@ static obs_properties_t *shader_filter_properties(void *data)
 		obs_property_t *expand_prop = obs_properties_add_group(props, "expand_group", obs_module_text("ShaderFilter.ExpandPixels"),
 					 OBS_GROUP_NORMAL, expand_group);
 		obs_property_set_long_description(expand_prop, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
+		obs_property_t *expand_help = obs_properties_add_button2(expand_group, "expand_help",
+									 obs_module_text("ShaderFilter.ExpandPixels.Help"),
+									 shader_filter_noop_button_clicked, NULL);
+		obs_property_set_long_description(expand_help, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
 
 		obs_properties_add_int(expand_group, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999,
 					   1);

@@ -243,6 +243,38 @@ I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as p
 | zoom_blur.shader                | A shader that creates a zoom with blur effect based on a number of samples and magnitude of each sample. It also includes an animation with or without easing and a glitch option. Set speed to zero to not use animation. Suggested values are 15 samples and 30-50 magnitude.                                                                                                                         |                                                                                                           |
 
 
+## Fork Changes
+
+This fork (`myrqyry/obs-shaderfilter`) includes the following changes over upstream [`exeldro/obs-shaderfilter`](https://github.com/exeldro/obs-shaderfilter).
+
+### New Features
+
+- **Generative Source Mode**: Added a new `shader_source` OBS source type alongside the existing filter and transition. This allows shaders to run as standalone video sources with configurable width/height, enabling fully procedural visuals without requiring an input source.
+- **Auto-reload**: Shader files now auto-reload 300ms after edits, with a debounce timer to avoid repeated reloads during rapid changes.
+- **Source Picker Parameter**: `texture2d` parameters can use `widget_type = "source"` to pick an OBS source directly from the properties UI.
+- **UI Overhaul**: Filter properties are now organized into collapsible groups — "Shader Source" for file/text/reload controls and "Shader Parameters" for shader uniforms. Added "Input Source Padding (px)" group with descriptive tooltip.
+- **Raw Shader Text toggle**: Switched from "Load shader text from file" to a positive "Raw Shader Text" toggle (loading from file is now the default).
+- **Expand Pixels tooltip**: Added descriptive tooltip explaining the padding purpose and memory implications.
+- **Locale files**: Added translations for de-DE, es-ES, fr-FR, ja-JP, pt-BR, and zh-CN.
+- **`install-user` target**: Added a Linux-only CMake target to install the plugin into the user's OBS directory (`~/.config/obs-studio/plugins/`).
+
+### Bug Fixes
+
+- **Circular includes**: `#include` paths are now tracked to detect and warn on circular include chains, preventing infinite recursion.
+- **Thread-safe audio**: Audio callback now uses a mutex to prevent data races when reading peak/magnitude values from `video_tick`.
+- **dstr ownership**: Fixed double-free in `load_shader_from_file` by explicitly transferring dstr buffer ownership via NULL-set before `dstr_free`.
+- **Bounds checks**: Fixed out-of-bounds reads in `convert_atan`, `convert_mat_mul_var`, `convert_mat_mul`, `convert_return`, and `shader_filter_convert` when the match pointer is at the start of the buffer.
+- **Include parsing**: `#include` lines now guard against malformed quotes and use both `/` and `\` path separators. Invented-path warnings are emitted.
+- **Properties scroll**: Auto-reload no longer triggers `obs_source_update_properties`, preventing the properties panel from jumping on every edit.
+- **Color defaults**: Color parameters without a default annotation now consistently fall back to opaque white.
+- **String parameters**: Fixed memory leak by properly `bfree`-ing string parameter values on clear and update.
+- **Macro stripping**: Function-like `#define` macros are now detected and warned; `convert_define` is temporarily disabled because it produces broken HLSL without call-site substitution.
+- **Audio clamp**: `convert_db_to_linear` now correctly clamps to 1.0 without the previous division-by-negative-threshold artifact.
+
+### Build
+
+The fork also fixes a `da_push_back` macro incompatibility with OBS 28 headers and removes the bundled `nullptr` macro.
+
 ## Building
 
 If you wish to build the obs-shaderfilter plugin from source, you should just need [CMake](https://cmake.org/) 

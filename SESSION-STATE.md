@@ -66,6 +66,14 @@
 - Decision: Be direct about limits. Do not promise "run models in shaders". Offer to help with (a) shader post-processing of AI output, or (b) scoping a separate native inference plugin if that's the goal. Update MEMORY.md with this as a hard architectural boundary.
 - No changes to current shaderfilter codebase make sense for "add AI" without turning it into a completely different (much larger) project.
 
+## 2026-06-29 Shader Source UI Request
+- User wants the shader source settings reversed: loading shader text from a file should be the common/default route, and a checkbox labeled "Raw Shader" should reveal the raw shader text field instead.
+- Current code uses the persisted setting key `from_file`; false currently shows `shader_text`, true shows `shader_file_name`.
+- Likely minimal design: keep `from_file` for scene-data compatibility, set its default to true, present an inverted UI control label/behavior only if OBS property APIs support it cleanly; otherwise use a compatibility-preserving derived `raw_shader` UI key with sync logic.
+- User confirmed existing OBS scenes should keep their current mode; default only new filters to file mode.
+- Implemented compatibility-preserving `raw_shader` UI key synced to inverse `from_file`; brand-new sources initialize to file mode only when neither `from_file` nor `shader_text` exists as a user value.
+- User selected completion option 1 and requested local OBS user-plugin install.
+
 ## 2026-06-12 Clarification on MediaPipe
 - User is specifically considering **MediaPipe Tasks** (Google's Task API for selfie segmentation, face/pose/hands, etc.).
 - User explicitly stated they are already working on a native plugin for the inference side.
@@ -142,7 +150,7 @@
 - Patched `/home/myrqyry/MQR/hyperShaderFX/src/mediapipe/mp_wrapper.cpp`:
   - Updated top-of-file ONNX comments to match actual model filenames and NCHW shapes.
   - Replaced stale build comment with `USE_ONNX_RUNTIME=ON`.
-  - Removed fake LiteRT hand result emission; decoder now clears results and logs that simulated output is refused.
+  - Removed non-real LiteRT hand result emission; decoder now clears results and logs that simulated output is refused.
 - Updated `/home/myrqyry/MQR/hyperShaderFX/data/models/mediapipe/README.md`:
   - Required filenames now match actual code/files: `face_detector.onnx`, `face_landmark_detector.onnx`.
   - Model specs now match actual I/O names/shapes.

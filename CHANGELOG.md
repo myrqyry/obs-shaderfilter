@@ -20,7 +20,7 @@ This changelog covers a one-time sweep that added metadata headers, cross-platfo
   - `halftone_color.shader` — CMYK print-style halftone with per-channel angles
   - `lens_correction.shader` — Barrel/pincushion lens correction
   - `crosshatch.shader` — Pen-and-ink crosshatch illustration
-  - `depth_of_field.shader` — Fake DoF via brightness-driven bokeh
+  - `depth_of_field.shader` — Approximate DoF via brightness-driven bokeh
   - `pixel_sort.shader` — Glitch-art pixel sort
 - **3 stdlib composition showcases**:
   - `stdlib_fireplace.shader` — Domain-warped FBM fireplace

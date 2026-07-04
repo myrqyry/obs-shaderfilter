@@ -183,6 +183,7 @@ struct shader_filter_data {
 	bool reload_effect;
 	struct dstr last_path;
 	bool last_from_file;
+	bool source;
 	bool transition;
 	bool transitioning;
 	bool prev_transitioning;
@@ -809,11 +810,17 @@ static void shader_filter_init_source_mode(obs_data_t *settings)
 		obs_data_set_bool(settings, "from_file", true);
 }
 
-static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
+static int clamp_source_dimension(int value)
+{
+	return value > 0 ? value : 1;
+}
+
+static void *shader_filter_create_internal(obs_data_t *settings, obs_source_t *source, bool source_mode)
 {
 	struct shader_filter_data *filter = bzalloc(sizeof(struct shader_filter_data));
 	filter->context = source;
 	filter->reload_effect = true;
+	filter->source = source_mode;
 	filter->width = 1920;
 	filter->height = 1080;
 	filter->uv_scale.x = 1.0f;
@@ -835,6 +842,11 @@ static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
 	obs_source_update(source, settings);
 
 	return filter;
+}
+
+static void *shader_filter_create(obs_data_t *settings, obs_source_t *source)
+{
+	return shader_filter_create_internal(settings, source, false);
 }
 
 static void shader_filter_destroy(void *data)
@@ -2405,6 +2417,11 @@ static obs_properties_t *shader_filter_properties(void *data)
 	obs_properties_add_button2(source_group, "reload_effect", obs_module_text("ShaderFilter.ReloadEffect"),
 				   shader_filter_reload_effect_clicked, data);
 
+	if (filter && filter->source) {
+		obs_properties_add_int(source_group, "source_width", obs_module_text("ShaderFilter.SourceWidth"), 1, 16384, 1);
+		obs_properties_add_int(source_group, "source_height", obs_module_text("ShaderFilter.SourceHeight"), 1, 16384, 1);
+	}
+
 	if (filter && (filter->param_audio_magnitude || filter->param_audio_peak)) {
 		obs_property_t *audio_source = obs_properties_add_list(source_group, "audio_source", "Audio source",
 								       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
@@ -2660,24 +2677,24 @@ static obs_properties_t *shader_filter_properties(void *data)
 	}
 	da_free(groups);
 
-	if (!filter || !filter->transition) {
+	if (!filter || (!filter->source && !filter->transition)) {
 		obs_properties_t *expand_group = obs_properties_create();
 		obs_property_t *expand_prop = obs_properties_add_group(props, "expand_group", obs_module_text("ShaderFilter.ExpandPixels"),
 					 OBS_GROUP_NORMAL, expand_group);
 		obs_property_set_long_description(expand_prop, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
-		obs_property_t *expand_help = obs_properties_add_button2(expand_group, "expand_help",
-									 obs_module_text("ShaderFilter.ExpandPixels.Help"),
-									 shader_filter_noop_button_clicked, NULL);
-		obs_property_set_long_description(expand_help, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
 
-		obs_properties_add_int(expand_group, "expand_left", obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999,
-					   1);
-		obs_properties_add_int(expand_group, "expand_right", obs_module_text("ShaderFilter.ExpandRight"), 0, 9999,
-					   1);
-		obs_properties_add_int(expand_group, "expand_top", obs_module_text("ShaderFilter.ExpandTop"), 0, 9999,
-					   1);
-		obs_properties_add_int(expand_group, "expand_bottom", obs_module_text("ShaderFilter.ExpandBottom"), 0,
-					   9999, 1);
+		obs_property_t *expand_left = obs_properties_add_int(expand_group, "expand_left",
+								       obs_module_text("ShaderFilter.ExpandLeft"), 0, 9999, 1);
+		obs_property_set_long_description(expand_left, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
+		obs_property_t *expand_right = obs_properties_add_int(expand_group, "expand_right",
+									obs_module_text("ShaderFilter.ExpandRight"), 0, 9999, 1);
+		obs_property_set_long_description(expand_right, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
+		obs_property_t *expand_top = obs_properties_add_int(expand_group, "expand_top",
+								      obs_module_text("ShaderFilter.ExpandTop"), 0, 9999, 1);
+		obs_property_set_long_description(expand_top, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
+		obs_property_t *expand_bottom = obs_properties_add_int(expand_group, "expand_bottom",
+									 obs_module_text("ShaderFilter.ExpandBottom"), 0, 9999, 1);
+		obs_property_set_long_description(expand_bottom, obs_module_text("ShaderFilter.ExpandPixels.Tooltip"));
 	}
 
 	obs_properties_add_text(
@@ -2698,6 +2715,10 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 	filter->expand_right = (int)obs_data_get_int(settings, "expand_right");
 	filter->expand_top = (int)obs_data_get_int(settings, "expand_top");
 	filter->expand_bottom = (int)obs_data_get_int(settings, "expand_bottom");
+	if (filter->source) {
+		filter->width = clamp_source_dimension((int)obs_data_get_int(settings, "source_width"));
+		filter->height = clamp_source_dimension((int)obs_data_get_int(settings, "source_height"));
+	}
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
 	if (filter->reload_effect) {
@@ -3573,6 +3594,8 @@ static uint32_t shader_filter_getheight(void *data)
 static void shader_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "shader_text", effect_template_default_image_shader);
+	obs_data_set_default_int(settings, "source_width", 1920);
+	obs_data_set_default_int(settings, "source_height", 1080);
 }
 
 static enum gs_color_space shader_filter_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces)
@@ -3720,7 +3743,7 @@ static void *shader_transition_create(obs_data_t *settings, obs_source_t *source
 static const char *shader_transition_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return obs_module_text("ShaderFilter");
+	return obs_module_text("ShaderFilter.Transition");
 }
 
 static float mix_a(void *data, float t)
@@ -3863,16 +3886,27 @@ static void shader_source_render(void *data, gs_effect_t *effect)
 	gs_blend_state_pop();
 }
 
+static const char *shader_source_get_name(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+	return obs_module_text("ShaderFilter.Source");
+}
+
+static void *shader_source_create(obs_data_t *settings, obs_source_t *source)
+{
+	return shader_filter_create_internal(settings, source, true);
+}
+
 struct obs_source_info shader_source = {
 	.id = "shader_source",
 	.type = OBS_SOURCE_TYPE_INPUT,
 	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_SRGB | OBS_SOURCE_CUSTOM_DRAW,
-	.create = shader_filter_create,
+	.create = shader_source_create,
 	.destroy = shader_filter_destroy,
 	.update = shader_filter_update,
 	.load = shader_filter_update,
 	.video_tick = shader_filter_tick,
-	.get_name = shader_filter_get_name,
+	.get_name = shader_source_get_name,
 	.get_defaults = shader_filter_defaults,
 	.get_width = shader_filter_getwidth,
 	.get_height = shader_filter_getheight,

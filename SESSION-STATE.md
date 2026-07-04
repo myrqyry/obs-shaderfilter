@@ -81,6 +81,22 @@
 - Implemented compatibility-preserving `raw_shader` UI key synced to inverse `from_file`; brand-new sources initialize to file mode only when neither `from_file` nor `shader_text` exists as a user value.
 - User selected completion option 1 and requested local OBS user-plugin install.
 
+## 2026-07-01 README / Shader Source Accuracy Review
+- User provided an external review of the fork status and flagged three issues before treating README claims as authoritative.
+- Verified in current code:
+  - README claim "Shader files auto-reload" is inaccurate; only raw `shader_text` changes use the 300 ms debounce in `shader_filter_text_changed()`.
+  - `shader_source` dimensions are still hard-coded to 1920x1080 in `shader_filter_create()` and no `source_width` / `source_height` properties exist.
+  - Padding controls are shown for any non-transition instance via `if (!filter || !filter->transition)`, so the standalone source inherits filter-only padding controls that the source path ignores.
+- Minimal preferred fix under discussion: add explicit source-mode flagging, add source width/height integer settings for `shader_source`, hide padding for source mode, and correct README auto-reload wording unless real file mtime polling is added.
+- User approved the recommended design: implement real source width/height controls, explicit source-mode gating, source-only dimension usage, filter-only padding UI, and README wording that accurately describes raw-text debounce rather than file auto-reload.
+- User corrected source display naming expectations: the filter must be named "Shaderfilter Shader", the standalone source must be named "Shaderfilter Source", and the transition must be named "Shaderfilter Transition". Do not use generic names like "User-defined Shader".
+- User wants the padding section's separate question-mark help control removed; padding help should follow the vertex shader option's long-tooltip pattern instead.
+- User clarified install target: install the rebuilt plugin into the actual OBS user plugin directory, not just the build rundir.
+- User corrected filter display name again: it must be "Shaderfilter Filter", not "Shaderfilter Shader". Source and transition names remain "Shaderfilter Source" and "Shaderfilter Transition".
+- User provided screenshot showing desired tooltip behavior: use OBS-native inline tooltip icon next to the actual option label, like "Full Vertex Shader (.effect)", not a separate question-mark button or row. Apply this to padding controls.
+- User asked whether OBS tooltips can use multiple lines and approved trying escaped `\n` newlines in the padding tooltip locale string first.
+- User confirmed escaped `\n` multiline tooltips work in OBS and wants the same treatment for the Full Vertex Shader option tooltip.
+
 ## 2026-06-12 Clarification on MediaPipe
 - User is specifically considering **MediaPipe Tasks** (Google's Task API for selfie segmentation, face/pose/hands, etc.).
 - User explicitly stated they are already working on a native plugin for the inference side.

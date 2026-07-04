@@ -16,6 +16,7 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
 
 #include <util/threading.h>
 #ifdef _WIN32
@@ -274,16 +275,14 @@ struct shader_filter_data {
 
 static unsigned int rand_interval(unsigned int min, unsigned int max)
 {
-	unsigned int r;
 	const unsigned int range = 1 + max - min;
-	const unsigned int buckets = RAND_MAX / range;
-	const unsigned int limit = buckets * range;
+	uint64_t x = os_gettime_ns() ^ (uint64_t)(uintptr_t)&x;
+	x ^= x >> 12;
+	x ^= x << 25;
+	x ^= x >> 27;
+	x *= 2685821657736338717ULL;
 
-	do {
-		r = (unsigned int)rand();
-	} while (r >= limit);
-
-	return min + (r / buckets);
+	return min + (unsigned int)(x % range);
 }
 
 static char *load_shader_from_file_internal(const char *file_name, shader_path_array_t *visited)
@@ -339,12 +338,19 @@ static char *load_shader_from_file_internal(const char *file_name, shader_path_a
 			dstr_ncat(&include_path, start, end - start);
 			char *abs_include_path =
 				os_get_abs_path_ptr(include_path.array);
-			char *file_contents = load_shader_from_file_internal(
-				abs_include_path, visited);
+			char *file_contents = abs_include_path ? load_shader_from_file_internal(
+				abs_include_path, visited) : NULL;
 			if (file_contents) {
 				dstr_cat(&shader_file, file_contents);
 				dstr_cat(&shader_file, "\n");
 				bfree(file_contents);
+			} else {
+				blog(LOG_ERROR,
+				     "[obs-shaderfilter] failed to resolve #include '%s' from '%s'",
+				     include_path.array, file_name);
+				dstr_cat(&shader_file, "\n// ERROR: failed to resolve #include: ");
+				dstr_cat(&shader_file, include_path.array);
+				dstr_cat(&shader_file, "\n");
 			}
 			bfree(abs_include_path);
 			dstr_free(&include_path);
@@ -953,6 +959,9 @@ static bool shader_filter_text_changed(obs_properties_t *props, obs_property_t *
 static bool shader_filter_file_name_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
 {
 	struct shader_filter_data *filter = obs_properties_get_param(props);
+	if (!filter)
+		return false;
+
 	const char *new_file_name = obs_data_get_string(settings, obs_property_name(p));
 
 	if ((dstr_is_empty(&filter->last_path) && strlen(new_file_name)) ||
@@ -1044,6 +1053,8 @@ static void convert_atan(struct dstr *effect_text)
 		while (*p && depth > 0) {
 			if (*p == '/' && *(p + 1) == '/') {
 				while (*p && *p != '\n')
+					p++;
+				if (*p == '\n')
 					p++;
 				continue;
 			}
@@ -1690,63 +1701,6 @@ static void convert_if1(struct dstr *effect_text)
 		} else {
 			begin = strstr(effect_text->array + diff + 5, "#if 1");
 		}
-	}
-}
-
-static void convert_define(struct dstr *effect_text)
-{
-	char *pos = strstr(effect_text->array, "#define ");
-	while (pos) {
-		size_t diff = pos - effect_text->array;
-		char *start = pos + 8;
-		while (*start == ' ' || *start == '\t')
-			start++;
-		char *end = start;
-		while (*end != ' ' && *end != '\t' && *end != '\n' && *end != 0)
-			end++;
-		char *t = strstr(start, "(");
-		if (t && t < end) {
-			struct dstr macro_name = {0};
-			dstr_ncat(&macro_name, start, end - start);
-			blog(LOG_WARNING,
-			     "[obs-shaderfilter] Dropping unsupported function-like macro: %s(...)",
-			     macro_name.array);
-			dstr_free(&macro_name);
-			char *line_end = strstr(pos, "\n");
-			if (line_end)
-				dstr_remove(effect_text, diff, line_end - pos + 1);
-			else
-				dstr_remove(effect_text, diff, effect_text->len - diff);
-			pos = strstr(effect_text->array + diff, "#define ");
-			continue;
-		}
-
-		struct dstr def_name = {0};
-		dstr_ncat(&def_name, start, end - start);
-
-		start = end;
-		while (*start == ' ' || *start == '\t')
-			start++;
-
-		end = start;
-		while (*end != '\n' && *end != 0 && (*end != '/' || *(end + 1) != '/'))
-			end++;
-
-		t = strstr(start, "(");
-		if (*start == '(' || (t && t < end)) {
-			struct dstr replacement = {0};
-			dstr_ncat(&replacement, start, end - start);
-
-			dstr_remove(effect_text, diff, end - (effect_text->array + diff));
-
-			dstr_replace(effect_text, def_name.array, replacement.array);
-
-			dstr_free(&replacement);
-			pos = strstr(effect_text->array + diff, "#define ");
-		} else {
-			pos = strstr(effect_text->array + diff + 8, "#define ");
-		}
-		dstr_free(&def_name);
 	}
 }
 
@@ -2554,6 +2508,12 @@ static obs_properties_t *shader_filter_properties(void *data)
 			blog(LOG_WARNING,
 			     "[obs-shaderfilter] Parameter '%s' is unsupported type int3; skipping UI.",
 			     param_name);
+			struct dstr int3_warning = {0};
+			dstr_printf(&int3_warning, "%s: unsupported int3 shader parameter; this control is not editable.",
+				    display_name.array);
+			p = obs_properties_add_text(group, param_name, int3_warning.array, OBS_TEXT_INFO);
+			obs_property_text_set_info_type(p, OBS_TEXT_INFO_WARNING);
+			dstr_free(&int3_warning);
 			break;
 		case GS_SHADER_PARAM_VEC2: {
 			double range_min = param->minimum.f;

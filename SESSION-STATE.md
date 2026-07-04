@@ -10,6 +10,13 @@
 - UI preferences: customized layout (details pending)
 - Rule: When uncertain about runtime/plugin behavior, do NOT toggle code based on memory — inspect source or ask for clarification first (user correction 2026-05-30)
 
+## 2026-07-03 Code Review Follow-up
+- User provided a detailed review of `obs-shaderfilter.c` with claimed issues around include error handling, unsafe/dead `convert_define`, missing null guard in `shader_filter_file_name_changed`, audio mutex read-side locking, `convert_atan` comment handling, committed `SESSION-STATE.md`, `rand()`, and unsupported `GS_SHADER_PARAM_INT3` UI handling.
+- Active approach: treat review as leads, verify each claim against current checkout, then apply only minimal fixes that survive source inspection. Do not delete files without explicit approval.
+- Applied minimal source-verified fixes in `obs-shaderfilter.c`: missing include errors now log and inject a shader comment, file-name callback now null-guards filter data, `convert_atan` advances past `//` comment newlines, unsafe dead `convert_define` helper removed, `rand()` removed from `rand_interval`, and unsupported `int3` parameters now show an OBS warning info row.
+- Verified `cmake --build build_x86_64 --parallel` exits 0. Audio mutex read-side race claim did not reproduce in this checkout; render/tick read already locks `audio_mutex`.
+- User requested commit and push of our changes. Need stage only review-follow-up changes, because the worktree already contains unrelated modified/untracked files from prior work.
+
 ## 2026-05-31 Decision
 - Completed generative source implementation: added width/height to struct, default 1920x1080, updated get_width/get_height to prefer explicit dimensions, fixed shader_source_render, added UNUSED_PARAMETER guard. Compiles cleanly. Source "shader_source" now registered alongside filter/transition.
 - Built and installed to ~/.config/obs-studio/plugins/obs-shaderfilter/ (user-local OBS plugins dir)

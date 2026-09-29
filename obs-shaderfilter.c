@@ -27,19 +27,26 @@
 
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
 
+struct image_file {
+	gs_texture_t *texture;
+	enum gs_color_format format;
+	uint32_t cx;
+	uint32_t cy;
+	bool is_animated_gif;
+	bool frame_updated;
+	bool loaded;
+};
+
 void *(*gs_image_file_create_func)() = NULL;
-void (*gs_image_file_free_func)(void *image) = NULL;
-void (*gs_image_file_init_func)(void *image, const char *file, enum gs_image_alpha_mode alpha_mode) = NULL;
-void (*gs_image_file_init_texture_func)(void *image) = NULL;
-gs_texture_t *gs_image_file_get_texture(void *image)
-{
-	gs_texture_t **t = (gs_texture_t **)image;
-	return t[0];
-}
+void (*gs_image_file_free_func)(struct image_file *image) = NULL;
+void (*gs_image_file_init_func)(struct image_file *image, const char *file, enum gs_image_alpha_mode alpha_mode) = NULL;
+void (*gs_image_file_init_texture_func)(struct image_file *image) = NULL;
+bool (*gs_image_file_tick_func)(struct image_file *image, uint64_t elapsed_time_ns);
+void (*gs_image_file_update_texture_func)(struct image_file *image) = NULL;
 
 void *gs_image_file4_create()
 {
-	return bzalloc(41336); //sizeof(struct gs_image_file4)
+	return bzalloc(41336); //sizeof(gs_image_file4_t)
 }
 
 void *gs_image_file_ex_create()
@@ -149,7 +156,7 @@ struct effect_param_data {
 	enum gs_shader_param_type type;
 	gs_eparam_t *param;
 
-	void *image;
+	struct image_file *image;
 	gs_texrender_t *render;
 	obs_weak_source_t *source;
 
@@ -279,6 +286,7 @@ struct shader_filter_data {
 	float current_audio_magnitude;
 
 	DARRAY(struct effect_param_data) stored_param_list;
+	uint64_t last_frame_time;
 };
 
 static unsigned int rand_interval(unsigned int min, unsigned int max)
@@ -2882,6 +2890,33 @@ static void shader_filter_tick(void *data, float seconds)
 
 	filter->output_rendered = false;
 	filter->input_rendered = false;
+
+	if (gs_image_file_tick_func) {
+		uint64_t frame_time = obs_get_video_frame_time();
+		if (filter->last_frame_time) {
+			bool g = false;
+			uint64_t elapsed = frame_time - filter->last_frame_time;
+			size_t param_count = filter->stored_param_list.num;
+			for (size_t param_index = 0; param_index < param_count; param_index++) {
+				struct effect_param_data *param = (filter->stored_param_list.array + param_index);
+				if (!param->image)
+					continue;
+
+				bool updated = gs_image_file_tick_func(param->image, elapsed);
+				if (updated) {
+					if (!g) {
+						obs_enter_graphics();
+						g = true;
+					}
+					gs_image_file_update_texture_func(param->image);
+				}
+			}
+			if (g) {
+				obs_leave_graphics();
+			}
+		}
+		filter->last_frame_time = frame_time;
+	}
 }
 
 gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render, const enum gs_color_format format)
@@ -3140,7 +3175,7 @@ void shader_filter_set_effect_params(struct shader_filter_data *filter)
 				gs_texture_t *tex = gs_texrender_get_texture(param->render);
 				gs_effect_set_texture(param->param, tex);
 			} else if (param->image) {
-				gs_effect_set_texture(param->param, gs_image_file_get_texture(param->image));
+				gs_effect_set_texture(param->param, param->image->texture);
 			} else {
 				gs_effect_set_texture(param->param, NULL);
 			}
@@ -3666,15 +3701,18 @@ bool obs_module_load(void)
 			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_ex_free");
 			gs_image_file_init_func = os_dlsym(dl, "gs_image_file_ex_init");
 			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file_ex_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file_ex_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file_ex_update_texture");
 		} else {
 			gs_image_file_create_func = gs_image_file4_create;
 			gs_image_file_free_func = os_dlsym(dl, "gs_image_file4_free");
 			gs_image_file_init_func = os_dlsym(dl, "gs_image_file4_init");
 			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file4_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file4_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file4_update_texture");
 		}
 		os_dlclose(dl);
 	}
-
 	return true;
 }
 

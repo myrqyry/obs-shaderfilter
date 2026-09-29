@@ -3661,7 +3661,7 @@ bool obs_module_load(void)
 	void *dl = dlopen(nullptr, RTLD_LAZY);
 #endif
 	if (dl) {
-		if (true || obs_get_version() >= MAKE_SEMANTIC_VERSION(33, 0, 0)) {
+		if (obs_get_version() >= MAKE_SEMANTIC_VERSION(33, 0, 0)) {
 			gs_image_file_create_func = gs_image_file_ex_create;
 			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_ex_free");
 			gs_image_file_init_func = os_dlsym(dl, "gs_image_file_ex_init");

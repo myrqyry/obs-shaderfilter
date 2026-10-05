@@ -22,6 +22,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <dlfcn.h>
 #include <sys/time.h>
 #endif
 
@@ -29,6 +30,41 @@
 #include "obs-shaderfilter.h"
 
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
+
+/*
+ * OBS 33 replaced the legacy gs_image_file4 ABI with gs_image_file_ex.
+ * Resolve the matching image API at runtime so one plugin build can continue
+ * to support older OBS releases while also loading on OBS 33+.
+ */
+struct image_file {
+	gs_texture_t *texture;
+	enum gs_color_format format;
+	uint32_t cx;
+	uint32_t cy;
+	bool is_animated_gif;
+	bool frame_updated;
+	bool loaded;
+};
+
+static void *(*gs_image_file_create_func)(void) = NULL;
+static void (*gs_image_file_free_func)(struct image_file *image) = NULL;
+static void (*gs_image_file_init_func)(struct image_file *image, const char *file,
+				       enum gs_image_alpha_mode alpha_mode) = NULL;
+static void (*gs_image_file_init_texture_func)(struct image_file *image) = NULL;
+static bool (*gs_image_file_tick_func)(struct image_file *image, uint64_t elapsed_time_ns) = NULL;
+static void (*gs_image_file_update_texture_func)(struct image_file *image) = NULL;
+
+static void *gs_image_file4_create(void)
+{
+	/* OBS <=32 gs_image_file4_t storage size, matching upstream 2.6.0. */
+	return bzalloc(41336);
+}
+
+static void *gs_image_file_ex_create(void)
+{
+	/* OBS 33+ gs_image_file_ex_t storage size, matching upstream 2.6.0. */
+	return bzalloc(72);
+}
 
 static const char *effect_template_begin = "\
 uniform float4x4 ViewProj;\n\
@@ -130,7 +166,7 @@ struct effect_param_data {
 	enum gs_shader_param_type type;
 	gs_eparam_t *param;
 
-	gs_image_file_t *image;
+	struct image_file *image;
 	gs_texrender_t *render;
 	obs_weak_source_t *source;
 
@@ -271,6 +307,7 @@ struct shader_filter_data {
 	float current_audio_magnitude;
 	pthread_mutex_t audio_mutex;
 
+	uint64_t last_frame_time;
 	DARRAY(struct effect_param_data) stored_param_list;
 };
 
@@ -428,9 +465,11 @@ static void shader_filter_clear_params(struct shader_filter_data *filter)
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
 		if (param->image) {
-			obs_enter_graphics();
-			gs_image_file_free(param->image);
-			obs_leave_graphics();
+			if (gs_image_file_free_func) {
+				obs_enter_graphics();
+				gs_image_file_free_func(param->image);
+				obs_leave_graphics();
+			}
 
 			bfree(param->image);
 			param->image = NULL;
@@ -2919,7 +2958,12 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 				}
 				obs_source_release(source);
 				if (param->image) {
-					gs_image_file_free(param->image);
+					if (gs_image_file_free_func) {
+						obs_enter_graphics();
+						gs_image_file_free_func(param->image);
+						obs_leave_graphics();
+					}
+					bfree(param->image);
 					param->image = NULL;
 				}
 				dstr_free(&param->path);
@@ -2948,22 +2992,23 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 				}
 				path = obs_data_get_string(settings, param_name);
 				bool n = false;
-				if (param->image == NULL) {
-					param->image = bzalloc(sizeof(gs_image_file_t));
+				if (param->image == NULL && gs_image_file_create_func) {
+					param->image = gs_image_file_create_func();
 					n = true;
 				}
-				if (n || !path || !param->path.array || strcmp(path, param->path.array) != 0) {
-
-					if (!n) {
+				if (param->image && (n || !path || !param->path.array || strcmp(path, param->path.array) != 0)) {
+					if (gs_image_file_free_func && gs_image_file_init_func && gs_image_file_init_texture_func) {
+						if (!n) {
+							obs_enter_graphics();
+							gs_image_file_free_func(param->image);
+							obs_leave_graphics();
+						}
+						gs_image_file_init_func(param->image, path, GS_IMAGE_ALPHA_PREMULTIPLY_SRGB);
+						dstr_copy(&param->path, path);
 						obs_enter_graphics();
-						gs_image_file_free(param->image);
+						gs_image_file_init_texture_func(param->image);
 						obs_leave_graphics();
 					}
-					gs_image_file_init(param->image, path);
-					dstr_copy(&param->path, path);
-					obs_enter_graphics();
-					gs_image_file_init_texture(param->image);
-					obs_leave_graphics();
 				}
 				obs_source_t *old_source = obs_weak_source_get_source(param->source);
 				if (old_source) {
@@ -3094,15 +3139,42 @@ static void shader_filter_tick(void *data, float seconds)
 		filter->audio_magnitude = 0.0f;
 	}
 
+	if (gs_image_file_tick_func && gs_image_file_update_texture_func) {
+		uint64_t frame_time = obs_get_video_frame_time();
+		if (filter->last_frame_time) {
+			bool graphics_entered = false;
+			uint64_t elapsed = frame_time - filter->last_frame_time;
+			for (size_t param_index = 0; param_index < filter->stored_param_list.num; param_index++) {
+				struct effect_param_data *param = filter->stored_param_list.array + param_index;
+				if (!param->image)
+					continue;
+
+				if (gs_image_file_tick_func(param->image, elapsed)) {
+					if (!graphics_entered) {
+						obs_enter_graphics();
+						graphics_entered = true;
+					}
+					gs_image_file_update_texture_func(param->image);
+				}
+			}
+			if (graphics_entered)
+				obs_leave_graphics();
+		}
+		filter->last_frame_time = frame_time;
+	}
+
 	filter->output_rendered = false;
 	filter->input_rendered = false;
 	filter->last_render_f = -1.0f;
 }
 
-static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render)
+static enum gs_color_space shader_filter_get_color_space(void *data, size_t count,
+							 const enum gs_color_space *preferred_spaces);
+
+static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render, enum gs_color_format format)
 {
 	if (!render) {
-		render = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+		render = gs_texrender_create(format, GS_ZS_NONE);
 	} else {
 		gs_texrender_reset(render);
 	}
@@ -3136,7 +3208,7 @@ static void get_input_source(struct shader_filter_data *filter)
 	}
 
 	// Set up our input_texrender to catch the output texture.
-	filter->input_texrender = create_or_reset_texrender(filter->input_texrender);
+	filter->input_texrender = create_or_reset_texrender(filter->input_texrender, format);
 
 	// Start the rendering process with our correct color space params,
 	// And set up your texrender to recieve the created texture.
@@ -3404,7 +3476,9 @@ static void render_shader(struct shader_filter_data *filter, float f, obs_source
 		filter->output_texrender = filter->previous_output_texrender;
 		filter->previous_output_texrender = temp;
 	}
-	filter->output_texrender = create_or_reset_texrender(filter->output_texrender);
+	enum gs_color_space output_space = shader_filter_get_color_space(filter, 0, NULL);
+	enum gs_color_format output_format = gs_get_format_from_space(output_space);
+	filter->output_texrender = create_or_reset_texrender(filter->output_texrender, output_format);
 
 	if (filter->param_image)
 		gs_effect_set_texture(filter->param_image, texture);
@@ -3929,6 +4003,41 @@ bool obs_module_load(void)
 	obs_register_source(&shader_filter);
 	obs_register_source(&shader_transition);
 	obs_register_source(&shader_source);
+
+#ifdef _WIN32
+	void *dl = os_dlopen("obs");
+#else
+	void *dl = dlopen(NULL, RTLD_LAZY);
+#endif
+	if (dl) {
+		if (obs_get_version() >= MAKE_SEMANTIC_VERSION(33, 0, 0)) {
+			gs_image_file_create_func = gs_image_file_ex_create;
+			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_ex_free");
+			gs_image_file_init_func = os_dlsym(dl, "gs_image_file_ex_init");
+			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file_ex_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file_ex_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file_ex_update_texture");
+		} else {
+			gs_image_file_create_func = gs_image_file4_create;
+			gs_image_file_free_func = os_dlsym(dl, "gs_image_file4_free");
+			gs_image_file_init_func = os_dlsym(dl, "gs_image_file4_init");
+			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file4_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file4_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file4_update_texture");
+		}
+
+		if (!gs_image_file_free_func || !gs_image_file_init_func || !gs_image_file_init_texture_func) {
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] image-file ABI symbols unavailable; file texture parameters are disabled");
+			gs_image_file_create_func = NULL;
+		} else if (!gs_image_file_tick_func || !gs_image_file_update_texture_func) {
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] animated image symbols unavailable; GIF textures will remain static");
+		}
+		os_dlclose(dl);
+	} else {
+		blog(LOG_WARNING, "[obs-shaderfilter] unable to resolve OBS image-file ABI");
+	}
 
 	return true;
 }

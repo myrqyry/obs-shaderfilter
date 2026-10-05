@@ -29,6 +29,58 @@
 #include "version.h"
 #include "obs-shaderfilter.h"
 
+/*
+ * The OBS 28 Windows SDK exposes pthread declarations through its utility
+ * headers, but third-party modules do not automatically link a pthread
+ * implementation. Keep this small audio-state lock native on Windows and
+ * pthread-backed elsewhere so the plugin has no extra threading dependency.
+ */
+#ifdef _WIN32
+typedef CRITICAL_SECTION shader_mutex_t;
+
+static inline void shader_mutex_init(shader_mutex_t *mutex)
+{
+	InitializeCriticalSection(mutex);
+}
+
+static inline void shader_mutex_destroy(shader_mutex_t *mutex)
+{
+	DeleteCriticalSection(mutex);
+}
+
+static inline void shader_mutex_lock(shader_mutex_t *mutex)
+{
+	EnterCriticalSection(mutex);
+}
+
+static inline void shader_mutex_unlock(shader_mutex_t *mutex)
+{
+	LeaveCriticalSection(mutex);
+}
+#else
+typedef pthread_mutex_t shader_mutex_t;
+
+static inline void shader_mutex_init(shader_mutex_t *mutex)
+{
+	pthread_mutex_init(mutex, NULL);
+}
+
+static inline void shader_mutex_destroy(shader_mutex_t *mutex)
+{
+	pthread_mutex_destroy(mutex);
+}
+
+static inline void shader_mutex_lock(shader_mutex_t *mutex)
+{
+	pthread_mutex_lock(mutex);
+}
+
+static inline void shader_mutex_unlock(shader_mutex_t *mutex)
+{
+	pthread_mutex_unlock(mutex);
+}
+#endif
+
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
 
 /*
@@ -305,7 +357,7 @@ struct shader_filter_data {
 	obs_volmeter_t *volmeter;
 	float current_audio_peak;
 	float current_audio_magnitude;
-	pthread_mutex_t audio_mutex;
+	shader_mutex_t audio_mutex;
 
 	uint64_t last_frame_time;
 	DARRAY(struct effect_param_data) stored_param_list;
@@ -874,7 +926,7 @@ static void *shader_filter_create_internal(obs_data_t *settings, obs_source_t *s
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
-	pthread_mutex_init(&filter->audio_mutex, NULL);
+	shader_mutex_init(&filter->audio_mutex);
 
 	da_init(filter->stored_param_list);
 	load_output_effect(filter);
@@ -918,7 +970,7 @@ static void shader_filter_destroy(void *data)
 	if (filter->audio_source_name)
 		bfree(filter->audio_source_name);
 
-	pthread_mutex_destroy(&filter->audio_mutex);
+	shader_mutex_destroy(&filter->audio_mutex);
 
 	bfree(filter);
 }
@@ -2352,7 +2404,7 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 	UNUSED_PARAMETER(input_peak);
 	struct shader_filter_data *filter = (struct shader_filter_data *)data;
 
-	pthread_mutex_lock(&filter->audio_mutex);
+	shader_mutex_lock(&filter->audio_mutex);
 
 	float max_peak = MIN_AUDIO_THRESHOLD;
 	for (int i = 0; i < MAX_AUDIO_CHANNELS; i++) {
@@ -2371,7 +2423,7 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 	filter->current_audio_peak = convert_db_to_linear(max_peak);
 	filter->current_audio_magnitude = convert_db_to_linear(max_magnitude);
 
-	pthread_mutex_unlock(&filter->audio_mutex);
+	shader_mutex_unlock(&filter->audio_mutex);
 }
 
 static bool shader_filter_enum_audio_sources(void *data, obs_source_t *source)
@@ -3130,10 +3182,10 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->rand_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
 	if (filter->volmeter) {
-		pthread_mutex_lock(&filter->audio_mutex);
+		shader_mutex_lock(&filter->audio_mutex);
 		filter->audio_peak = filter->current_audio_peak;
 		filter->audio_magnitude = filter->current_audio_magnitude;
-		pthread_mutex_unlock(&filter->audio_mutex);
+		shader_mutex_unlock(&filter->audio_mutex);
 	} else {
 		filter->audio_peak = 0.0f;
 		filter->audio_magnitude = 0.0f;
@@ -3805,7 +3857,7 @@ static void *shader_transition_create(obs_data_t *settings, obs_source_t *source
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
-	pthread_mutex_init(&filter->audio_mutex, NULL);
+	shader_mutex_init(&filter->audio_mutex);
 
 	da_init(filter->stored_param_list);
 

@@ -4019,9 +4019,16 @@ bool obs_module_load(void)
 			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file_ex_update_texture");
 		} else {
 			gs_image_file_create_func = gs_image_file4_create;
-			gs_image_file_free_func = os_dlsym(dl, "gs_image_file4_free");
+			/*
+			 * gs_image_file4_free/init_texture are header-only wrappers in
+			 * OBS 28-32, so they are not dynamic symbols. gs_image_file4
+			 * embeds gs_image_file at offset zero; resolve the exported base
+			 * helpers for those two operations and the versioned symbols for
+			 * init/tick/update.
+			 */
+			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_free");
 			gs_image_file_init_func = os_dlsym(dl, "gs_image_file4_init");
-			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file4_init_texture");
+			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file_init_texture");
 			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file4_tick");
 			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file4_update_texture");
 		}

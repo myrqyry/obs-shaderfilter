@@ -1,0 +1,109 @@
+name: OBS compatibility
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    # Weekly early-warning check against OBS development.
+    - cron: '23 11 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  current-obs:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: OBS 32.2.2 stable
+            os: ubuntu-24.04
+            obs_ref: 32.2.2
+          - name: OBS next (master)
+            os: ubuntu-26.04
+            obs_ref: master
+
+    steps:
+      - name: Checkout OBS
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: obsproject/obs-studio
+          ref: ${{ matrix.obs_ref }}
+          path: obs-studio
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout shaderfilter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: obs-studio/plugins/obs-shaderfilter
+
+      - name: Keep the compatibility build focused
+        shell: bash
+        run: |
+          # Build libobs + this plugin only. This avoids unrelated OBS core
+          # modules turning a shaderfilter ABI check into a full OBS distro build.
+          printf '%s\n' 'add_subdirectory(obs-shaderfilter)' 'if(COMMAND set_obs_core_modules)' '  set_obs_core_modules()' 'endif()' > obs-studio/plugins/CMakeLists.txt
+
+      - name: Install compile dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libdrm-dev \
+            libegl-dev \
+            libgl-dev \
+            libjansson-dev \
+            libsimde-dev \
+            libuthash-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            zlib1g-dev
+
+      - name: Configure
+        working-directory: obs-studio
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DENABLE_FRONTEND=OFF \
+            -DENABLE_HEVC=OFF \
+            -DENABLE_PULSEAUDIO=OFF \
+            -DENABLE_SCRIPTING=OFF \
+            -DENABLE_WAYLAND=OFF
+
+      - name: Build shaderfilter
+        working-directory: obs-studio
+        shell: bash
+        run: cmake --build build --target obs-shaderfilter --parallel
+
+      - name: Reject direct image-file ABI imports
+        working-directory: obs-studio
+        shell: bash
+        run: |
+          plugin="$(find build -type f -name 'obs-shaderfilter.so' -print -quit)"
+          test -n "${plugin}"
+          if nm -D "${plugin}" | grep -E ' U gs_image_file(4|_ex)?_'; then
+            echo '::error::Shaderfilter directly imports versioned gs_image_file symbols; OBS 28/32/33 runtime compatibility would be brittle.'
+            exit 1
+          fi

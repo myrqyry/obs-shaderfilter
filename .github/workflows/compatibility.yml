@@ -29,9 +29,11 @@ jobs:
           - name: OBS 32.2.2 stable
             os: ubuntu-24.04
             obs_ref: 32.2.2
+            obs_version: 32.2.2
           - name: OBS next (master)
             os: ubuntu-26.04
             obs_ref: master
+            obs_version: 33.0.0-dev
 
     steps:
       - name: Checkout OBS
@@ -61,6 +63,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            extra-cmake-modules \
             cmake \
             ninja-build \
             pkg-config \
@@ -86,6 +89,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DOBS_VERSION_OVERRIDE=${{ matrix.obs_version }} \
             -DENABLE_FRONTEND=OFF \
             -DENABLE_HEVC=OFF \
             -DENABLE_PULSEAUDIO=OFF \

@@ -74,7 +74,7 @@ jobs:
             libgl-dev \
             libjansson-dev \
             libsimde-dev \
-            libuthash-dev \
+            uthash-dev \
             libx11-dev \
             libx11-xcb-dev \
             libxcb1-dev \

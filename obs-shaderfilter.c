@@ -22,13 +22,101 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <dlfcn.h>
 #include <sys/time.h>
 #endif
 
 #include "version.h"
 #include "obs-shaderfilter.h"
 
+/*
+ * The OBS 28 Windows SDK exposes pthread declarations through its utility
+ * headers, but third-party modules do not automatically link a pthread
+ * implementation. Keep this small audio-state lock native on Windows and
+ * pthread-backed elsewhere so the plugin has no extra threading dependency.
+ */
+#ifdef _WIN32
+typedef CRITICAL_SECTION shader_mutex_t;
+
+static inline void shader_mutex_init(shader_mutex_t *mutex)
+{
+	InitializeCriticalSection(mutex);
+}
+
+static inline void shader_mutex_destroy(shader_mutex_t *mutex)
+{
+	DeleteCriticalSection(mutex);
+}
+
+static inline void shader_mutex_lock(shader_mutex_t *mutex)
+{
+	EnterCriticalSection(mutex);
+}
+
+static inline void shader_mutex_unlock(shader_mutex_t *mutex)
+{
+	LeaveCriticalSection(mutex);
+}
+#else
+typedef pthread_mutex_t shader_mutex_t;
+
+static inline void shader_mutex_init(shader_mutex_t *mutex)
+{
+	pthread_mutex_init(mutex, NULL);
+}
+
+static inline void shader_mutex_destroy(shader_mutex_t *mutex)
+{
+	pthread_mutex_destroy(mutex);
+}
+
+static inline void shader_mutex_lock(shader_mutex_t *mutex)
+{
+	pthread_mutex_lock(mutex);
+}
+
+static inline void shader_mutex_unlock(shader_mutex_t *mutex)
+{
+	pthread_mutex_unlock(mutex);
+}
+#endif
+
 float (*move_get_transition_filter)(obs_source_t *filter_from, obs_source_t **filter_to) = NULL;
+
+/*
+ * OBS 33 replaced the legacy gs_image_file4 ABI with gs_image_file_ex.
+ * Resolve the matching image API at runtime so one plugin build can continue
+ * to support older OBS releases while also loading on OBS 33+.
+ */
+struct image_file {
+	gs_texture_t *texture;
+	enum gs_color_format format;
+	uint32_t cx;
+	uint32_t cy;
+	bool is_animated_gif;
+	bool frame_updated;
+	bool loaded;
+};
+
+static void *(*gs_image_file_create_func)(void) = NULL;
+static void (*gs_image_file_free_func)(struct image_file *image) = NULL;
+static void (*gs_image_file_init_func)(struct image_file *image, const char *file,
+				       enum gs_image_alpha_mode alpha_mode) = NULL;
+static void (*gs_image_file_init_texture_func)(struct image_file *image) = NULL;
+static bool (*gs_image_file_tick_func)(struct image_file *image, uint64_t elapsed_time_ns) = NULL;
+static void (*gs_image_file_update_texture_func)(struct image_file *image) = NULL;
+
+static void *gs_image_file4_create(void)
+{
+	/* OBS <=32 gs_image_file4_t storage size, matching upstream 2.6.0. */
+	return bzalloc(41336);
+}
+
+static void *gs_image_file_ex_create(void)
+{
+	/* OBS 33+ gs_image_file_ex_t storage size, matching upstream 2.6.0. */
+	return bzalloc(72);
+}
 
 static const char *effect_template_begin = "\
 uniform float4x4 ViewProj;\n\
@@ -130,7 +218,7 @@ struct effect_param_data {
 	enum gs_shader_param_type type;
 	gs_eparam_t *param;
 
-	gs_image_file_t *image;
+	struct image_file *image;
 	gs_texrender_t *render;
 	obs_weak_source_t *source;
 
@@ -269,8 +357,9 @@ struct shader_filter_data {
 	obs_volmeter_t *volmeter;
 	float current_audio_peak;
 	float current_audio_magnitude;
-	pthread_mutex_t audio_mutex;
+	shader_mutex_t audio_mutex;
 
+	uint64_t last_frame_time;
 	DARRAY(struct effect_param_data) stored_param_list;
 };
 
@@ -428,9 +517,11 @@ static void shader_filter_clear_params(struct shader_filter_data *filter)
 	for (size_t param_index = 0; param_index < param_count; param_index++) {
 		struct effect_param_data *param = (filter->stored_param_list.array + param_index);
 		if (param->image) {
-			obs_enter_graphics();
-			gs_image_file_free(param->image);
-			obs_leave_graphics();
+			if (gs_image_file_free_func) {
+				obs_enter_graphics();
+				gs_image_file_free_func(param->image);
+				obs_leave_graphics();
+			}
 
 			bfree(param->image);
 			param->image = NULL;
@@ -835,7 +926,7 @@ static void *shader_filter_create_internal(obs_data_t *settings, obs_source_t *s
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
-	pthread_mutex_init(&filter->audio_mutex, NULL);
+	shader_mutex_init(&filter->audio_mutex);
 
 	da_init(filter->stored_param_list);
 	load_output_effect(filter);
@@ -879,7 +970,7 @@ static void shader_filter_destroy(void *data)
 	if (filter->audio_source_name)
 		bfree(filter->audio_source_name);
 
-	pthread_mutex_destroy(&filter->audio_mutex);
+	shader_mutex_destroy(&filter->audio_mutex);
 
 	bfree(filter);
 }
@@ -2313,7 +2404,7 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 	UNUSED_PARAMETER(input_peak);
 	struct shader_filter_data *filter = (struct shader_filter_data *)data;
 
-	pthread_mutex_lock(&filter->audio_mutex);
+	shader_mutex_lock(&filter->audio_mutex);
 
 	float max_peak = MIN_AUDIO_THRESHOLD;
 	for (int i = 0; i < MAX_AUDIO_CHANNELS; i++) {
@@ -2332,7 +2423,7 @@ static void shader_filter_audio_callback(void *data, const float magnitude[MAX_A
 	filter->current_audio_peak = convert_db_to_linear(max_peak);
 	filter->current_audio_magnitude = convert_db_to_linear(max_magnitude);
 
-	pthread_mutex_unlock(&filter->audio_mutex);
+	shader_mutex_unlock(&filter->audio_mutex);
 }
 
 static bool shader_filter_enum_audio_sources(void *data, obs_source_t *source)
@@ -2919,7 +3010,12 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 				}
 				obs_source_release(source);
 				if (param->image) {
-					gs_image_file_free(param->image);
+					if (gs_image_file_free_func) {
+						obs_enter_graphics();
+						gs_image_file_free_func(param->image);
+						obs_leave_graphics();
+					}
+					bfree(param->image);
 					param->image = NULL;
 				}
 				dstr_free(&param->path);
@@ -2948,22 +3044,23 @@ static void shader_filter_update(void *data, obs_data_t *settings)
 				}
 				path = obs_data_get_string(settings, param_name);
 				bool n = false;
-				if (param->image == NULL) {
-					param->image = bzalloc(sizeof(gs_image_file_t));
+				if (param->image == NULL && gs_image_file_create_func) {
+					param->image = gs_image_file_create_func();
 					n = true;
 				}
-				if (n || !path || !param->path.array || strcmp(path, param->path.array) != 0) {
-
-					if (!n) {
+				if (param->image && (n || !path || !param->path.array || strcmp(path, param->path.array) != 0)) {
+					if (gs_image_file_free_func && gs_image_file_init_func && gs_image_file_init_texture_func) {
+						if (!n) {
+							obs_enter_graphics();
+							gs_image_file_free_func(param->image);
+							obs_leave_graphics();
+						}
+						gs_image_file_init_func(param->image, path, GS_IMAGE_ALPHA_PREMULTIPLY_SRGB);
+						dstr_copy(&param->path, path);
 						obs_enter_graphics();
-						gs_image_file_free(param->image);
+						gs_image_file_init_texture_func(param->image);
 						obs_leave_graphics();
 					}
-					gs_image_file_init(param->image, path);
-					dstr_copy(&param->path, path);
-					obs_enter_graphics();
-					gs_image_file_init_texture(param->image);
-					obs_leave_graphics();
 				}
 				obs_source_t *old_source = obs_weak_source_get_source(param->source);
 				if (old_source) {
@@ -3085,13 +3182,37 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->rand_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
 	if (filter->volmeter) {
-		pthread_mutex_lock(&filter->audio_mutex);
+		shader_mutex_lock(&filter->audio_mutex);
 		filter->audio_peak = filter->current_audio_peak;
 		filter->audio_magnitude = filter->current_audio_magnitude;
-		pthread_mutex_unlock(&filter->audio_mutex);
+		shader_mutex_unlock(&filter->audio_mutex);
 	} else {
 		filter->audio_peak = 0.0f;
 		filter->audio_magnitude = 0.0f;
+	}
+
+	if (gs_image_file_tick_func && gs_image_file_update_texture_func) {
+		uint64_t frame_time = obs_get_video_frame_time();
+		if (filter->last_frame_time) {
+			bool graphics_entered = false;
+			uint64_t elapsed = frame_time - filter->last_frame_time;
+			for (size_t param_index = 0; param_index < filter->stored_param_list.num; param_index++) {
+				struct effect_param_data *param = filter->stored_param_list.array + param_index;
+				if (!param->image)
+					continue;
+
+				if (gs_image_file_tick_func(param->image, elapsed)) {
+					if (!graphics_entered) {
+						obs_enter_graphics();
+						graphics_entered = true;
+					}
+					gs_image_file_update_texture_func(param->image);
+				}
+			}
+			if (graphics_entered)
+				obs_leave_graphics();
+		}
+		filter->last_frame_time = frame_time;
 	}
 
 	filter->output_rendered = false;
@@ -3099,13 +3220,26 @@ static void shader_filter_tick(void *data, float seconds)
 	filter->last_render_f = -1.0f;
 }
 
-static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render)
+static enum gs_color_space shader_filter_get_color_space(void *data, size_t count,
+							 const enum gs_color_space *preferred_spaces);
+
+static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render, enum gs_color_format format)
 {
-	if (!render) {
-		render = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
-	} else {
-		gs_texrender_reset(render);
+	if (render && gs_texrender_get_format(render) != format) {
+		/*
+		 * A reset preserves the render target's original pixel format.
+		 * Recreate when the source changes color space so SDR/HDR switches
+		 * do not leave the filter rendering into a stale-format texture.
+		 */
+		gs_texrender_destroy(render);
+		render = NULL;
 	}
+
+	if (!render)
+		render = gs_texrender_create(format, GS_ZS_NONE);
+	else
+		gs_texrender_reset(render);
+
 	return render;
 }
 
@@ -3136,7 +3270,7 @@ static void get_input_source(struct shader_filter_data *filter)
 	}
 
 	// Set up our input_texrender to catch the output texture.
-	filter->input_texrender = create_or_reset_texrender(filter->input_texrender);
+	filter->input_texrender = create_or_reset_texrender(filter->input_texrender, format);
 
 	// Start the rendering process with our correct color space params,
 	// And set up your texrender to recieve the created texture.
@@ -3404,7 +3538,9 @@ static void render_shader(struct shader_filter_data *filter, float f, obs_source
 		filter->output_texrender = filter->previous_output_texrender;
 		filter->previous_output_texrender = temp;
 	}
-	filter->output_texrender = create_or_reset_texrender(filter->output_texrender);
+	enum gs_color_space output_space = shader_filter_get_color_space(filter, 0, NULL);
+	enum gs_color_format output_format = gs_get_format_from_space(output_space);
+	filter->output_texrender = create_or_reset_texrender(filter->output_texrender, output_format);
 
 	if (filter->param_image)
 		gs_effect_set_texture(filter->param_image, texture);
@@ -3731,7 +3867,7 @@ static void *shader_transition_create(obs_data_t *settings, obs_source_t *source
 	filter->rand_instance_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 	filter->rand_activation_f = (float)((double)rand_interval(0, 10000) / (double)10000);
 
-	pthread_mutex_init(&filter->audio_mutex, NULL);
+	shader_mutex_init(&filter->audio_mutex);
 
 	da_init(filter->stored_param_list);
 
@@ -3929,6 +4065,48 @@ bool obs_module_load(void)
 	obs_register_source(&shader_filter);
 	obs_register_source(&shader_transition);
 	obs_register_source(&shader_source);
+
+#ifdef _WIN32
+	void *dl = os_dlopen("obs");
+#else
+	void *dl = dlopen(NULL, RTLD_LAZY);
+#endif
+	if (dl) {
+		if (obs_get_version() >= MAKE_SEMANTIC_VERSION(33, 0, 0)) {
+			gs_image_file_create_func = gs_image_file_ex_create;
+			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_ex_free");
+			gs_image_file_init_func = os_dlsym(dl, "gs_image_file_ex_init");
+			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file_ex_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file_ex_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file_ex_update_texture");
+		} else {
+			gs_image_file_create_func = gs_image_file4_create;
+			/*
+			 * gs_image_file4_free/init_texture are header-only wrappers in
+			 * OBS 28-32, so they are not dynamic symbols. gs_image_file4
+			 * embeds gs_image_file at offset zero; resolve the exported base
+			 * helpers for those two operations and the versioned symbols for
+			 * init/tick/update.
+			 */
+			gs_image_file_free_func = os_dlsym(dl, "gs_image_file_free");
+			gs_image_file_init_func = os_dlsym(dl, "gs_image_file4_init");
+			gs_image_file_init_texture_func = os_dlsym(dl, "gs_image_file_init_texture");
+			gs_image_file_tick_func = os_dlsym(dl, "gs_image_file4_tick");
+			gs_image_file_update_texture_func = os_dlsym(dl, "gs_image_file4_update_texture");
+		}
+
+		if (!gs_image_file_free_func || !gs_image_file_init_func || !gs_image_file_init_texture_func) {
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] image-file ABI symbols unavailable; file texture parameters are disabled");
+			gs_image_file_create_func = NULL;
+		} else if (!gs_image_file_tick_func || !gs_image_file_update_texture_func) {
+			blog(LOG_WARNING,
+			     "[obs-shaderfilter] animated image symbols unavailable; GIF textures will remain static");
+		}
+		os_dlclose(dl);
+	} else {
+		blog(LOG_WARNING, "[obs-shaderfilter] unable to resolve OBS image-file ABI");
+	}
 
 	return true;
 }

@@ -3225,11 +3225,21 @@ static enum gs_color_space shader_filter_get_color_space(void *data, size_t coun
 
 static gs_texrender_t *create_or_reset_texrender(gs_texrender_t *render, enum gs_color_format format)
 {
-	if (!render) {
-		render = gs_texrender_create(format, GS_ZS_NONE);
-	} else {
-		gs_texrender_reset(render);
+	if (render && gs_texrender_get_format(render) != format) {
+		/*
+		 * A reset preserves the render target's original pixel format.
+		 * Recreate when the source changes color space so SDR/HDR switches
+		 * do not leave the filter rendering into a stale-format texture.
+		 */
+		gs_texrender_destroy(render);
+		render = NULL;
 	}
+
+	if (!render)
+		render = gs_texrender_create(format, GS_ZS_NONE);
+	else
+		gs_texrender_reset(render);
+
 	return render;
 }
 

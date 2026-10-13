@@ -57,8 +57,8 @@ def compile_case(name,body):
         effect=root/'combined.effect';effect.write_text(src)
         result=subprocess.run([str(NATIVE_BINARY),str(effect)],text=True,capture_output=True)
         if result.returncode!=0:
-            lines=[line for line in result.stdout.splitlines() if 'error' in line.lower() or 'PASS=' in line]
-            raise RuntimeError(f'{name}: '+ '\n'.join(lines[-12:]))
+            lines=(result.stdout+'\n'+result.stderr).splitlines()
+            raise RuntimeError(f'{name} (exit {result.returncode}): '+ '\n'.join(lines[-20:]))
         print(f'PASS {name}',flush=True)
 
 
@@ -74,6 +74,44 @@ def checks():
     blur=(LIB/'blur.glsl').read_text()
     assert 'radius = clamp(radius, 0, 8);' in blur
     assert 'samples = clamp(samples, 1, 32);' in blur
+    # Source-contract guards for the review's numerical edge cases.
+    # These supplement native effect compilation; they are NOT GPU pixel tests.
+    colors=(LIB/'colors.glsl').read_text()
+    animation=(LIB/'animation.glsl').read_text()
+    math=(LIB/'math.glsl').read_text()
+    assert 'data/stdlib' in (ROOT/'CMakeLists.txt').read_text().split('install(DIRECTORY ',1)[1].split('DESTINATION',1)[0]
+    assert 'if (l <= 0.0) return float3(0.0, 0.0, 0.0);' in colors
+    assert 'if (l >= 1.0) return float3(1.0, 1.0, 1.0);' in colors
+    assert '(l / (l - mn))' in colors and '((1.0 - l) / (mx - l))' in colors
+    assert 'saturate(color) * intervals + 0.5' in colors
+    assert 'animationModPositive(time, period * 2.0)' in animation
+    assert 'animationModPositive(time, totalDuration)' in animation
+    assert 'mod(time' not in animation
+    assert 'if (lenSq <= 0.0) return length(pa);' in math
+    assert 'if (sigma <= 0.0001) return x == 0.0 ? 1.0 : 0.0;' in blur
+    assert 'if (samples == 1) return image.Sample(textureSampler, uv);' in blur
+    assert 'return curlDirection(' in noise and 'if (lenSq <= 1.0e-12)' in noise
+    assert 'if (octaves <= 0 || abs(eps) <= 1.0e-6)' in noise
+    assert 'dot(a, hash22(i) * 2.0 - 1.0)' in noise
+    assert 'abs(2.0 * perlinNoise(p) - 1.0)' in noise
+    assert 'abs(2.0 * perlinNoise3D(p) - 1.0)' in noise
+    assert 'float3(x, y, p.z) * 2.0 + 100.0;' in noise
+    assert 'p.z * 2.0) * 2.0' not in noise
+    assert 'float3 c = a - o2 + 2.0 * G;' in noise
+    assert 'float3 d = a - ONE + 3.0 * G;' in noise
+    assert 'float4(dot(a, a), dot(b, b), dot(c, c), dot(d, d))' in noise
+
+    # All six strict coordinate orderings must reach consecutive simplex vertices.
+    from itertools import permutations
+    for order in permutations(range(3)):
+        a=[0.0,0.0,0.0]
+        for rank,axis in enumerate(order): a[axis]=float(rank)
+        g=[float(a[k]>=a[(k+1)%3]) for k in range(3)]
+        lo=[1.0-v for v in g]
+        first=[min(g[k],lo[(k+2)%3]) for k in range(3)]
+        second=[max(g[k],lo[(k+2)%3]) for k in range(3)]
+        assert sum(first)==1.0 and sum(second)==2.0
+        assert all(first[k]<=second[k] for k in range(3))
     print('STDLIB_STATIC_CONTRACT_PASS=1')
     for name in HEADERS:
         case='#include "../stdlib/'+name+'.glsl"\n'
@@ -90,6 +128,29 @@ def checks():
         compile_case(name,case+main)
     includes='\n'.join('#include "../stdlib/'+name+'.glsl"' for name in HEADERS) + '\n#include "../stdlib/math.glsl"'
     compile_case('all',includes+'\nfloat4 mainImage(VertData v_in) : TARGET {float n=fbm(v_in.uv,3)+worley(v_in.uv).x+worley3D(float3(v_in.uv,0.5)).x;float3 c=tonemapACES(rgb2lab(float3(n,n,n)));float w=loopWithHold(elapsed_time,1.0,0.5);return gaussianBlur1D(v_in.uv,uv_pixel_interval,float2(1.0,0.0),2.0,3)*float4(c,1.0)*easeInOutSine(w);}')
+    # Exercise the reviewed functions as real libobs shader expressions,
+    # including their boundary inputs. This verifies compilation, not pixels.
+    cases='\n'.join('#include "../stdlib/'+name+'.glsl"' for name in HEADERS)
+    edge_main = '''float4 mainImage(VertData v_in) : TARGET {
+        float2 p = v_in.uv * 2.0;
+        float3 q = float3(p, 0.25);
+        float2 curl = curlNoise(p, 0.0) + curlFbm(p, 0, 0.01);
+        float3 col = blendColor(float3(0.0,0.0,0.0), float3(1.0,0.0,0.0))
+            + blendLuminosity(float3(1.0,0.0,0.0), float3(1.0,1.0,1.0))
+            + posterize(float3(1.0,0.5,0.0), 3.0);
+        float n = simplexNoise(p) + simplexNoise3D(q)
+            + fbm3D(q, 2) + ridgeNoise3D(q, 2)
+            + billowNoise3D(q, 2) + bumpNoise3D(q, 2)
+            + ridgeNoise(p, 2) + billowNoise(p, 2) + bumpNoise(p, 2)
+            + distToSegment(p, p, p)
+            + pingPong(-0.5, 1.0) + loopWithHold(-0.5, 1.0, 0.5)
+            + gaussian1D(1.0, 0.0);
+        float4 blurred = gaussianBlur1D(v_in.uv, uv_pixel_interval,
+            float2(1.0,0.0), 0.0, 3)
+            + directionalBlur(v_in.uv, uv_pixel_interval, 0.0, 10.0, 1);
+        return float4(col * 0.01 + n * 0.01 + curl.x, blurred.g);
+    }'''
+    compile_case('edge-expressions', cases+'\n'+edge_main)
     print('STDLIB_NATIVE_OBS_PASS=1')
 
 

@@ -11,7 +11,7 @@
 #endif
 
 float gaussian1D(float x, float sigma) {
-    if (sigma < 0.0001) return 1.0;
+    if (sigma <= 0.0001) return x == 0.0 ? 1.0 : 0.0;
     float twoSigmaSq = 2.0 * sigma * sigma;
     return exp(-(x * x) / twoSigmaSq) / (sqrt(TAU) * sigma);
 }
@@ -62,8 +62,9 @@ float4 directionalBlur(float2 uv, float2 texelSize, float angle, float strength,
     float weightSum = 0.0;
 
     samples = clamp(samples, 1, 32);
+    if (samples == 1) return image.Sample(textureSampler, uv);
     for (int i = 0; i < samples; i++) {
-        float t = float(i) / float(max(samples - 1, 1)) - 0.5;
+        float t = float(i) / float(samples - 1) - 0.5;
         float2 offset = direction * t * strength * texelSize;
         float weight = gaussian1D(t * 2.0, 0.4);
 

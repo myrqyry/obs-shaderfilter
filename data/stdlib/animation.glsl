@@ -83,9 +83,14 @@ float easeOutBack(float t) {
     return f * f * ((s + 1.0) * f + s) + 1.0;
 }
 
+// GLSL-style positive modulo, also valid in OBS's Direct3D/HLSL backend.
+float animationModPositive(float x, float period) {
+    return x - period * floor(x / period);
+}
+
 float pingPong(float time, float period) {
     if (period <= 0.0) return 0.0;
-    float t = mod(time, period * 2.0) / period;
+    float t = animationModPositive(time, period * 2.0) / period;
     return t < 1.0 ? t : 2.0 - t;
 }
 
@@ -115,7 +120,7 @@ float smoothStepped(float t, float steps) {
 float loopWithHold(float time, float animDuration, float holdDuration) {
     if (animDuration <= 0.0) return 1.0;
     float totalDuration = max(animDuration + holdDuration, animDuration);
-    float t = mod(time, totalDuration);
+    float t = animationModPositive(time, totalDuration);
     return clamp(t / animDuration, 0.0, 1.0);
 }
 

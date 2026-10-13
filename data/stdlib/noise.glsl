@@ -109,9 +109,9 @@ float simplexNoise(float2 p) {
 
     float3 h = max(0.5 - float3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
     float3 n = h * h * h * h * float3(
-        dot(a, hash22(i)),
-        dot(b, hash22(i + o)),
-        dot(c, hash22(i + 1.0))
+        dot(a, hash22(i) * 2.0 - 1.0),
+        dot(b, hash22(i + o) * 2.0 - 1.0),
+        dot(c, hash22(i + 1.0) * 2.0 - 1.0)
     );
 
     return dot(n, float3(1.0, 1.0, 1.0)) * 41.0 + 0.5;
@@ -262,18 +262,26 @@ float fbmConfig(float2 p, int octaves, float lacunarity, float gain) {
 // CURL NOISE (divergence-free vector fields)
 // ###########################################################################
 
+float2 curlDirection(float2 delta) {
+    float lenSq = dot(delta, delta);
+    if (lenSq <= 1.0e-12) return float2(0.0, 0.0);
+    return delta * rsqrt(lenSq);
+}
+
 float2 curlNoise(float2 p, float eps) {
+    if (abs(eps) <= 1.0e-6) return float2(0.0, 0.0);
     float n0 = perlinNoise(p);
     float nx = perlinNoise(p + float2(eps, 0.0));
     float ny = perlinNoise(p + float2(0.0, eps));
-    return normalize(float2(n0 - ny, nx - n0));
+    return curlDirection(float2(n0 - ny, nx - n0));
 }
 
 float2 curlFbm(float2 p, int octaves, float eps) {
+    if (octaves <= 0 || abs(eps) <= 1.0e-6) return float2(0.0, 0.0);
     float n0 = fbm(p, octaves);
     float nx = fbm(p + float2(eps, 0.0), octaves);
     float ny = fbm(p + float2(0.0, eps), octaves);
-    return normalize(float2(n0 - ny, nx - n0));
+    return curlDirection(float2(n0 - ny, nx - n0));
 }
 
 // ###########################################################################
@@ -301,7 +309,7 @@ float ridgeNoise(float2 p, int octaves) {
     float s05 = sin(0.5);
 
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = 1.0 - abs(perlinNoise(p));
+        float n = 1.0 - abs(2.0 * perlinNoise(p) - 1.0);
         v += a * n * n;
         float2 rotated = float2(p.x * c05 - p.y * s05, p.x * s05 + p.y * c05);
         p = rotated * 2.0 + shift;
@@ -318,7 +326,7 @@ float billowNoise(float2 p, int octaves) {
     float s05 = sin(0.5);
 
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = abs(perlinNoise(p));
+        float n = abs(2.0 * perlinNoise(p) - 1.0);
         v += a * n;
         float2 rotated = float2(p.x * c05 - p.y * s05, p.x * s05 + p.y * c05);
         p = rotated * 2.0 + shift;
@@ -335,7 +343,7 @@ float bumpNoise(float2 p, int octaves) {
     float s05 = sin(0.5);
 
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = perlinNoise(p);
+        float n = 2.0 * perlinNoise(p) - 1.0;
         n = 1.0 - abs(n);
         n = n * n;
         v += a * n;
@@ -411,7 +419,7 @@ float fbm3D(float3 p, int octaves) {
         v += a * perlinNoise3D(p);
         float x = p.x * c05 - p.y * s05;
         float y = p.x * s05 + p.y * c05;
-        p = float3(x, y, p.z * 2.0) * 2.0 + 100.0;
+        p = float3(x, y, p.z) * 2.0 + 100.0;
         a *= 0.5;
     }
     return v;
@@ -425,11 +433,11 @@ float ridgeNoise3D(float3 p, int octaves) {
     float v = 0.0;
     float a = 0.5;
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = 1.0 - abs(perlinNoise3D(p));
+        float n = 1.0 - abs(2.0 * perlinNoise3D(p) - 1.0);
         v += a * n * n;
         float x = p.x * cos(0.5) - p.y * sin(0.5);
         float y = p.x * sin(0.5) + p.y * cos(0.5);
-        p = float3(x, y, p.z * 2.0) * 2.0 + 100.0;
+        p = float3(x, y, p.z) * 2.0 + 100.0;
         a *= 0.5;
     }
     return v;
@@ -439,11 +447,11 @@ float billowNoise3D(float3 p, int octaves) {
     float v = 0.0;
     float a = 0.5;
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = abs(perlinNoise3D(p));
+        float n = abs(2.0 * perlinNoise3D(p) - 1.0);
         v += a * n;
         float x = p.x * cos(0.5) - p.y * sin(0.5);
         float y = p.x * sin(0.5) + p.y * cos(0.5);
-        p = float3(x, y, p.z * 2.0) * 2.0 + 100.0;
+        p = float3(x, y, p.z) * 2.0 + 100.0;
         a *= 0.5;
     }
     return v;
@@ -453,13 +461,13 @@ float bumpNoise3D(float3 p, int octaves) {
     float v = 0.0;
     float a = 0.5;
     for (int i = 0; i < min(max(octaves, 0), 8); i++) {
-        float n = perlinNoise3D(p);
+        float n = 2.0 * perlinNoise3D(p) - 1.0;
         n = 1.0 - abs(n);
         n = n * n;
         v += a * n;
         float x = p.x * cos(0.5) - p.y * sin(0.5);
         float y = p.x * sin(0.5) + p.y * cos(0.5);
-        p = float3(x, y, p.z * 2.0) * 2.0 + 100.0;
+        p = float3(x, y, p.z) * 2.0 + 100.0;
         a *= 0.5;
     }
     return v;
@@ -491,27 +499,26 @@ float simplexNoise3D(float3 p) {
     float3 unskew = float3(t, t, t);
     float3 a = p - (i - unskew);
 
-    float3 o1 = step(a.yzx, a);
-    float3 o2 = ONE - step(a.zxy, a);
-    float3 b = a - o1 + float3(G, G, G);
-    float3 c = a - ONE + float3(2.0 * G, 2.0 * G, 2.0 * G);
+    // Rank the coordinates so the two intermediate vertices are distinct,
+    // with each gradient sampled at the same vertex as its displacement.
+    float3 g = step(a.yzx, a);
+    float3 l = ONE - g;
+    float3 o1 = min(g, l.zxy);
+    float3 o2 = max(g, l.zxy);
+    float3 b = a - o1 + G;
+    float3 c = a - o2 + 2.0 * G;
+    float3 d = a - ONE + 3.0 * G;
 
-    float3 h = max(float3(0.5, 0.5, 0.5) - float3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    float3 n = h * h * h * h;
-
-    float3 gradA = hash33(i) * 2.0 - ONE;
-    float3 gradB = hash33(i + o1) * 2.0 - ONE;
-    float3 gradC = hash33(i + o2) * 2.0 - ONE;
-    float3 gradD = hash33(i + ONE) * 2.0 - ONE;
-
-    float3 gn;
-    gn.x = dot(gradA, a);
-    gn.y = dot(gradB, b);
-    gn.z = dot(gradC, c);
-    float3 c1 = c - ONE + float3(3.0 * G, 3.0 * G, 3.0 * G);
-    float gw = dot(gradD, c1);
-
-    return 0.5 + 0.5 * (dot(n, gn) + (h.x * h.x * h.x * h.x) * gw) * 32.0;
+    float4 h = max(float4(0.6, 0.6, 0.6, 0.6) -
+        float4(dot(a, a), dot(b, b), dot(c, c), dot(d, d)), 0.0);
+    float4 falloff = h * h * h * h;
+    float4 gradients = float4(
+        dot(hash33(i) * 2.0 - ONE, a),
+        dot(hash33(i + o1) * 2.0 - ONE, b),
+        dot(hash33(i + o2) * 2.0 - ONE, c),
+        dot(hash33(i + ONE) * 2.0 - ONE, d)
+    );
+    return 0.5 + 0.5 * dot(falloff, gradients) * 32.0;
 }
 
 // ###########################################################################

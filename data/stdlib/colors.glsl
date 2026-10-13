@@ -147,7 +147,9 @@ float3 grayscale(float3 color) {
 }
 
 float3 posterize(float3 color, float levels) {
-    return floor(color * levels) / max(levels - 1.0, 1.0);
+    // N output levels have N-1 intervals; round to the nearest level.
+    float intervals = max(levels - 1.0, 1.0);
+    return floor(saturate(color) * intervals + 0.5) / intervals;
 }
 
 float3 threshold(float3 color, float thresh) {
@@ -176,12 +178,15 @@ float blendLuminance(float3 c) {
 }
 
 float3 blendSetLum(float3 c, float l) {
-    float d = l - blendLuminance(c);
-    float3 r = c + d;
+    // ClipColor from the non-separable blend specification. Black and white
+    // targets are fixed points; never divide by l or 1-l at those endpoints.
+    if (l <= 0.0) return float3(0.0, 0.0, 0.0);
+    if (l >= 1.0) return float3(1.0, 1.0, 1.0);
+    float3 r = c + (l - blendLuminance(c));
     float mn = blend_min3(r.r, r.g, r.b);
+    if (mn < 0.0) r = l + (r - l) * (l / (l - mn));
     float mx = blend_max3(r.r, r.g, r.b);
-    if (mn < 0.0) r = lerp((l / (l - mn)) * r, float3(0.0, 0.0, 0.0), -mn / l);
-    if (mx > 1.0) r = lerp(((1.0 - l) / (mx - l)) * r, float3(1.0, 1.0, 1.0), (mx - 1.0) / (1.0 - l));
+    if (mx > 1.0) r = l + (r - l) * ((1.0 - l) / (mx - l));
     return saturate(r);
 }
 

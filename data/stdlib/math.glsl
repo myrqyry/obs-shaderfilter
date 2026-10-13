@@ -124,7 +124,9 @@ float2 aspectCorrect(float2 uv, float2 resolution) {
 float distToSegment(float2 p, float2 a, float2 b) {
     float2 pa = p - a;
     float2 ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    float lenSq = dot(ba, ba);
+    if (lenSq <= 0.0) return length(pa);
+    float h = clamp(dot(pa, ba) / lenSq, 0.0, 1.0);
     return length(pa - ba * h);
 }
 

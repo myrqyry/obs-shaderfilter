@@ -86,18 +86,24 @@ float smoothQuintic(float t) {
 }
 
 float expSmooth(float current, float target, float speed) {
-    return lerp(current, target, 1.0 - exp(-speed));
+    return lerp(current, target, 1.0 - exp(-max(speed, 0.0)));
 }
 
 float softClamp(float x, float limit) {
+    // A zero limit means no soft-clamping, not an undefined division.
+    if (limit == 0.0) return x;
     return limit * tanh(x / limit);
 }
 
 float bias(float t, float b) {
+    // The bias curve is defined for 0 < b < 1. Outside that domain,
+    // preserve the input instead of producing infinities or NaNs.
+    if (b <= 0.0 || b >= 1.0) return t;
     return pow(t, log(b) / log(0.5));
 }
 
 float gain(float t, float g) {
+    if (g <= 0.0 || g >= 1.0) return t;
     if (t < 0.5)
         return bias(2.0 * t, 1.0 - g) / 2.0;
     else
@@ -113,11 +119,14 @@ float cosNorm(float x) {
 }
 
 float modPositive(float x, float m) {
-    return x - m * floor(x / m);
+    // Negative periods have the same positive remainder as their magnitude.
+    float period = abs(m);
+    if (period == 0.0) return x;
+    return x - period * floor(x / period);
 }
 
 float2 aspectCorrect(float2 uv, float2 resolution) {
-    float aspect = resolution.x / resolution.y;
+    float aspect = resolution.y != 0.0 ? resolution.x / resolution.y : 1.0;
     return float2((uv.x - 0.5) * aspect + 0.5, uv.y);
 }
 

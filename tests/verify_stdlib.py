@@ -88,6 +88,13 @@ def checks():
     assert 'animationModPositive(time, totalDuration)' in animation
     assert 'mod(time' not in animation
     assert 'if (lenSq <= 0.0) return length(pa);' in math
+    assert 'exp(-max(speed, 0.0))' in math
+    assert 'if (limit == 0.0) return x;' in math
+    assert 'if (b <= 0.0 || b >= 1.0) return t;' in math
+    assert 'if (g <= 0.0 || g >= 1.0) return t;' in math
+    assert 'float period = abs(m);' in math
+    assert 'if (period == 0.0) return x;' in math
+    assert 'resolution.y != 0.0 ? resolution.x / resolution.y : 1.0' in math
     assert 'if (sigma <= 0.0001) return x == 0.0 ? 1.0 : 0.0;' in blur
     assert 'if (samples == 1) return image.Sample(textureSampler, uv);' in blur
     assert 'return curlDirection(' in noise and 'if (lenSq <= 1.0e-12)' in noise
@@ -143,6 +150,11 @@ def checks():
             + billowNoise3D(q, 2) + bumpNoise3D(q, 2)
             + ridgeNoise(p, 2) + billowNoise(p, 2) + bumpNoise(p, 2)
             + distToSegment(p, p, p)
+            + softClamp(1.0, 0.0) + bias(0.5, 0.0) + bias(0.5, 1.0)
+            + gain(0.5, 0.0) + gain(0.5, 1.0)
+            + modPositive(-0.5, -2.0) + modPositive(1.0, 0.0)
+            + aspectCorrect(p, float2(1920.0, 0.0)).x
+            + expSmooth(0.0, 1.0, -1.0)
             + pingPong(-0.5, 1.0) + loopWithHold(-0.5, 1.0, 0.5)
             + gaussian1D(1.0, 0.0);
         float4 blurred = gaussianBlur1D(v_in.uv, uv_pixel_interval,

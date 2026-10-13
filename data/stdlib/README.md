@@ -52,6 +52,10 @@ including third-party shader libraries with their own helpers.
   coordinate system. This changes previously incorrect results.
 - Animation time helpers guard zero/negative durations; remapping guards
   zero-width input ranges.
+- Math fallbacks: zero softClamp limit, out-of-domain bias/gain parameters,
+  and zero modPositive period preserve their input; a negative modulo period
+  uses its magnitude. aspectCorrect uses aspect ratio 1 when height is zero;
+  expSmooth treats negative speed as zero.
 - `blur.glsl` samples the default `image` texture and belongs in filters,
   or source shaders that explicitly bind a source image. Its loops are
   sampled per pixel; use conservative radii on streaming resolutions.

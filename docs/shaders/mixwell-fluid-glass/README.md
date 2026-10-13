@@ -1,6 +1,6 @@
 # Mixwell Fluid Glass — OBS Shaderfilter
 
-**File:** \`data/examples/mixwell-fluid-glass.shader\`
+**File:** `data/examples/mixwell-fluid-glass.shader`
 
 A fluid-brush refraction effect adapted from the Mixwell Reverse-Drift
 Function (RDF) published by Doug L. James and Ethan James. It is a
@@ -11,17 +11,20 @@ Mixwell paper/source: https://github.com/dougjam/mixwell-2026
 
 The original Mixwell code is MIT-licensed, copyright (c) 2026
 Doug L. James and Ethan James. The complete upstream license is preserved
-alongside the shader as \`LICENSE-MIXWELL-MIT.txt\`.
+in this documentation directory as `LICENSE-MIXWELL-MIT.txt`.
 
 ## Use in OBS
 
 1. Add **User-defined shader** to a source or scene under OBS Filters.
 2. In the **Shader Source** section, use the shader-file picker (the fork
    defaults to a file; disable **Raw Shader Text** if that switch is on).
-3. Select \`mixwell-fluid-glass.shader\` from this worktree's
-   \`data/examples/\` directory.
+3. Select `mixwell-fluid-glass.shader` from this worktree's
+   `data/examples/` directory.
+   The companion guide/license are under `docs/shaders/mixwell-fluid-glass/`
+   and intentionally NOT in the examples folder. OBS parses Markdown
+   headings as shader preprocessor commands if the wrong file is selected.
 4. **Do not enable Entire Effect**. This is a normal Shaderfilter
-   \`.shader\` using the plugin's built-in image, sampler, UV and clock.
+   `.shader` using the plugin's built-in image, sampler, UV and clock.
 5. Begin with Strength around 0.2, Speed around 0.15, and Fast quality.
    For a static visual, set Speed to 0.
 6. Select **One** brush for the lowest GPU cost. Higher radius and
@@ -44,15 +47,15 @@ installation or plugin binary is changed automatically.
 
 ### Technical mechanism
 
-\`fluidGlassBrushVelocity\` evaluates Mixwell's softened 2D influence
-matrix \`K(v,r)=A*I+B*v*v^T\`. \`fluidGlassReverseBrush\` integrates
+`fluidGlassBrushVelocity` evaluates Mixwell's softened 2D influence
+matrix `K(v,r)=A*I+B*v*v^T`. `fluidGlassReverseBrush` integrates
 backward from the end of a moving brush with explicit midpoint steps.
 Points beyond four brush radii from the path are skipped; a smooth mask
 reduces boundary discontinuities. The image texture is sampled **once**
 after composing the inverse brush mappings.
 
 The influence matrix and integration are derived from Mixwell's
-MIT-licensed \`public/code/glsl/MixwellBrush.glsl\`. Our real-time
+MIT-licensed `public/code/glsl/MixwellBrush.glsl`. Our real-time
 implementation uses bounded **fixed steps**, instead of the adaptive
 midpoint integrator described by the authors; the output is therefore
 an approximation, **not** a faithful port of Mixwell's entire solver.
@@ -82,7 +85,7 @@ This shader does not synthesize extra haze or colors by itself.
   the repository root (requires a C compiler, pkg-config/libobs development
   headers, and a working OBS OpenGL graphics backend).
   The test constructed Shaderfilter's actual template and applied its
-  OpenGL-specific stripping of \`[loop]\` before \`gs_effect_create\`.
+  OpenGL-specific stripping of `[loop]` before `gs_effect_create`.
 - Both Fast and Detailed branches are present in the compiled shader,
   with file-select, scalar and timing uniform parameters recognized.
 - Static contract checks verify the source has exactly the neutral and
@@ -95,5 +98,5 @@ shader, so it was not a valid image-quality test. Native shader compilation
 is not proof that an OBS filter has actually rendered the intended pixels.
 
 The shader is committed on the separate
-\`aster/mixwell-fluid-glass\` branch/worktree to protect parallel changes
+`aster/mixwell-fluid-glass` branch/worktree to protect parallel changes
 in the normal OBS repository.

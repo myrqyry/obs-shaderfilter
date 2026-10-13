@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SHADER = ROOT / "data/examples/mixwell-fluid-glass.shader"
 SOURCE = ROOT / "obs-shaderfilter.c"
-LICENSE = ROOT / "data/examples/LICENSE-MIXWELL-MIT.txt"
+LICENSE = ROOT / "docs/shaders/mixwell-fluid-glass/LICENSE-MIXWELL-MIT.txt"
 NATIVE = ROOT / "tests/obs_native_shader_compile.c"
 
 
@@ -30,6 +30,8 @@ def check_contract(shader: str) -> None:
     assert "float4 mainImage(VertData v_in) : TARGET" in shader
     assert "uniform texture2d image;" not in shader
     assert "technique Draw" not in shader
+    assert not list((ROOT / "data/examples").glob("MIXWELL_FLUID_GLASS.*")), "Nonshader docs must not be in examples"
+    assert not (ROOT / "data/examples/LICENSE-MIXWELL-MIT.txt").exists()
     license_text = LICENSE.read_text()
     assert "MIT License" in license_text
     assert "Copyright (c) 2026 Doug L. James and Ethan James" in license_text

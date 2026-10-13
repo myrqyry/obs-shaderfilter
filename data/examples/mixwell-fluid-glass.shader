@@ -11,7 +11,7 @@
 // Inspired by MixwellBrush.glsl by Doug L. James and Ethan James, MIT (2026):
 // https://github.com/dougjam/mixwell-2026
 // The influence matrix and midpoint reverse integration are adapted here.
-// See data/examples/MIXWELL_FLUID_GLASS.md and LICENSE-MIXWELL-MIT.txt.
+// Guide and full license: docs/shaders/mixwell-fluid-glass/ (repository).
 //
 // This is a real-time fixed-step approximation, not the original adaptive
 // integrator, and not a volumetric simulation. The source is sampled once.

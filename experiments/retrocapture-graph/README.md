@@ -12,7 +12,8 @@ Dependencies: git, C++17 compiler, pkg-config, GLFW3/OpenGL, libpng and xvfb-run
 
     bash experiments/retrocapture-graph/run.sh
 
-The runner clones the pinned RetroCapture source into a temporary sparse checkout, applies one reviewed experimental patch, builds the actual ShaderEngine, and renders four GPU tests. It redirects its app config/log directory to a temporary XDG directory and cleans up afterward.
+The runner clones the pinned RetroCapture source into a temporary sparse checkout, applies one reviewed experimental patch, builds the actual ShaderEngine, and runs 12 positive GPU scenarios plus
+one explicitly expected-failing reproduction (Hyllian black output). It redirects its app config/log directory to a temporary XDG directory and cleans up afterward.
 
 Offline reuse of a preexisting *matching pinned-revision* source checkout:
 
@@ -30,6 +31,18 @@ Mesa OpenGL llvmpipe, 160 × 120 synthetic input texture. Checksums are sums of 
 | Vector Glow (presets/vector-glow.glslp) | 9 | 12,353,239 | Real multi-Kawase glow chain |
 | LCD response-time (motionblur/response-time.glslp) | 1 + history | 5,280,000 → 7,430,400 → 7,545,600 | Changed input after frame zero, then held fixed; history response evolves |
 | Synthetic PassFeedback0Texture fixture | 1 + self-feedback | 8,400,890 → 10,157,236 → 11,036,831 | Source input unchanged all three frames, genuine feedback growth |
+| CRT Lottes multipass | 2 | 10,917,762 | Different spatial output, nonempty GPU pixels |
+| CRT Guest SM | 2 | 11,929,547 | Different spatial output, nonempty GPU pixels |
+| Kawase Blur | 7 | 12,228,219 | Original seven-pass blur graph |
+| Kawase Glow | 8 | 12,348,430 | Original eight-pass glow graph |
+| CRT Guest/Dr Venom NTSC Composite | 12 | 11,220,811 (first frame) | Original 12-pass NTSC + CRT graph, 3D LUT resources |
+| Feedback source resize 160×120→192×128→160×120 | 1 + feedback | 8,400,890 → 10,747,481 → 8,400,890 | All frames nonblack, dimensions verified, returning first-frame baseline |
+| Feedback preset reload | 1 + feedback | first frame 8,400,890; after reload 8,400,890 | Existing feedback no longer leaks through preset reload |
+| Vector Glow graph resize 160×120→192×128→160×120 | 9 | 12,353,239 → 15,792,846 → 12,353,239 | Multistage target reallocation and exact return-to-baseline |
+
+**Known failing graph (not counted as passing):** the unmodified `crt/crt-hyllian-multipass.glslp` loads two passes, but returns black RGB on our 160×120 fixture (`NONBLACK=0`, `VARIED=0`, checksum 4,896,000 from opaque alpha alone). The runner requires that known-black condition and fails if the preset unexpectedly changes status, so improvements must be consciously reviewed instead of being silently reclassified.
+
+These GPU tests verify output, not exact visual equivalence with a RetroArch emulator. The fixed camera-like gradient/checkerboard isn't a substitute for real gameplay, and llvmpipe says nothing about 1080p60/4K performance.
 
 The tests use the original RetroCapture shader engine, a hidden GLFW context and real GPU readback. They do not mock shader output, and compilation alone does not satisfy the assertions.
 
@@ -45,7 +58,7 @@ The same fixture now produces a varied, nonempty first frame and continues accum
 
 - The source engine's m_frameHistory path stores **processed output** instead of raw original input and performs its history copy using **pass 0's shader**, potentially applying it again rather than doing a neutral texture copy. Therefore the observed LCD response-time evolution does not establish precise RetroArch history parity. This needs separate correction and explicit input-history regression tests.
 - The history ring-buffer resize check uses the remaining buffer's dimensions after popping the recycled element. That needs a resize test before relying on mixed resolutions.
-- We have **not** proven output against native RetroArch reference images, actual OBS UI integration, live camera input, Windows Direct3D/Metal behavior, hardware GPU cost, resize/reload/reconnect handling, or color-space/alpha fidelity.
+- We have **not** proven output against native RetroArch reference images, actual OBS UI integration, live camera input, Windows Direct3D/Metal behavior, hardware GPU cost, frame-history resize/reconnect handling, or color-space/alpha fidelity. We have tested feedback and multistage graph resize/reload only in the standalone OpenGL harness.
 - A GLSLP preset is a graph: shaders plus intermediate buffers, pass sizes, aliases, float/sRGB flags and temporal inputs. It is not equivalent to a single ShaderFilter .shader or OBS .effect.
 - RetroCapture runs GLSL on its own OpenGL context; ShaderFilter and HyperShaderFX use OBS's libobs graphics abstraction. Directly injecting foreign GL texture IDs into a normal OBS filter is neither generally portable nor safe.
 

@@ -23,7 +23,7 @@ if [[ -n "${RETROCAPTURE_SOURCE_DIR:-}" ]]; then
   for dir in shader renderer utils; do
     cp -a "$upstream/src/$dir" "$TEMP/repo/src/"
   done
-  for dir in crt blurs presets anti-aliasing motionblur; do
+  for dir in crt blurs presets anti-aliasing motionblur ntsc; do
     cp -a "$upstream/shaders/shaders_glsl/$dir" "$TEMP/repo/shaders/shaders_glsl/"
   done
   # The source checkout may contain experimental worktree changes: always
@@ -36,7 +36,7 @@ else
   git -C "$TEMP/repo" sparse-checkout set src/shader src/renderer src/utils \
     shaders/shaders_glsl/crt shaders/shaders_glsl/blurs \
     shaders/shaders_glsl/presets shaders/shaders_glsl/anti-aliasing \
-    shaders/shaders_glsl/motionblur
+    shaders/shaders_glsl/motionblur shaders/shaders_glsl/ntsc
 fi
 (cd "$TEMP/repo" && patch --silent --dry-run -p1 < "$ROOT/patches/0001-restore-feedback-target.patch")
 (cd "$TEMP/repo" && patch --silent -p1 < "$ROOT/patches/0001-restore-feedback-target.patch")
@@ -62,4 +62,47 @@ xvfb-run -a "$TEMP/verify-preset" \
  "$TEMP/repo/shaders/shaders_glsl/motionblur/response-time.glslp" history
 printf '\n[synthetic PassFeedback0Texture ping-pong: first-frame and temporal behavior]\n'
 xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/feedback.glslp" feedback
+
+# More real multi-pass shader families: these are not placeholder passes.
+for case in \
+ "CRT_Lottes|crt/crt-lottes-multipass.glslp|2" \
+ "CRT_Guest_SM|crt/crt-guest-sm.glslp|2" \
+ "Kawase_Blur|blurs/kawase_blur_5pass.glslp|7" \
+ "Kawase_Glow|blurs/kawase_glow.glslp|8" \
+ "CRT_Guest_NTSC|presets/crt-guest-dr-venom-ntsc-composite.glslp|12"; do
+  IFS='|' read -r name preset passes <<< "$case"
+  printf '\n[%s — %s real passes]\n' "$name" "$passes"
+  log="$TEMP/$name.log"
+  xvfb-run -a "$TEMP/verify-preset" "$TEMP/repo/shaders/shaders_glsl/$preset" spatial > "$log" 2>&1 || {
+    cat "$log" >&2; echo "PRESET_FAILED=$name" >&2; exit 1;
+  }
+  grep -q "PRESET_LOADED=1 PASSES=$passes" "$log"
+  grep -q 'GLSLP_GRAPH_RENDER_PASS=1 MODE=spatial' "$log"
+  grep -E 'PRESET_LOADED=|FRAME=0|GLSLP_GRAPH_RENDER_PASS=' "$log"
+done
+
+printf '\n[feedback resize: 160x120 -> 192x128 -> 160x120]\n'
+xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/feedback.glslp" resize
+printf '\n[feedback preset reload: history resets deterministically]\n'
+xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/feedback.glslp" reload
+printf '\n[nine-pass pipeline resize: buffers reallocate and return to reference]\n'
+xvfb-run -a "$TEMP/verify-preset" \
+ "$TEMP/repo/shaders/shaders_glsl/presets/vector-glow.glslp" resizestatic
+
+# A known broken real preset MUST remain visible. Its two passes compile,
+# but currently they produce flat black RGB on our controlled input.
+# Treating that as success or hiding it would invalidate the suite.
+printf '\n[expected black-output reproduction: CRT Hyllian multipass]\n'
+log="$TEMP/hyllian.log"
+if xvfb-run -a "$TEMP/verify-preset" \
+ "$TEMP/repo/shaders/shaders_glsl/crt/crt-hyllian-multipass.glslp" spatial > "$log" 2>&1; then
+  echo 'HYLLIAN_UNEXPECTEDLY_PASSED: investigate and promote to regular positive case' >&2
+  cat "$log" >&2
+  exit 1
+fi
+grep -q 'PRESET_LOADED=1 PASSES=2' "$log"
+grep -q 'GLSLP_GRAPH_RENDER_PASS=0 MODE=spatial' "$log"
+grep -E '^FRAME=0 .*VARIED=0 NONBLACK=0' "$log"
+echo 'KNOWN_BLANK_OUTPUT_REPRODUCED=1 (no fix claimed)'
+
 printf '\nRETROCAPTURE_GRAPH_PROOF_PASS=1 (standalone OpenGL, NOT integrated OBS UI)\n'

@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 
-struct Receipt { unsigned long long rgba=0; size_t varied=0, nonzero=0; unsigned char center[4]{}; };
+struct Receipt { unsigned long long rgba=0; size_t varied=0, nonzero=0; unsigned char center[4]{}; uint32_t width=0,height=0; };
 static Receipt render(ShaderEngine &engine, GLuint src, GLuint fbo,
                       int w,int h,int kind,int tick) {
     std::vector<uint8_t> pixels(size_t(w)*h*4);
@@ -32,10 +32,17 @@ static Receipt render(ShaderEngine &engine, GLuint src, GLuint fbo,
         pixels[i+3]=255;
     }
     glBindTexture(GL_TEXTURE_2D,src);
-    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
+    // Reallocate even on resize. Never upload larger pixel data into an old
+    // texture's storage or accidentally test stale dimensions.
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
     engine.setViewport(w,h);
     GLuint output=engine.applyShader(src,w,h);
     if(!output) {std::fprintf(stderr,"ZERO_OUTPUT frame=%d\n",tick);std::exit(7);}
+    if(engine.getOutputWidth()!=unsigned(w) || engine.getOutputHeight()!=unsigned(h)) {
+        std::fprintf(stderr,"BAD_OUTPUT_DIMENSIONS frame=%d actual=%ux%u expected=%dx%d\n",
+            tick,engine.getOutputWidth(),engine.getOutputHeight(),w,h);
+        std::exit(9);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER,fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,output,0);
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) {
@@ -44,6 +51,7 @@ static Receipt render(ShaderEngine &engine, GLuint src, GLuint fbo,
     std::vector<uint8_t> frame(size_t(w)*h*4,0);
     glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,frame.data());
     Receipt r;
+    r.width=engine.getOutputWidth();r.height=engine.getOutputHeight();
     for(size_t i=0;i<frame.size();i+=4) {
        r.rgba+=frame[i]+frame[i+1]+frame[i+2]+frame[i+3];
        if(frame[i]!=frame[4] || frame[i+1]!=frame[5] || frame[i+2]!=frame[6])r.varied++;
@@ -56,9 +64,12 @@ static Receipt render(ShaderEngine &engine, GLuint src, GLuint fbo,
     return r;
 }
 int main(int argc,char**argv) {
-  if(argc!=3){std::fprintf(stderr,"Usage: %s PRESET.glslp MODE[spatial|history|feedback]\n",argv[0]);return 2;}
+  if(argc!=3){std::fprintf(stderr,"Usage: %s PRESET.glslp MODE[spatial|history|feedback|resize|resizestatic|reload]\n",argv[0]);return 2;}
   const bool history=std::string(argv[2])=="history";
   const bool feedback=std::string(argv[2])=="feedback";
+  const bool resize=std::string(argv[2])=="resize" || std::string(argv[2])=="resizestatic";
+  const bool spatialResize=std::string(argv[2])=="resizestatic";
+  const bool reload=std::string(argv[2])=="reload";
   const int w=160,h=120;
   if(!glfwInit()){std::fprintf(stderr,"GLFW_INIT_FAIL\n");return 2;}
   glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
@@ -82,7 +93,7 @@ int main(int argc,char**argv) {
   glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
   glGenFramebuffers(1,&readback);
   auto first=render(engine,source,readback,w,h,history?2:0,0);
-  auto second=render(engine,source,readback,w,h,history?2:0,1);
+  auto second=render(engine,source,readback,resize?192:w,resize?128:h,history?2:0,1);
   auto third=render(engine,source,readback,w,h,history?2:0,2);
   int result=0;
   if(engine.getPreset().getPasses().size()<1 || first.nonzero==0 || second.nonzero==0)result=10;
@@ -90,8 +101,23 @@ int main(int argc,char**argv) {
     // Input changed at frame 1; response-time output should differ
     // on the next frame even though input is then held constant.
     if(second.rgba==third.rgba && std::memcmp(second.center,third.center,4)==0)result=11;
-  } else if(feedback) {
+  } else if(feedback || resize || reload) {
     if(first.rgba==second.rgba || second.rgba==third.rgba)result=13;
+    if(resize && (first.nonzero<1 || second.nonzero<1 || third.nonzero<1
+      || second.width!=192 || second.height!=128
+      || first.width!=unsigned(w) || third.width!=unsigned(w)))result=14;
+    if(resize && first.rgba!=third.rgba)result=17;
+    if(spatialResize && (engine.getPreset().getPasses().size()<2
+      || first.varied<size_t(w*h/5)))result=18;
+    if(reload) {
+      if(!engine.loadPreset(argv[1]))result=15;
+      else {
+        auto reset=render(engine,source,readback,w,h,0,3);
+        if(reset.rgba!=first.rgba || std::memcmp(reset.center,first.center,4))result=16;
+        std::printf("RELOAD_REFERENCE_CHECK=%d FRAME0=%llu AFTER_RELOAD=%llu\n",
+          result==0,first.rgba,reset.rgba);
+      }
+    }
   } else {
     // A real multi-pass result should not be byte-for-byte pass-through.
     unsigned long long rawChecksum=0;
@@ -104,7 +130,7 @@ int main(int argc,char**argv) {
     if(first.varied<size_t(w*h/5) || first.rgba==rawChecksum
        || engine.getPreset().getPasses().size()<2)result=12;
   }
-  std::printf("GLSLP_GRAPH_RENDER_PASS=%d MODE=%s\n",result==0,history?"history":(feedback?"feedback":"spatial"));
+  std::printf("GLSLP_GRAPH_RENDER_PASS=%d MODE=%s\n",result==0,history?"history":(feedback?"feedback":(resize?(spatialResize?"resizestatic":"resize"):(reload?"reload":"spatial"))));
   engine.shutdown();
   glDeleteFramebuffers(1,&readback);glDeleteTextures(1,&source);
   glfwDestroyWindow(win);glfwTerminate();

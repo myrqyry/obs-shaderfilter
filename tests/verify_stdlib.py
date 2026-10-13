@@ -82,7 +82,7 @@ def checks():
         elif name=='math':
             main='float4 mainImage(VertData v_in) : TARGET {return float4(smootherstep(0.0,1.0,v_in.uv.x),luma(float3(0.2,0.4,0.6)),0.0,1.0);}'
         elif name=='colors':
-            main='float4 mainImage(VertData v_in) : TARGET {return float4(blendOverlay(float3(0.1,0.2,0.3),rgb2hsv(float3(0.8,0.7,0.1))),1.0);}'
+            main='float4 mainImage(VertData v_in) : TARGET {return float4(blendOverlay(float3(0.1,0.2,0.3),hsv2rgb(rgb2hsv(float3(0.8,0.7,0.1)))),1.0);}'
         elif name=='noise':
             main='float4 mainImage(VertData v_in) : TARGET {float v=fbm(v_in.uv,3);return float4(v,v,v,1.0);}'
         else:

@@ -44,8 +44,13 @@ float3 rgb2hsv(float3 c) {
 
 float3 hsv2rgb(float3 c) {
     float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    // Explicit vector construction preserves the repeated-swizzle result
+    // across OBS's HLSL/OpenGL effect compilation path.
+    float3 hue = float3(c.x, c.x, c.x);
+    float3 one = float3(K.x, K.x, K.x);
+    float3 three = float3(K.w, K.w, K.w);
+    float3 p = abs(frac(hue + K.xyz) * 6.0 - three);
+    return c.z * lerp(one, clamp(p - one, 0.0, 1.0), c.y);
 }
 
 // --- RGB <-> HSL ---

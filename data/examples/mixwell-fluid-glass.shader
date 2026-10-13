@@ -96,7 +96,8 @@ uniform int FluidGlass_Quality<
     string option_1_label = "Detailed (16 midpoint steps)";
 > = 8;
 
-static const float FLUID_GLASS_PI = 3.14159265358979323846;
+// Preprocessor constant: the libobs OpenGL emitter treated static const as uninitialized.
+#define FLUID_GLASS_PI 3.14159265358979323846
 
 // Mixwell's softened brush influence matrix:
 // K(v, r) = A*I + B*(v*v^T), evaluated as a matrix-vector product.

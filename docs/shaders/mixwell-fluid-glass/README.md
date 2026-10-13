@@ -79,23 +79,34 @@ This shader does not synthesize extra haze or colors by itself.
 
 ## Verification
 
-- Passed **real OBS libobs 32 native shader/GLSL compilation** on the
-  user's Linux Mint system with NVIDIA RTX 2070 Super and OpenGL 3.3.
-  Reproduce using `python3 tests/verify_mixwell_fluid_glass.py` from
-  the repository root (requires a C compiler, pkg-config/libobs development
-  headers, and a working OBS OpenGL graphics backend).
-  The test constructed Shaderfilter's actual template and applied its
+- Verified through **real libobs 32.0.1 native OpenGL shader compilation and
+  offscreen GPU pixel readback** under Linux Mint, Mesa llvmpipe. Reproduce
+  using `xvfb-run -a python3 tests/verify_mixwell_fluid_glass.py` on headless
+  Linux (requires a C compiler, pkg-config, libobs headers and OpenGL).
+  An existing graphical session can also run the Python test directly.
+  The test assembles Shaderfilter's actual standard template and applies its
   OpenGL-specific stripping of `[loop]` before `gs_effect_create`.
-- Both Fast and Detailed branches are present in the compiled shader,
-  with file-select, scalar and timing uniform parameters recognized.
-- Static contract checks verify the source has exactly the neutral and
-  final single-sample branches, plus an explicit step bound.
+- At 256×144, a nonuniform gradient/checkerboard input with partial alpha
+  renders correctly with Strength 0. Strength 0.65 alters 21,599 pixels,
+  and changing Direction from 0° to 90° alters 22,093 pixels. At the same
+  strength/direction, 8→16 quality steps changes 4,300 pixels, and two→one
+  brush strokes changes 19,291 pixels (RGB comparisons on llvmpipe, keeping
+  image and time unchanged). The test checks variation and coverage rather
+  than relying on fixed driver-specific checksums.
+- An earlier revision used `static const float FLUID_GLASS_PI` for its
+  degrees-to-radians conversion. libobs/OpenGL warned it was uninitialized,
+  and nonzero strength produced a flat RGBA `(0,0,0,32)` frame in our test.
+  The preprocessor constant and these rendered-pixel assertions fix and
+  guard that exact regression, which compile-only validation missed.
+- The source and tests retain separate Fast (8 midpoint steps) and Detailed
+  (16 steps), one/two stroke bounds, and neutral-source bypass checks.
 
-**Not yet verified:** visible pixel output in OBS, sustained GPU time, or
-edge correctness on production input. An isolated offscreen rendering
-harness returned its clear color even with the known-good pass-through
-shader, so it was not a valid image-quality test. Native shader compilation
-is not proof that an OBS filter has actually rendered the intended pixels.
+**Still unverified:** loading/rendering through the installed ShaderFilter
+Filter UI, actual audio/interaction (not applicable to this shader), target
+GPU frame cost at 1080p60/4K, source-edge behavior on production inputs,
+Windows/macOS shader-backend parity, and live OBS compositing/alpha behavior.
+Passing a direct libobs readback does **not** verify the installed plugin's
+source/filter scheduling and properties lifecycle.
 
 The shader is committed on the separate
 `aster/mixwell-fluid-glass` branch/worktree to protect parallel changes

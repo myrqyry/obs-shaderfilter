@@ -6,6 +6,7 @@ Runs on an OBS/libobs-capable machine without touching OBS configuration.
 from __future__ import annotations
 
 import shlex
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -18,7 +19,9 @@ NATIVE = ROOT / "tests/obs_native_shader_compile.c"
 
 
 def check_contract(shader: str) -> None:
-    assert shader.count("image.Sample(textureSampler,") == 2
+    # Ignore comments and allow harmless whitespace changes around the sampler.
+    executable = re.sub(r"/\*.*?\*/|//[^\n]*", "", shader, flags=re.S)
+    assert len(re.findall(r"\bimage\s*\.\s*Sample\s*\(\s*textureSampler\s*,", executable)) == 2
     assert "fluidGlassBrushVelocity" in shader
     assert "fluidGlassReverseBrush" in shader
     assert "for (int i = 0; i < 16; i++)" in shader
@@ -71,6 +74,7 @@ def main() -> None:
             raise RuntimeError(f"Native OBS shader compile failed ({completed.returncode}):\n"
                                + completed.stdout + "\n" + completed.stderr)
         assert "NATIVE_OBS_SHADER_COMPILE_PASS=1" in completed.stdout, completed.stdout
+        assert "NATIVE_OBS_SHADER_RENDER_PASS=1" in completed.stdout, completed.stdout
         print(completed.stdout.strip())
         print("MIXWELL_NATIVE_OBS_PASS=1")
 

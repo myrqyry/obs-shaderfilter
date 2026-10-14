@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 NATIVE_BINARY=None
 SOURCE=(ROOT/'obs-shaderfilter.c').read_text()
 LIB=ROOT/'data/stdlib'
-HEADERS=('math', 'colors', 'noise', 'animation', 'blur')
+HEADERS=('math', 'colors', 'noise', 'animation', 'blur', 'printmaking')
 
 
 def template(name):
@@ -46,12 +46,13 @@ def expand_text(text,virtual_path,stack=()):
     return '\n'.join(lines)+'\n'
 
 
-def compile_case(name,body):
+def compile_case(name,body,virtual_shader=None):
     with tempfile.TemporaryDirectory(prefix='shader-stdlib-') as tmp:
         root=Path(tmp)
         # Treat the synthetic shader as though it lives in data/examples:
         # this exercises the exact documented ../stdlib/... relative paths.
-        virtual_shader=ROOT/'data/examples/_stdlib-smoke.shader'
+        if virtual_shader is None:
+            virtual_shader=ROOT/'data/examples/_stdlib-smoke.shader'
         src=('#define OPENGL 1\n'+template('begin')+
              expand_text(body,virtual_shader).replace('[loop]','')+'\n'+template('end'))
         effect=root/'combined.effect';effect.write_text(src)
@@ -130,6 +131,8 @@ def checks():
             main='float4 mainImage(VertData v_in) : TARGET {return float4(blendOverlay(float3(0.1,0.2,0.3),hsv2rgb(rgb2hsv(float3(0.8,0.7,0.1)))),1.0);}'
         elif name=='noise':
             main='float4 mainImage(VertData v_in) : TARGET {float v=fbm(v_in.uv,3);return float4(v,v,v,1.0);}'
+        elif name=='printmaking':
+            main='float4 mainImage(VertData v_in) : TARGET {float2 p=v_in.uv*uv_size;float4 c=printNearestCell(p/8.0,0.5,2.0);float v=printHatchField(p,0.5,16.0,2.0)+printValueNoise(c.xy,1.0);return float4(v,v,v,1.0);}'
         else:
             main='float4 mainImage(VertData v_in) : TARGET {float v=easeInOutCubic(v_in.uv.x)+pingPong(elapsed_time,3.0);return float4(v,v,v,1.0);}'
         compile_case(name,case+main)
@@ -163,6 +166,11 @@ def checks():
         return float4(col * 0.01 + n * 0.01 + curl.x, blurred.g);
     }'''
     compile_case('edge-expressions', cases+'\n'+edge_main)
+    # Compile the complete shipped shader files with their UI annotations
+    # and nested relative include paths, not just synthetic calls.
+    for name in ('ink_hatching', 'jittered_pointillism'):
+        shader=ROOT/'data/examples/printmaking'/f'{name}.shader'
+        compile_case('printmaking/'+name,shader.read_text(),shader)
     print('STDLIB_NATIVE_OBS_PASS=1')
 
 

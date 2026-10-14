@@ -51,15 +51,17 @@ float4 mainImage(VertData v_in) : TARGET {
     float2 pixel = v_in.uv * max(uv_size, float2(1.0, 1.0));
     float tone = saturate(dot(source.rgb, float3(0.2126, 0.7152, 0.0722))
                           + tone_balance);
-    float angle = stroke_angle * 0.017453292519943295;
+    float angle = radians(stroke_angle);
+    float crossAngle = radians(45.0);
 
     float primary = printHatchField(pixel, angle, stroke_length, stroke_seed);
-    float crossing = printHatchField(pixel, angle + 0.7853981633974483,
+    float crossing = printHatchField(pixel, angle + crossAngle,
                                     stroke_length, stroke_seed + 11.0);
-    float deep = printHatchField(pixel, angle - 0.7853981633974483,
+    float deep = printHatchField(pixel, angle - crossAngle,
                                 stroke_length, stroke_seed + 29.0);
 
-    // Darker tones accumulate multiple crossing layers.
+    // Tone bands are artistic coverage ramps: the first inks midtones and
+    // shadows; the next two gradually accumulate only in deeper shadows.
     float firstBand = 1.0 - smoothstep(0.62, 0.86, tone);
     float secondBand = 1.0 - smoothstep(0.34, 0.57, tone);
     float thirdBand = 1.0 - smoothstep(0.08, 0.28, tone);

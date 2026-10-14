@@ -60,14 +60,20 @@ float4 mainImage(VertData v_in) : TARGET {
 
     // Sampling the local center makes a dot solid-colored rather than
     // smearing the image's underlying edge through every printed dot.
-    float2 centerUV = saturate(cell.xy * size / dimensions);
+    // Nearest cells can have centers outside the frame at the edges.
+    // Reuse the nearest edge texel, matching a clamp-to-edge sampler.
+    float2 halfTexel = uv_pixel_interval * 0.5;
+    float2 centerUV = clamp(cell.xy * size / dimensions,
+                            halfTexel, 1.0 - halfTexel);
     float3 dotColor = image.Sample(textureSampler, centerUV).rgb;
     float darkness = 1.0 -
         saturate(dot(dotColor, float3(0.2126, 0.7152, 0.0722)));
+    // Noisemaker-inspired dot radius: highlights ~0.34, shadows ~0.74 cells.
     float radius = (0.34 + 0.40 * darkness) * max(dot_scale, 0.01);
     float distanceToDot = length(gridPosition - cell.xy);
 
-    // One output pixel of soft transition; avoids requiring GLSL fwidth().
+    // A 0.75-output-pixel antialiasing half-width in cell units;
+    // avoids requiring GLSL fwidth().
     float feather = max(0.75 / size, 0.001);
     float mask = 1.0 -
         smoothstep(radius - feather, radius + feather, distanceToDot);

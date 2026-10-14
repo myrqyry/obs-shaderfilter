@@ -11,6 +11,8 @@
 // pixel coordinates consistently. Names are namespaced to coexist with
 // HyperShader's generic noise.glsl helpers.
 float printHash(float2 p, float seed) {
+    // Intentional p.xyx projection, matching Noisemaker hash12 and the
+    // common 2D-to-3D hash mixing pattern (not a missing Y component).
     float3 q = frac(float3(p.x, p.y, p.x) * 0.1031 + seed * 0.071);
     float offset = dot(q, q.yzx + 33.33);
     q += float3(offset, offset, offset);
@@ -48,6 +50,7 @@ float2 printRotate(float2 pixel, float radiansAngle) {
 float printHatchField(float2 pixel, float radiansAngle,
                       float strokeLengthPixels, float seed) {
     float2 rotated = printRotate(pixel, radiansAngle);
+    // 0.9 keeps cross-stroke variation close to one pixel per sample.
     float2 position = rotated *
         float2(1.0 / max(strokeLengthPixels, 1.0), 0.9);
     return printValueNoise(position, seed);
@@ -60,6 +63,8 @@ float4 printNearestCell(float2 gridPosition, float jitter, float seed) {
     float2 base = floor(gridPosition);
     float bestDistanceSq = 1.0e12;
     float4 nearest = float4(0.0, 0.0, 0.0, 0.0);
+    // Keep feature points inside their cell: jitter below 1 ensures the
+    // 3x3 neighboring-cell search still captures the closest point.
     float amount = clamp(jitter, 0.0, 0.95);
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {

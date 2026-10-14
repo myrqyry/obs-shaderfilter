@@ -50,6 +50,11 @@ probes={
 'wind':('strength',0,100),
 }
 assert len(probes)==38
+printmaking_probes={
+    'ink_hatching':('ink_strength',0,1),
+    'jittered_pointillism':('opacity',0,1),
+}
+assert len(printmaking_probes)==2
 shipped={p.stem.removeprefix('nm_') for p in root.glob('nm_*.shader')}
 assert shipped==set(probes),f'Untested/missing effect files: {shipped ^ set(probes)}'
 assert (root/'NOISEMAKER-LICENSE.txt').is_file()
@@ -67,8 +72,9 @@ with tempfile.TemporaryDirectory(prefix='nm-real-pixel-') as dir:
     subprocess.run(['g++','-std=c++17','-O2','-Wall','-Wextra',
         '-I'+str(Path(inc)/'obs'),str(repo/'tests/native_shader_pixel_probe.cpp'),
         '-o',str(probe),*libs],check=True)
-    for name,(control,a,b) in probes.items():
-       p=(root/f'nm_{name}.shader').resolve()
+    for name,(control,a,b) in {**probes,**printmaking_probes}.items():
+       p=((repo/'data/examples/printmaking'/f'{name}.shader') if name in printmaking_probes
+          else (root/f'nm_{name}.shader')).resolve()
        text='#define OPENGL 1\n'+t.template('begin')+t.expand_text(p.read_text(),p).replace('[loop]','')+'\n'+t.template('end')
        effect=Path(dir)/f'{name}.effect';effect.write_text(text)
        proc=subprocess.run([str(probe),str(effect),control,str(a),str(b)],capture_output=True,text=True,timeout=15)
@@ -82,6 +88,6 @@ with tempfile.TemporaryDirectory(prefix='nm-real-pixel-') as dir:
           err=(proc.stderr or proc.stdout)[-900:]
           bad.append((name,err))
           print(name,'FAIL',err.replace('\n',' ')[:500],flush=True)
-print('NOISEMAKER_REAL_GPU_PASS=',int(not bad),'GPU_BATCH_TOTAL',len(probes),'PASSED',len(probes)-len(bad),'FAILED',len(bad))
+print('NOISEMAKER_REAL_GPU_PASS=',int(not bad),'GPU_BATCH_TOTAL',len(probes)+len(printmaking_probes),'PASSED',len(probes)+len(printmaking_probes)-len(bad),'FAILED',len(bad))
 for name,e in bad:print('FAIL_CASE',name,e)
 if bad:sys.exit(1)

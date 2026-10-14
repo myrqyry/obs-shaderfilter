@@ -62,10 +62,11 @@ From the repository root:
     PYTHONDONTWRITEBYTECODE=1 xvfb-run -a python3 tests/verify_stdlib.py
     PYTHONDONTWRITEBYTECODE=1 xvfb-run -a python3 tests/verify_noisemaker_ports.py
 
-The first command validates the shared stdlib and earlier printmaking effects.
+The first command validates the shared stdlib and two printmaking effects.
 The second builds the C++ libobs/OpenGL render probe, expands the real OBS
-effect wrapper, creates actual textures, changes one control in each of the
-38 filters, renders two 128x96 frames, and reads real GPU pixels back.
+effect wrapper, creates actual textures, and changes one control in each of
+**all 40 filters** (38 in this directory plus the two printmaking filters).
+It renders two 128x96 frames per filter and reads real GPU pixels back.
 It requires each shader to visibly respond to that control and an opaque
 input image to remain opaque at the tested settings. The test does not
 use mocks, fixed expected image pixels, or snapshots standing in for output.

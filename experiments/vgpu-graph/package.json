@@ -1,0 +1,9 @@
+{
+  "name": "obs-vgpu-rendering-lab",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vgpu/wgsl": "0.6.0",
+    "vgpu": "0.6.0"
+  }
+}

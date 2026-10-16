@@ -47,7 +47,9 @@ with tempfile.TemporaryDirectory(prefix="mpv-anime-gpu-") as dir:
             process.stdout)
         if match:
             changed, from_input, alpha, total = map(int, match.groups())
-            ok = changed > 20 and alpha == 0 and total > 0
+            # At the neutral control setting the complete source must pass
+            # through unchanged, while the active setting must visibly react.
+            ok = changed > 20 and alpha == 0 and total > 0 and from_input == 0
             print(name, "PASS" if ok else "FAIL_PIXELS", "changed", changed,
                 "from_input", from_input, "alpha", alpha, "sum", total, flush=True)
             if not ok: failures.append((name, "did not alter pixels or alpha changed"))

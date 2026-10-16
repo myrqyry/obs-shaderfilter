@@ -10,7 +10,6 @@ float4 mpvSample(float2 uv) {
     float2 halfPixel = uv_pixel_interval * 0.5;
     return image.Sample(textureSampler, clamp(uv, halfPixel, 1.0 - halfPixel));
 }
-float mpvLuma(float3 rgb) { return dot(rgb, float3(0.299, 0.587, 0.114)); }
 
 uniform float strength<
     string label = "Chroma Grain";

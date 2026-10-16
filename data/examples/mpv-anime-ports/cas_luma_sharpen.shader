@@ -26,6 +26,8 @@ float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float2 d = uv_pixel_interval;
     float4 center = mpvSample(uv);
+    // Zero sharpen mix is a passthrough; no need for eight extra samples.
+    if (amount <= 0.0) return center;
     float a = mpvLuma(mpvSample(uv + float2(-d.x,-d.y)).rgb);
     float b = mpvLuma(mpvSample(uv + float2(0,-d.y)).rgb);
     float c = mpvLuma(mpvSample(uv + float2(d.x,-d.y)).rgb);

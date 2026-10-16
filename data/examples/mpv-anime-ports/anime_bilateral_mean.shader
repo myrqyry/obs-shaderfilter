@@ -10,7 +10,6 @@ float4 mpvSample(float2 uv) {
     float2 halfPixel = uv_pixel_interval * 0.5;
     return image.Sample(textureSampler, clamp(uv, halfPixel, 1.0 - halfPixel));
 }
-float mpvLuma(float3 rgb) { return dot(rgb, float3(0.299, 0.587, 0.114)); }
 
 uniform float intensity_sigma<
     string label = "Color Similarity";
@@ -30,6 +29,8 @@ uniform float blend_factor<
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 center = mpvSample(uv);
+    // Avoid the 25-tap spatial/color kernel when the effect is disabled.
+    if (blend_factor <= 0.0) return center;
     float3 sum = float3(0,0,0);
     float3 weights = float3(0,0,0);
     float3 colorSigma = max(center.rgb + 0.0001, 0.0001) * intensity_sigma;

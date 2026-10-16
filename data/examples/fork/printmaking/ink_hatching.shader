@@ -2,7 +2,7 @@
 // Adapted from the Hatch technique in Noisemaker by Noise Factor LLC.
 // MIT notice: printmaking/NOISEMAKER-LICENSE.txt
 // Requires Shaderfilter's built-in image/textureSampler; use as an OBS filter.
-#include "../../stdlib/printmaking.glsl"
+#include "../../../stdlib/printmaking.glsl"
 
 uniform float ink_strength<
     string label = "Ink strength";

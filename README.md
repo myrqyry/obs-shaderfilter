@@ -165,7 +165,12 @@ The plugin provides some optional pre-processing macros.
 
 ### Example shaders
 
-Several examples are provided in the plugin's *data/examples* folder. These can be used as-is for some hopefully
+Several examples are provided in the plugin's *data/examples* folder. The canonical upstream shaders
+remain at the top level, while [our fork additions](data/examples/fork/README.md) live under
+`data/examples/fork/` with their own licenses and port notes. This keeps original upstream
+example paths intact. OBS presets previously pointing to moved fork additions need to be
+reselected under `fork/`. See [example layout](data/examples/README.md) for the migration note.
+These can be used as-is for some hopefully
 useful common tasks, or used as a reference in developing your own shaders. Note that the *.shader* and *.effect* 
 extensions are for clarity only, and have no specific meaning to the plugin. Text files with any extension can be
 loaded. In a standard, *.effect* files include a vertex shader and *.shader* only has a pixel shader.

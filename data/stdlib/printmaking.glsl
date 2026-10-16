@@ -3,7 +3,7 @@
 // Original code: https://github.com/noisefactorllc/noisemaker/tree/main/shaders/effects/filter
 // Copyright (c) 2017-2026 Noise Factor LLC, MIT License.
 // The copyright and license text are retained in
-// data/examples/printmaking/NOISEMAKER-LICENSE.txt.
+// data/examples/fork/printmaking/NOISEMAKER-LICENSE.txt.
 #ifndef _STDLIB_PRINTMAKING_H_
 #define _STDLIB_PRINTMAKING_H_
 

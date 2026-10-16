@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SHADER = ROOT / "data/examples/mixwell-fluid-glass.shader"
+SHADER = ROOT / "data/examples/fork/mixwell-fluid-glass.shader"
 SOURCE = ROOT / "obs-shaderfilter.c"
 LICENSE = ROOT / "docs/shaders/mixwell-fluid-glass/LICENSE-MIXWELL-MIT.txt"
 NATIVE = ROOT / "tests/obs_native_shader_compile.c"

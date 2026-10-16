@@ -5,6 +5,7 @@ When synchronizing from upstream, update the snapshot deliberately.
 """
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
@@ -32,6 +33,17 @@ class ExampleLayoutTests(unittest.TestCase):
         for path in expected:
             with self.subTest(path=path):
                 self.assertTrue((myrqyry / path).is_file(), path)
+
+    def test_myrqyry_files_are_in_git_index(self):
+        # Git-ignored local files could make the worktree pass while a pushed
+        # commit silently deletes the previous collection without replacing it.
+        on_disk = {str(p.relative_to(REPO)) for p in (EXAMPLES / 'myrqyry').rglob('*')
+                   if p.is_file()}
+        tracked_raw = subprocess.check_output(
+            ['git', 'ls-files', '-z', '--', 'data/examples/myrqyry'], cwd=REPO)
+        tracked = {item.decode() for item in tracked_raw.split(b'\x00') if item}
+        self.assertEqual(on_disk, tracked,
+                         'All published myrqyry additions must be tracked, not ignored')
 
     def test_all_shader_includes_still_resolve_after_move(self):
         for shader in EXAMPLES.rglob('*.shader'):

@@ -11,7 +11,7 @@ import re
 import sys
 import verify_stdlib as obs
 repo = Path(__file__).resolve().parents[1]
-shaders = repo / "data/examples/fork/mpv-anime-ports"
+shaders = repo / "data/examples/myrqyry/mpv-anime-ports"
 cases = {
     "anime_line_thinner": ("blend_factor", 0, 1),
     "anime_bilateral_mean": ("blend_factor", 0, 1),

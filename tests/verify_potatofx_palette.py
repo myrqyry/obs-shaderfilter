@@ -11,7 +11,7 @@ import tempfile
 import verify_stdlib as obs
 
 ROOT = Path(__file__).resolve().parents[1]
-SHADER = ROOT / "data/examples/fork/potatofx-ports/palette_harmony.shader"
+SHADER = ROOT / "data/examples/myrqyry/potatofx-ports/palette_harmony.shader"
 # Different values must produce meaningfully different real GPU pixels.
 CONTROLS = (
     ("palette_type", 0, 4),

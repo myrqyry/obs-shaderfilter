@@ -8,7 +8,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PORTS = ROOT / 'data/examples/fork/noisemaker-ports'
+PORTS = ROOT / 'data/examples/myrqyry/noisemaker-ports'
 
 
 class GeometrySingularityTests(unittest.TestCase):

@@ -18,11 +18,12 @@ class ExampleLayoutTests(unittest.TestCase):
                     if line.strip() and not line.startswith('#')}
         actual = {p.name for p in EXAMPLES.iterdir() if p.is_file() and p.name != 'README.md'}
         self.assertEqual(expected, actual,
-                         'upstream paths must remain intact; fork additions belong in examples/fork/')
+                         'upstream paths must remain intact; fork additions belong in examples/myrqyry/')
 
-    def test_fork_effects_live_under_named_fork_directory(self):
-        fork = EXAMPLES / 'fork'
-        self.assertTrue(fork.is_dir())
+    def test_myrqyry_effects_live_under_named_directory(self):
+        myrqyry = EXAMPLES / 'myrqyry'
+        self.assertTrue(myrqyry.is_dir())
+        self.assertFalse((EXAMPLES / 'fork').exists(), "obsolete fork directory should not remain")
         expected = ['bloom-karis.shader', 'mixwell-fluid-glass.shader',
                     'orphic_chladni.shader', 'noisemaker-ports/nm_polar.shader',
                     'printmaking/ink_hatching.shader',
@@ -30,7 +31,7 @@ class ExampleLayoutTests(unittest.TestCase):
                     'potatofx-ports/palette_harmony.shader']
         for path in expected:
             with self.subTest(path=path):
-                self.assertTrue((fork / path).is_file(), path)
+                self.assertTrue((myrqyry / path).is_file(), path)
 
     def test_all_shader_includes_still_resolve_after_move(self):
         for shader in EXAMPLES.rglob('*.shader'):

@@ -1,6 +1,6 @@
 # Mixwell Fluid Glass — OBS Shaderfilter
 
-**File:** `data/examples/fork/mixwell-fluid-glass.shader`
+**File:** `data/examples/myrqyry/mixwell-fluid-glass.shader`
 
 A fluid-brush refraction effect adapted from the Mixwell Reverse-Drift
 Function (RDF) published by Doug L. James and Ethan James. It is a

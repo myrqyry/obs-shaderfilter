@@ -11,6 +11,7 @@ calls remain available.
 | `colors.glsl` | RGB/HSV/HSL/YUV/LAB, Photoshop-like blend modes, palettes, tone mapping | None |
 | `noise.glsl` | Hash, value/gradient/simplex noise, cellular/Voronoi, FBM, curl and domain warping in 2D/3D | None |
 | `animation.glsl` | Easing curves, procedural waveforms, time helpers | None |
+| `printmaking.glsl` | Seeded procedural fibers, smooth noise, jittered Voronoi-cell helpers | None |
 | `blur.glsl` | Gaussian, box, directional, radial and Kawase filters | `image`, `textureSampler` |
 
 ## Include paths are relative to the importing file
@@ -59,6 +60,8 @@ including third-party shader libraries with their own helpers.
 - `blur.glsl` samples the default `image` texture and belongs in filters,
   or source shaders that explicitly bind a source image. Its loops are
   sampled per pixel; use conservative radii on streaming resolutions.
+
+See `data/examples/printmaking/README.md` for two single-pass printmaking filter examples and attribution.
 
 ## Reproducible validation
 

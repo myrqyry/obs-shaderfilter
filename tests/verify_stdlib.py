@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 NATIVE_BINARY=None
 SOURCE=(ROOT/'obs-shaderfilter.c').read_text()
 LIB=ROOT/'data/stdlib'
-HEADERS=('math', 'colors', 'noise', 'animation', 'blur', 'printmaking')
+HEADERS=('math', 'colors', 'noise', 'animation', 'blur', 'printmaking', 'oklab')
 
 
 def template(name):
@@ -133,6 +133,8 @@ def checks():
             main='float4 mainImage(VertData v_in) : TARGET {float v=fbm(v_in.uv,3);return float4(v,v,v,1.0);}'
         elif name=='printmaking':
             main='float4 mainImage(VertData v_in) : TARGET {float2 p=v_in.uv*uv_size;float4 c=printNearestCell(p/8.0,0.5,2.0);float v=printHatchField(p,0.5,16.0,2.0)+printValueNoise(c.xy,1.0);return float4(v,v,v,1.0);}'
+        elif name=='oklab':
+            main='float4 mainImage(VertData v_in) : TARGET {float3 l=pfOklabToLch(pfLinearToOklab(pfSrgbToLinear(float3(v_in.uv,0.5))));return float4(pfLinearToSrgb(pfOklabToLinear(pfLchToOklab(l))),1.0);}'
         else:
             main='float4 mainImage(VertData v_in) : TARGET {float v=easeInOutCubic(v_in.uv.x)+pingPong(elapsed_time,3.0);return float4(v,v,v,1.0);}'
         compile_case(name,case+main)

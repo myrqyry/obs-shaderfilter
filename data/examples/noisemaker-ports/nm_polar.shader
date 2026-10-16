@@ -70,7 +70,10 @@ float2 vortexCoords(float2 uv, float aspect) {
     uv -= 0.5;
     if (aspectLens) { uv.x *= aspect; }
     float r2 = dot(uv, uv) - scale * 0.01;
-    uv = uv / r2;
+    // Keep the winding on both sides of the vortex; avoid undefined 0/0
+    // and infinities when the radius offset meets the image center.
+    float safeR2 = (r2 < 0.0 ? -1.0 : 1.0) * max(abs(r2), 0.0001);
+    uv = uv / safeR2;
     uv.x = smod(uv.x + elapsed_time * -rotation, 1.0);
     uv.y = smod(uv.y + elapsed_time * speed, 1.0);
     return uv;

@@ -118,9 +118,13 @@ float4 mainImage(VertData v_in) : TARGET {
     // Apply scale
     r -= scale * 0.15;
 
+    // Preserve the tunnel direction across the shifted radius, but avoid
+    // an undefined sample at the center and near the scale-controlled ring.
+    float safeR = (r < 0.0 ? -1.0 : 1.0) * max(abs(r), 0.0001);
+
     // Create tunnel coordinates
     float2 tunnelCoords = smod(float2(
-        0.3 / r + elapsed_time * speed,
+        0.3 / safeR + elapsed_time * speed,
         a / PI + elapsed_time * rotation
     ), 1.0);
 

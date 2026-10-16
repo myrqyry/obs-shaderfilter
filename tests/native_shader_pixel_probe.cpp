@@ -32,7 +32,7 @@ Frame sample(bool partialAlpha=false) {
 }
 
 Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float value,
-             const char* presetUniform="",float presetValue=0.f) {
+             const std::vector<std::pair<std::string,float>>& presets={}) {
     Frame pixels;
     gs_set_cull_mode(GS_NEITHER);
     gs_texrender_t* target=gs_texrender_create(GS_RGBA,GS_ZS_NONE);
@@ -61,13 +61,13 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float 
             else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(param,value!=0.f);
             else gs_effect_set_float(param,value);
         }
-        if(presetUniform[0]) {
-            if(auto* p=gs_effect_get_param_by_name(effect,presetUniform)) {
+        for(const auto& preset: presets) {
+            if(auto* p=gs_effect_get_param_by_name(effect,preset.first.c_str())) {
                 struct gs_effect_param_info info={};
                 gs_effect_get_param_info(p,&info);
-                if(info.type==GS_SHADER_PARAM_INT)gs_effect_set_int(p,int(presetValue));
-                else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(p,presetValue!=0.f);
-                else gs_effect_set_float(p,presetValue);
+                if(info.type==GS_SHADER_PARAM_INT)gs_effect_set_int(p,int(preset.second));
+                else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(p,preset.second!=0.f);
+                else gs_effect_set_float(p,preset.second);
             }
         }
         while(gs_effect_loop(effect,"Draw"))gs_draw_sprite(source,0,W,H);
@@ -89,19 +89,17 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float 
 }
 
 int main(int argc,char** argv) {
-    if(argc<5 || argc>7){std::fprintf(stderr,"usage: probe EFFECT UNIFORM A B [partial-alpha] [uniform=value]\n");return 2;}
+    if(argc<5 || argc>24){std::fprintf(stderr,"usage: probe EFFECT UNIFORM A B [partial-alpha] [uniform=value ...]\n");return 2;}
     bool partialAlpha=false;
-    std::string presetName;
-    float presetValue=0.f;
+    std::vector<std::pair<std::string,float>> presets;
     for(int i=5;i<argc;i++) {
         if(std::strcmp(argv[i],"partial-alpha")==0) {
             partialAlpha=true;
         } else {
             std::string arg=argv[i];
             size_t pos=arg.find('=');
-            if(pos==std::string::npos || pos==0 || !presetName.empty())return 2;
-            presetName=arg.substr(0,pos);
-            presetValue=std::strtof(arg.c_str()+pos+1,nullptr);
+            if(pos==std::string::npos || pos==arg.size()-1)return 2;
+            presets.emplace_back(arg.substr(0,pos),std::strtof(arg.c_str()+pos+1,nullptr));
         }
     }
     if(!obs_startup("en-US",nullptr,nullptr))return 3;
@@ -127,8 +125,8 @@ int main(int argc,char** argv) {
             auto* texture=gs_texture_create(W,H,GS_RGBA,1,&bytes,0);
             if(texture) {
                 float a=std::strtof(argv[3],nullptr),b=std::strtof(argv[4],nullptr);
-                auto first=render(effect,texture,argv[2],a,presetName.c_str(),presetValue);
-                auto second=render(effect,texture,argv[2],b,presetName.c_str(),presetValue);
+                auto first=render(effect,texture,argv[2],a,presets);
+                auto second=render(effect,texture,argv[2],b,presets);
                 if(first.size()==data.size()&&second.size()==data.size()) {
                     size_t changed=0,changedInput=0,alphaChanged=0;
                     uint64_t sum=0;

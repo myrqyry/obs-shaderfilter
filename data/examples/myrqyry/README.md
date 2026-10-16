@@ -24,6 +24,25 @@ Preserve the per-file attribution and accompanying license notices.
 - [potatoFX palette](potatofx-ports/README.md) — one Oklab palette harmony
   filter with its SDR-only color-space contract (MIT)
 
+## Further myrqyry conversions and recovered effects
+
+- [PSX image-space pack](psx/README.md) — four filters for dither, fog,
+  instability and analog crossover (not a 3D console renderer)
+- [URSC/N64](retro_ursc/RETRO-URSC-PORTS.md) — 3-point sampling and glimmer
+  from the Godot shaders (MIT, with source license notes)
+- [Shader Effects](shader_effects/SHADER-EFFECTS-PORTS.md) — engraving and
+  Kuwahara-based watercolor (MIT, with source attribution)
+- [RetroCapture CMYK](../../../docs/shaders/retrocapture/README.md) —
+  four-screen print filter, original per-shader public-domain notice
+- `composite_signal.shader` — one-pass Y/C separation, chroma delay and RF
+  ghost artifacts; does not emulate a complete composite decoder
+- `soft_register.shader` — two rotated, misregistered ink screens (Glyphfield
+  adaptation; attribution in source)
+- [Wind Drift Events](../../../docs/shaders/wind-drift-events/README.md)
+  — animated petals, leaves, feathers; original MIT license preserved
+- [ImWeb-inspired Motion Matte](imweb-ports/README.md) — **actual two-frame**
+  movement detection and masking, not persistent temporal accumulation
+
 The folder names represent **provenance**, not guarantees that the files are
 identical to third-party renderers. Check the linked READMEs for GPU test
 coverage, differences, unsupported features, and licensing.

@@ -13,6 +13,7 @@ calls remain available.
 | `animation.glsl` | Easing curves, procedural waveforms, time helpers | None |
 | `printmaking.glsl` | Seeded procedural fibers, smooth noise, jittered Voronoi-cell helpers | None |
 | `blur.glsl` | Gaussian, box, directional, radial and Kawase filters | `image`, `textureSampler` |
+| `oklab.glsl` | Namespaced sRGB/linear/Oklab/Oklch conversions (SDR only; potatoFX adaptation) | None |
 
 ## Include paths are relative to the importing file
 
@@ -80,3 +81,6 @@ or compatibility across other graphics backends.
 The standard library does not by itself introduce automatic Source→Filter
 opacity/compositing or reorganize `.shader` filenames. Those remain separate
 plugin/API decisions.
+
+See `data/examples/potatofx-ports/README.md` for the SDR palette port,
+color-space caveats, and real GPU test coverage.

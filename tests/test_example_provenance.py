@@ -70,6 +70,7 @@ class ExampleLayoutTests(unittest.TestCase):
         cmake = (REPO / 'CMakeLists.txt').read_text()
         self.assertIn('install(DIRECTORY data/examples ', cmake)
         self.assertIn('copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data', cmake)
+        self.assertIn('cmake/MigrateLegacyExamples.cmake', cmake)
 
 
 if __name__ == '__main__':

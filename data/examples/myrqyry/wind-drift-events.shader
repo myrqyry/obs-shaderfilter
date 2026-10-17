@@ -167,17 +167,17 @@ float4 mainImage(VertData v_in) : TARGET
    float life=duration*(0.72+0.50*h1);
    float delay=(0.08+0.80*h0);
    float age=0.0;
-   float active=1.0;
+   float eventFade=1.0;
    if (Wind_Mode==0) {
      // Each activation creates one finite burst, spread across 0.8s.
      age=t-delay;
      if (age<0.0 || age>life) continue;
-     active=(1.0-smoothstep(life*0.78,life,age));
+     eventFade=(1.0-smoothstep(life*0.78,life,age));
    } else {
      // Continuous, temporally seamless respawn, unique phase per particle.
      age=frac((t*fall/max(duration,1.0))+h0)*life;
-     active=1.0-smoothstep(life*0.85,life,age);
-     active*=smoothstep(0.0,life*0.11,age);
+     eventFade=1.0-smoothstep(life*0.85,life,age);
+     eventFade*=smoothstep(0.0,life*0.11,age);
    }
    float u=saturate(age/max(life,0.001));
    float height=1.15+size*3.0;
@@ -207,7 +207,7 @@ float4 mainImage(VertData v_in) : TARGET
    if (silhouette<=0.0) continue;
    // Slight natural per-object shading with no high-frequency flashing.
    float shade=0.79+0.21*abs(cos(spin*0.67+h3*3.0));
-   float a=saturate(silhouette*Wind_Opacity*Wind_Tint.a*active
+   float a=saturate(silhouette*Wind_Opacity*Wind_Tint.a*eventFade
                     *(0.58+0.42*h2));
    float3 pigment=baseColor*Wind_Tint.rgb*shade;
    colorSum+=(1.0-alpha)*a*pigment;
@@ -219,6 +219,6 @@ float4 mainImage(VertData v_in) : TARGET
  float4 original=image.Sample(textureSampler,uv);
  // OBS Shader Source blends with ONE / INV_SRC_ALPHA, so output is
  // premultiplied; never divide RGB by alpha (causes bright fringe artifacts).
- return float4(colorSum+original.rgb*(1.0-alpha),
+ return float4(colorSum+original.rgb*original.a*(1.0-alpha),
                alpha+original.a*(1.0-alpha));
 }

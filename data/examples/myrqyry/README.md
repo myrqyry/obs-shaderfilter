@@ -37,7 +37,7 @@ Preserve the per-file attribution and accompanying license notices.
 - `composite_signal.shader` — one-pass Y/C separation, chroma delay and RF
   ghost artifacts; does not emulate a complete composite decoder
 - `soft_register.shader` — two rotated, misregistered ink screens (Glyphfield
-  adaptation; attribution in source)
+  adaptation; upstream MIT notice in GLYPHFIELD-LICENSE.txt)
 - [Wind Drift Events](../../../docs/shaders/wind-drift-events/README.md)
   — animated petals, leaves, feathers; original MIT license preserved
 - [ImWeb-inspired Motion Matte](imweb-ports/README.md) — **actual two-frame**

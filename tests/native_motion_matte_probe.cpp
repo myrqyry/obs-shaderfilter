@@ -34,7 +34,8 @@ void seti(gs_effect_t *effect,const char* name,int value) {
     if (auto *p=gs_effect_get_param_by_name(effect,name)) gs_effect_set_int(p,value);
 }
 Frame render(gs_effect_t* effect,gs_texture_t* current,gs_texture_t* previous,
-             int mode,float started,float gain=5.f,float threshold=.08f) {
+             int mode,float started,float gain=5.f,float threshold=.08f,
+             int compare=1,float enabledAge=-1.f) {
     Frame result;
     auto* target=gs_texrender_create(GS_RGBA,GS_ZS_NONE);
     auto* stage=gs_stagesurface_create(W,H,GS_RGBA);
@@ -51,8 +52,9 @@ Frame render(gs_effect_t* effect,gs_texture_t* current,gs_texture_t* previous,
         if(auto*p=gs_effect_get_param_by_name(effect,"uv_pixel_interval"))gs_effect_set_vec2(p,&pix);
         if(auto*p=gs_effect_get_param_by_name(effect,"uv_scale"))gs_effect_set_vec2(p,&one);
         if(auto*p=gs_effect_get_param_by_name(effect,"uv_offset"))gs_effect_set_vec2(p,&zero);
-        seti(effect,"display_mode",mode);seti(effect,"comparison",1);
+        seti(effect,"display_mode",mode);seti(effect,"comparison",compare);
         setf(effect,"elapsed_time_start",started);
+        setf(effect,"elapsed_time_enable", enabledAge >= 0.f ? enabledAge : started);
         setf(effect,"warmup_seconds",.1f);
         setf(effect,"blur_pixels",0.f);
         setf(effect,"gain",gain);setf(effect,"threshold",threshold);
@@ -98,10 +100,33 @@ int main(int argc,char** argv) {
             auto cutout=render(effect,live,old,1,1.f);
             auto highlighted=render(effect,live,old,2,1.f);
             auto low=render(effect,live,old,0,1.f,.25f,.5f);
+            // Re-enabled after minutes of elapsed shader runtime: the enabled
+            // clock must reset even while the startup clock remains large.
+            auto reenabled=render(effect,live,old,0,300.f,5.f,.08f,1,0.f);
+            Frame lumCurrent(W*H*4), lumPrevious(W*H*4);
+            for(size_t i=0;i<lumCurrent.size();i+=4) {
+                // Rec. 601 luma green == red + 125/255 green to 0.001.
+                lumCurrent[i]=0; lumCurrent[i+1]=255; lumCurrent[i+2]=0;
+                lumPrevious[i]=255;lumPrevious[i+1]=125;lumPrevious[i+2]=0;
+                lumCurrent[i+3]=lumPrevious[i+3]=255;
+            }
+            const uint8_t *lc=lumCurrent.data(),*lp=lumPrevious.data();
+            auto *lLive=gs_texture_create(W,H,GS_RGBA,1,&lc,0);
+            auto *lPast=gs_texture_create(W,H,GS_RGBA,1,&lp,0);
+            Frame isoLuma,isoRGB;
+            if(lLive && lPast) {
+                isoLuma=render(effect,lLive,lPast,0,1.f,5.f,.08f,0);
+                isoRGB=render(effect,lLive,lPast,0,1.f,5.f,.08f,1);
+            }
+            if(lLive)gs_texture_destroy(lLive);
+            if(lPast)gs_texture_destroy(lPast);
             if(still.size()==current.size()&&moved.size()==current.size()&&
                first.size()==current.size()&&cutout.size()==current.size()&&
-               highlighted.size()==current.size()&&low.size()==current.size()) {
+               highlighted.size()==current.size()&&low.size()==current.size()&&
+               reenabled.size()==current.size()&&isoLuma.size()==current.size()&&
+               isoRGB.size()==current.size()) {
                 unsigned movedCount=0,stillCount=0,firstCount=0,lowCount=0;
+                unsigned reenabledCount=0,lumaCount=0,rgbDiffCount=0;
                 unsigned movingAlpha=0,staticAlpha=0,badRGB=0,badHighlightAlpha=0;
                 unsigned highlightChanged=0;
                 for(unsigned y=4;y<H-4;y++)for(unsigned x=4;x<W-4;x++) {
@@ -112,6 +137,9 @@ int main(int argc,char** argv) {
                     stillCount+=still[p]>2;
                     firstCount+=first[p]>2;
                     lowCount+=low[p]>2;
+                    reenabledCount+=reenabled[p]>2;
+                    lumaCount+=isoLuma[p]>2;
+                    rgbDiffCount+=isoRGB[p]>200;
                     if(movingRegion) {
                         movingAlpha+=cutout[p+3]>180;
                         highlightChanged+=std::abs(int(highlighted[p])-int(current[p]))>15;
@@ -123,11 +151,12 @@ int main(int argc,char** argv) {
                     if(highlighted[p+3]!=current[p+3])badHighlightAlpha++;
                 }
                 pass=movedCount>1300 && stillCount==0 && firstCount==0 &&
-                     lowCount==0 && movingAlpha>1300 && staticAlpha==0 &&
+                     lowCount==0 && reenabledCount==0 && lumaCount==0 &&
+                     rgbDiffCount>5000 && movingAlpha>1300 && staticAlpha==0 &&
                      badRGB==0 && badHighlightAlpha==0 && highlightChanged>1300;
-                std::printf("MOTION_MATTE_REAL_GPU_PASS=%d moved=%u still=%u warmup=%u low=%u cutout=%u static_alpha=%u rgb_changed=%u highlight=%u highlight_alpha_errors=%u\n",
-                           pass,movedCount,stillCount,firstCount,lowCount,movingAlpha,
-                           staticAlpha,badRGB,highlightChanged,badHighlightAlpha);
+                std::printf("MOTION_MATTE_REAL_GPU_PASS=%d moved=%u still=%u warmup=%u low=%u reenable=%u iso_luma=%u iso_rgb=%u cutout=%u static_alpha=%u rgb_changed=%u highlight=%u highlight_alpha_errors=%u\n",
+                           pass,movedCount,stillCount,firstCount,lowCount,reenabledCount,
+                           lumaCount,rgbDiffCount,movingAlpha,staticAlpha,badRGB,highlightChanged,badHighlightAlpha);
             } else std::fprintf(stderr,"MOTION_NO_READBACK\n");
         } else std::fprintf(stderr,"MOTION_MISSING_TEXTURE_OR_PARAM\n");
         if(live)gs_texture_destroy(live);

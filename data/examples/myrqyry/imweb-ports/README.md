@@ -37,7 +37,7 @@ clients wanting an alpha matte should use Moving Cutout.
 compiles the actual expanded effect with installed libobs/OpenGL and reads GPU
 pixels back from real current and previous textures. It asserts no false motion
 on identical frames, mask on changed frames, threshold/sensitivity suppression,
-first-frame warmup, source RGB identity and alpha behavior for cutout, plus
+initial and re-enable warmup, source RGB identity and alpha behavior for cutout, plus
 highlight and source-opacity preservation.
 
 This does not establish installed OBS filter frame scheduling, exact Image/ine

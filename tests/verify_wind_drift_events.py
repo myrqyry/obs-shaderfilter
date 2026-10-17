@@ -23,7 +23,7 @@ def check_contract(s: str):
     assert 'age=t-delay' in s and 'age>life' in s
     assert 'Wind_Mode==0' in s and 'frac((t*fall/max(duration,1.0))+h0)' in s
     assert 'if (Wind_OverlayOnly)' in s and 'return float4(colorSum,alpha)' in s
-    assert 'original.rgb*(1.0-alpha)' in s and 'original.a*(1.0-alpha)' in s
+    assert 'original.rgb*original.a*(1.0-alpha)' in s and 'original.a*(1.0-alpha)' in s
     assert 'uniform bool Wind_OverlayOnly<' in s and '> = false;' in s
     assert s.count('Wind_Style==')>=1 and 'windSilhouette(' in s
     assert 'texture2d image' not in s and 'technique Draw' not in s

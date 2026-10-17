@@ -70,7 +70,7 @@ uniform float highlight_strength<
     float step = 0.01;
 > = 0.75;
 
-// Avoid a first-frame full-white flash while the previous-input buffer primes.
+// Suppress a flash at startup AND each disabled-to-enabled transition.
 // This is a startup suppression, not a stored background image.
 uniform float warmup_seconds<
     string label = "History Warmup (s)";
@@ -112,12 +112,16 @@ float4 mainImage(VertData v_in) : TARGET
     float3 a = current_smoothed(uv, offset);
     float3 b = previous_smoothed(uv, offset);
     float3 d = abs(a - b);
-    float raw = (comparison == 0) ? dot(d, float3(0.299, 0.587, 0.114))
-                                  : max(d.r, max(d.g, d.b));
+    // Luminance mode compares brightness, not weighted RGB magnitudes.
+    // Equiluminant hue changes therefore remain quiet in Luminance mode.
+    float raw = (comparison == 0) ?
+                abs(dot(a, float3(0.299, 0.587, 0.114)) -
+                    dot(b, float3(0.299, 0.587, 0.114))) :
+                max(d.r, max(d.g, d.b));
     float amount = saturate(raw * gain);
     float motion = smoothstep(threshold, threshold + max(0.001, feather), amount);
     if (warmup_seconds > 0.0001)
-        motion *= saturate(elapsed_time_start / warmup_seconds);
+        motion *= saturate(elapsed_time_enable / warmup_seconds);
 
     if (display_mode == 1) {
         // Shaderfilter provides straight-alpha RGB in the standard wrapper.

@@ -92,10 +92,16 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float 
 int main(int argc,char** argv) {
     if(argc<5 || argc>24){std::fprintf(stderr,"usage: probe EFFECT UNIFORM A B [partial-alpha] [uniform=value ...]\n");return 2;}
     bool partialAlpha=false;
+    bool n64HiddenRGB=false;
+    bool windHiddenRGB=false;
     std::vector<std::pair<std::string,float>> presets;
     for(int i=5;i<argc;i++) {
         if(std::strcmp(argv[i],"partial-alpha")==0) {
             partialAlpha=true;
+        } else if(std::strcmp(argv[i],"n64-hidden-rgb")==0) {
+            n64HiddenRGB=true;
+        } else if(std::strcmp(argv[i],"wind-hidden-rgb")==0) {
+            windHiddenRGB=true;
         } else {
             std::string arg=argv[i];
             size_t pos=arg.find('=');
@@ -122,6 +128,27 @@ int main(int argc,char** argv) {
         if(!param)std::fprintf(stderr,"MISSING_CONTROL=%s\n",argv[2]);
         else {
             auto data=sample(partialAlpha);
+            if(n64HiddenRGB) {
+                // Distinguish a bright invisible magenta region from opaque
+                // green. A correct premultiplied sampler cannot bleed magenta
+                // into a partially transparent edge.
+                for(uint32_t y=0;y<H;y++) for(uint32_t x=0;x<W;x++) {
+                    size_t i=(size_t(y)*W+x)*4;
+                    bool invisible=x<W/2;
+                    data[i]=invisible?255:0;
+                    data[i+1]=invisible?0:200;
+                    data[i+2]=invisible?255:0;
+                    data[i+3]=invisible?0:255;
+                }
+            }
+            if(windHiddenRGB) {
+                // Transparent camera texels often contain nonzero hidden RGB.
+                // A premultiplied wind composite with zero wind opacity must
+                // not reveal those invisible source colors.
+                for(size_t i=0;i<data.size();i+=4) {
+                    data[i]=255;data[i+1]=80;data[i+2]=20;data[i+3]=0;
+                }
+            }
             const uint8_t* bytes=data.data();
             auto* texture=gs_texture_create(W,H,GS_RGBA,1,&bytes,0);
             if(texture) {
@@ -154,7 +181,27 @@ int main(int argc,char** argv) {
                         }
                         std::printf("DISTINCT_FIRST=%zu DISTINCT_SECOND=%zu\n",one.size(),two.size());
                     }
-                    valid=true;
+                    if(n64HiddenRGB) {
+                        unsigned translucent=0,leaks=0;
+                        for(size_t i=0;i<second.size();i+=4) {
+                            if(second[i+3]>6 && second[i+3]<249) {
+                                ++translucent;
+                                if(second[i]>5 || second[i+2]>5)
+                                    ++leaks;
+                            }
+                        }
+                        bool premultValid=translucent>25 && leaks==0;
+                        std::printf("N64_PREMULT_GPU_PASS=%d TRANSLUCENT=%u INVISIBLE_COLOR_LEAKS=%u\n",
+                                    premultValid,translucent,leaks);
+                        valid=premultValid;
+                    } else if(windHiddenRGB) {
+                        unsigned nonzero=0;
+                        for(size_t i=0;i<second.size();i++)nonzero+=second[i]!=0;
+                        valid=nonzero==0;
+                        std::printf("WIND_TRANSPARENT_GPU_PASS=%d NONZERO_COMPONENTS=%u\n",valid,nonzero);
+                    } else {
+                        valid=true;
+                    }
                 } else std::fprintf(stderr,"NO_PIXEL_READBACK\n");
                 gs_texture_destroy(texture);
             }

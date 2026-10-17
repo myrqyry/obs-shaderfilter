@@ -68,7 +68,33 @@ def main():
                 print('PASS' if ok else 'FAIL',path,'partial' if partial else 'opaque',
                       match.groups() if match else (run.stdout+run.stderr)[-900:],flush=True)
                 if not ok:fail.append((path,partial))
-        print(f'ADDITIONAL_EFFECTS_REAL_GPU_PASS={int(not fail)} CASES={2*len(CASES)} FAILED={len(fail)}',flush=True)
+        # Additional native check: fully transparent magenta neighboring
+        # opaque green must not bleed into the N64 3-point resampled edge.
+        shader=fx/'retro_ursc/ursc_n64_three_point.shader'
+        (wd/'port.effect').write_text('#define OPENGL 1\n'+obs.template('begin')+
+            obs.expand_text(shader.read_text(),shader).replace('[loop]','')+
+            '\n'+obs.template('end'))
+        run=subprocess.run([str(probe),str(wd/'port.effect'),'Effect_Mix','0','1',
+                            'n64-hidden-rgb','Virtual_Width=48','Virtual_Height=36'],
+                            capture_output=True,text=True,timeout=25)
+        premult='N64_PREMULT_GPU_PASS=1' in run.stdout and run.returncode==0
+        print('PASS' if premult else 'FAIL','N64 invisible-RGB halo regression',
+              next((line for line in run.stdout.splitlines() if 'N64_PREMULT_' in line),
+                   run.stderr[-900:]),flush=True)
+        if not premult:fail.append(('retro_ursc/ursc_n64_three_point.shader','premult'))
+        shader=fx/'wind-drift-events.shader'
+        (wd/'port.effect').write_text('#define OPENGL 1\n'+obs.template('begin')+
+            obs.expand_text(shader.read_text(),shader).replace('[loop]','')+
+            '\n'+obs.template('end'))
+        run=subprocess.run([str(probe),str(wd/'port.effect'),'Wind_Opacity','0','0',
+                            'wind-hidden-rgb','Wind_OverlayOnly=0',
+                            'Wind_Mode=1'],capture_output=True,text=True,timeout=25)
+        windpass='WIND_TRANSPARENT_GPU_PASS=1' in run.stdout and run.returncode==0
+        print('PASS' if windpass else 'FAIL','Wind transparent source composition',
+              next((line for line in run.stdout.splitlines() if 'WIND_TRANSPARENT_' in line),
+                   run.stderr[-900:]),flush=True)
+        if not windpass:fail.append(('wind-drift-events.shader','premult'))
+        print(f'ADDITIONAL_EFFECTS_REAL_GPU_PASS={int(not fail)} CASES={2*len(CASES)+2} FAILED={len(fail)}',flush=True)
         if fail:raise SystemExit(1)
 
 if __name__=='__main__':main()

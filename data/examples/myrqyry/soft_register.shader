@@ -1,6 +1,7 @@
 // Soft Register — two misregistered, rotating ink screens for live OBS imagery.
 // Based on Glyphfield's "Soft Register" material technique (MIT):
 // https://github.com/Kevin-Liu-01/Glyphfield/blob/main/src/lib/originalMaterialShaders.ts
+// Full original copyright and MIT grant: GLYPHFIELD-LICENSE.txt.
 // Reworked as an image-aware ShaderFilter HLSL filter (NOT a procedural backdrop).
 // RGB processing uses the incoming source's luminance; original alpha is preserved.
 

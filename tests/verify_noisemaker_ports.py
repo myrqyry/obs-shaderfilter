@@ -8,7 +8,7 @@ from pathlib import Path
 import sys, subprocess, tempfile, re
 import verify_stdlib as t
 repo=Path(__file__).resolve().parents[1]
-root=repo / 'data/examples/noisemaker-ports'
+root=repo / 'data/examples/myrqyry/noisemaker-ports'
 probes={
 'channel':('channel',0,2),
 'chroma':('targetHue',0.0,0.5),
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='nm-real-pixel-') as dir:
         '-I'+str(Path(inc)/'obs'),str(repo/'tests/native_shader_pixel_probe.cpp'),
         '-o',str(probe),*libs],check=True)
     for name,(control,a,b) in {**probes,**printmaking_probes}.items():
-       p=((repo/'data/examples/printmaking'/f'{name}.shader') if name in printmaking_probes
+       p=((repo/'data/examples/myrqyry/printmaking'/f'{name}.shader') if name in printmaking_probes
           else (root/f'nm_{name}.shader')).resolve()
        text='#define OPENGL 1\n'+t.template('begin')+t.expand_text(p.read_text(),p).replace('[loop]','')+'\n'+t.template('end')
        effect=Path(dir)/f'{name}.effect';effect.write_text(text)

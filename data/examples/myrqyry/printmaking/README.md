@@ -24,8 +24,8 @@ remain square regardless of aspect ratio.
 ## Reuse
 
 The shared primitives are in data/stdlib/printmaking.glsl. In a shader under
-data/examples/printmaking/, use the relative include
-../../stdlib/printmaking.glsl. From a shader directly in data/examples/,
+data/examples/myrqyry/printmaking/, use the relative include
+../../../stdlib/printmaking.glsl. From a shader directly in data/examples/,
 use ../stdlib/printmaking.glsl.
 
 The helper functions printHash, printHash2, printValueNoise, printRotate,

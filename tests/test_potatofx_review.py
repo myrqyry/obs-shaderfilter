@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-SHADER=(ROOT/'data/examples/potatofx-ports/palette_harmony.shader').read_text()
+SHADER=(ROOT/'data/examples/myrqyry/potatofx-ports/palette_harmony.shader').read_text()
 HELPER=(ROOT/'data/stdlib/oklab.glsl').read_text()
 
 class PaletteReviewRegression(unittest.TestCase):

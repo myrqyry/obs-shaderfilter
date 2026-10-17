@@ -4,7 +4,7 @@
 // Notice: POTATOFX-LICENSE.txt. This adaptation is SDR sRGB ONLY,
 // not equivalent to upstream's HDR10/HLG/scRGB ReShade path.
 // Single-pass; source alpha is preserved, including transparent sources.
-#include "../../stdlib/oklab.glsl"
+#include "../../../stdlib/oklab.glsl"
 
 uniform int palette_type<
     string label = "Palette harmony";

@@ -67,6 +67,11 @@ if(BUILD_OUT_OF_TREE)
     if(OS_POSIX AND NOT OS_MACOS)
         set(OBS_USER_PLUGIN_DIR $ENV{HOME}/.config/obs-studio/plugins/${PROJECT_NAME})
         add_custom_target(install-user
+            # Relocated examples must not remain as misleading stale duplicates.
+            # Preserve only the 62 known old paths outside examples, including
+            # user-edited contents; keep all unrelated custom shaders in place.
+            COMMAND ${CMAKE_COMMAND} "-DPLUGIN_DATA_DIR=${OBS_USER_PLUGIN_DIR}/data"
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MigrateLegacyExamples.cmake
             COMMAND ${CMAKE_COMMAND} -E make_directory ${OBS_USER_PLUGIN_DIR}/bin/64bit
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${OBS_USER_PLUGIN_DIR}/bin/64bit/${PROJECT_NAME}.so
             COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data ${OBS_USER_PLUGIN_DIR}/data

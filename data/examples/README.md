@@ -27,3 +27,21 @@ Provenance is checked against `tests/fixtures/upstream-example-paths.txt`
 (snapshot of the upstream example tree). Update that snapshot when intentionally
 syncing new upstream examples; put any new fork-authored or adapted shader
 under `myrqyry/`.
+
+### Updating an existing Linux user installation
+
+The CMake **`install-user`** target archives **only the 62 known former
+example paths** from earlier myrqyry ports into
+`~/.config/obs-studio/plugins/obs-shaderfilter/data/legacy-shaderfilter-examples-backup/`
+*before* installing the new `data/examples/myrqyry/` layout. The original bytes,
+including any edits to those old example files, are preserved in the archive.
+Unrelated custom shader files and sibling directories are left in place.
+If an archive destination already exists for a path that needs migrating,
+the target stops rather than overwriting either file. Repeated installations
+without old files to migrate do nothing. Other installers or copying files
+manually do **not** run this migration script.
+
+Because the old saved file paths are no longer active, existing OBS presets
+referencing those shaders must be manually pointed to the matching files
+under `data/examples/myrqyry/`. Back up OBS scenes before installing and
+prefer to stop OBS during the upgrade.

@@ -19,7 +19,7 @@ in this documentation directory as `LICENSE-MIXWELL-MIT.txt`.
 2. In the **Shader Source** section, use the shader-file picker (the fork
    defaults to a file; disable **Raw Shader Text** if that switch is on).
 3. Select `mixwell-fluid-glass.shader` from this worktree's
-   `data/examples/` directory.
+   `data/examples/myrqyry/` directory.
    The companion guide/license are under `docs/shaders/mixwell-fluid-glass/`
    and intentionally NOT in the examples folder. OBS parses Markdown
    headings as shader preprocessor commands if the wrong file is selected.

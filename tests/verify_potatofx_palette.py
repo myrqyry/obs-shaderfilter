@@ -60,6 +60,8 @@ def main():
                     args.append("partial-alpha")
                 if name == "palette_balance":
                     args.append("palette_type=2")
+                if name == "num_colors":
+                    args.append("dither_strength=0")
                 run = subprocess.run(args, text=True, capture_output=True, timeout=25)
                 match = PATTERN.search(run.stdout)
                 if not match or run.returncode:
@@ -69,6 +71,15 @@ def main():
                 changed, from_input, alpha_changed, rgb_sum = map(int, match.groups())
                 ok = (changed > 20 and alpha_changed == 0 and rgb_sum > 0 and
                       (name != "effect_mix" or from_input == 0))
+                if name == "num_colors" and not alpha_pattern:
+                    # The fixture spans only part of the lightness range, so
+                    # 12 possible levels need not all occur; never exceed 12.
+                    exact = re.search(r"DISTINCT_FIRST=(\d+) DISTINCT_SECOND=(\d+)",run.stdout)
+                    if exact:
+                        first_count, second_count = map(int, exact.groups())
+                        ok = ok and first_count == 2 and 2 < second_count <= 12
+                    else:
+                        ok = False
                 print("PASS" if ok else "FAIL", name,
                       "partial-alpha" if alpha_pattern else "opaque",
                       "changed", changed, "passthrough_diff", from_input,

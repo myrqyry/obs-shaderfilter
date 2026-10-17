@@ -12,6 +12,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <set>
 
 constexpr uint32_t W=128,H=96;
 using Frame=std::vector<uint8_t>;
@@ -145,6 +146,16 @@ int main(int argc,char** argv) {
                     }
                     std::printf("GPU_READBACK_PASS=1 CONTROL=%s CHANGED=%zu CHANGED_FROM_INPUT=%zu ALPHA_CHANGED=%zu RGB_SUM=%llu\n",
                         argv[2],changed,changedInput,alphaChanged,(unsigned long long)sum);
+                    if(std::strcmp(argv[2],"num_colors")==0 && !partialAlpha) {
+                        // Count actual GPU-rendered palette colors; the alpha
+                        // fixture intentionally includes input passthroughs.
+                        std::set<uint32_t> one,two;
+                        for(size_t i=0;i<first.size();i+=4) {
+                            one.insert(uint32_t(first[i])<<16 | uint32_t(first[i+1])<<8 | first[i+2]);
+                            two.insert(uint32_t(second[i])<<16 | uint32_t(second[i+1])<<8 | second[i+2]);
+                        }
+                        std::printf("DISTINCT_FIRST=%zu DISTINCT_SECOND=%zu\n",one.size(),two.size());
+                    }
                     valid=true;
                 } else std::fprintf(stderr,"NO_PIXEL_READBACK\n");
                 gs_texture_destroy(texture);

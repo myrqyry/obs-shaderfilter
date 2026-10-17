@@ -21,9 +21,9 @@ uniform int palette_type<
     string option_4_label = "Full spectrum";
 > = 2;
 
-uniform float4 base_color<
+uniform float3 base_color<
     string label = "Palette base color (sRGB)";
-> = {0.52, 0.05, 0.05, 1.0};
+> = {0.52, 0.05, 0.05};
 
 uniform int num_colors<
     string label = "Tonal levels";
@@ -93,7 +93,9 @@ float4 mainImage(VertData v_in) : TARGET {
     float dither = (pfBayer2x2(v_in.uv * uv_size) * 0.25 - 0.5) *
                    max(dither_strength, 0.0);
     float lightness = saturate(lab.x + dither);
-    float quantizedL = ceil(lightness * float(levels)) / float(levels);
+    // Exactly `levels` lightness values including 0 and 1.
+    float bins = float(levels - 1);
+    float quantizedL = floor(lightness * bins + 0.5) / bins;
 
     float hueRange = 0.0;
     float hueOffset = 0.0;
@@ -104,9 +106,11 @@ float4 mainImage(VertData v_in) : TARGET {
         hueOffset = (lightness > 0.5 * control) ? 2.356194490192345 : 0.0;
     } else if (palette_type == 3) {
         hueRange = 1.5707963267948966;
-        hueOffset = lightness > 0.33 * control ?
-                    3.141592653589793 * 0.4167 *
-                    floor(lightness * 3.0 / control) : 0.0;
+        // Three bounded hue families, evenly spaced around Oklch.
+        // Very small balance values must not repeat an unbounded index.
+        float triadProgress = saturate(lightness / control);
+        int triadIndex = min(2, int(floor(triadProgress * 3.0)));
+        hueOffset = float(triadIndex) * 2.0943951023931953;
     } else if (palette_type >= 4) {
         hueRange = 6.283185307179586;
     }

@@ -10,8 +10,8 @@ The filter quantizes **Oklab lightness**, then builds Oklch hue/chroma
 from a user-selected base color, rather than posterizing R/G/B channels
 independently. It produces a coordinated set of colors even from
 photographic input. The five modes are monochrome, analogous,
-complementary, triadic, and full spectrum. Controls also expose:
-2–16 tonal levels, palette balance, 2x2 Bayer dithering, optional
+complementary, triadic (three bounded Oklch hue families), and full spectrum. Controls also expose:
+2–16 **exact discrete lightness levels**, palette balance, 2x2 Bayer dithering, optional
 highlight desaturation and effect mix. A 0 mix returns source pixels.
 
 The self-contained single-pass effect lives at
@@ -31,7 +31,7 @@ Thus the upstream HDR compatibility claim DOES NOT apply here.
 
 We preserve the upstream palette/hue branch structure and Bayer pattern
 but specialize it to SDR; also add source-alpha preservation,
-a zero-mix passthrough, and input bounds. The base-color picker is
+a zero-mix passthrough, and input bounds. The RGB-only base-color picker is
 interpreted as display-sRGB (upstream's direct `RGB_to_LCh` on the
 picker assumes linear values). Exact image parity with ReShade is not
 claimed. The output is limited to display-sRGB gamut.

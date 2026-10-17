@@ -42,7 +42,10 @@ float3 pfOklabToLinear(float3 c) {
                  -0.0041960863*l - 0.7034186147*m + 1.7076147010*s);
 }
 float3 pfOklabToLch(float3 c) {
-    return float3(c.x, length(c.yz), atan(c.z, c.y));
+    float chroma = length(c.yz);
+    // An achromatic color has no hue; avoid undefined atan2(0, 0).
+    if (chroma <= 1.0e-6) return float3(c.x, 0.0, 0.0);
+    return float3(c.x, chroma, atan(c.z, c.y));
 }
 float3 pfLchToOklab(float3 c) {
     return float3(c.x, c.y * cos(c.z), c.y * sin(c.z));

@@ -33,7 +33,7 @@ Frame sample(bool partialAlpha=false) {
 }
 
 Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float value,
-             const char* presetUniform="",float presetValue=0.f) {
+             const std::vector<std::pair<std::string,float>>& presets={}) {
     Frame pixels;
     gs_set_cull_mode(GS_NEITHER);
     gs_texrender_t* target=gs_texrender_create(GS_RGBA,GS_ZS_NONE);
@@ -62,13 +62,13 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float 
             else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(param,value!=0.f);
             else gs_effect_set_float(param,value);
         }
-        if(presetUniform[0]) {
-            if(auto* p=gs_effect_get_param_by_name(effect,presetUniform)) {
+        for(const auto& preset: presets) {
+            if(auto* p=gs_effect_get_param_by_name(effect,preset.first.c_str())) {
                 struct gs_effect_param_info info={};
                 gs_effect_get_param_info(p,&info);
-                if(info.type==GS_SHADER_PARAM_INT)gs_effect_set_int(p,int(presetValue));
-                else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(p,presetValue!=0.f);
-                else gs_effect_set_float(p,presetValue);
+                if(info.type==GS_SHADER_PARAM_INT)gs_effect_set_int(p,int(preset.second));
+                else if(info.type==GS_SHADER_PARAM_BOOL)gs_effect_set_bool(p,preset.second!=0.f);
+                else gs_effect_set_float(p,preset.second);
             }
         }
         while(gs_effect_loop(effect,"Draw"))gs_draw_sprite(source,0,W,H);
@@ -90,19 +90,23 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,const char* uniform,float 
 }
 
 int main(int argc,char** argv) {
-    if(argc<5 || argc>7){std::fprintf(stderr,"usage: probe EFFECT UNIFORM A B [partial-alpha] [uniform=value]\n");return 2;}
+    if(argc<5 || argc>24){std::fprintf(stderr,"usage: probe EFFECT UNIFORM A B [partial-alpha] [uniform=value ...]\n");return 2;}
     bool partialAlpha=false;
-    std::string presetName;
-    float presetValue=0.f;
+    bool n64HiddenRGB=false;
+    bool windHiddenRGB=false;
+    std::vector<std::pair<std::string,float>> presets;
     for(int i=5;i<argc;i++) {
         if(std::strcmp(argv[i],"partial-alpha")==0) {
             partialAlpha=true;
+        } else if(std::strcmp(argv[i],"n64-hidden-rgb")==0) {
+            n64HiddenRGB=true;
+        } else if(std::strcmp(argv[i],"wind-hidden-rgb")==0) {
+            windHiddenRGB=true;
         } else {
             std::string arg=argv[i];
             size_t pos=arg.find('=');
-            if(pos==std::string::npos || pos==0 || !presetName.empty())return 2;
-            presetName=arg.substr(0,pos);
-            presetValue=std::strtof(arg.c_str()+pos+1,nullptr);
+            if(pos==std::string::npos || pos==arg.size()-1)return 2;
+            presets.emplace_back(arg.substr(0,pos),std::strtof(arg.c_str()+pos+1,nullptr));
         }
     }
     if(!obs_startup("en-US",nullptr,nullptr))return 3;
@@ -124,12 +128,33 @@ int main(int argc,char** argv) {
         if(!param)std::fprintf(stderr,"MISSING_CONTROL=%s\n",argv[2]);
         else {
             auto data=sample(partialAlpha);
+            if(n64HiddenRGB) {
+                // Distinguish a bright invisible magenta region from opaque
+                // green. A correct premultiplied sampler cannot bleed magenta
+                // into a partially transparent edge.
+                for(uint32_t y=0;y<H;y++) for(uint32_t x=0;x<W;x++) {
+                    size_t i=(size_t(y)*W+x)*4;
+                    bool invisible=x<W/2;
+                    data[i]=invisible?255:0;
+                    data[i+1]=invisible?0:200;
+                    data[i+2]=invisible?255:0;
+                    data[i+3]=invisible?0:255;
+                }
+            }
+            if(windHiddenRGB) {
+                // Transparent camera texels often contain nonzero hidden RGB.
+                // A premultiplied wind composite with zero wind opacity must
+                // not reveal those invisible source colors.
+                for(size_t i=0;i<data.size();i+=4) {
+                    data[i]=255;data[i+1]=80;data[i+2]=20;data[i+3]=0;
+                }
+            }
             const uint8_t* bytes=data.data();
             auto* texture=gs_texture_create(W,H,GS_RGBA,1,&bytes,0);
             if(texture) {
                 float a=std::strtof(argv[3],nullptr),b=std::strtof(argv[4],nullptr);
-                auto first=render(effect,texture,argv[2],a,presetName.c_str(),presetValue);
-                auto second=render(effect,texture,argv[2],b,presetName.c_str(),presetValue);
+                auto first=render(effect,texture,argv[2],a,presets);
+                auto second=render(effect,texture,argv[2],b,presets);
                 if(first.size()==data.size()&&second.size()==data.size()) {
                     size_t changed=0,changedInput=0,alphaChanged=0;
                     uint64_t sum=0;
@@ -156,7 +181,27 @@ int main(int argc,char** argv) {
                         }
                         std::printf("DISTINCT_FIRST=%zu DISTINCT_SECOND=%zu\n",one.size(),two.size());
                     }
-                    valid=true;
+                    if(n64HiddenRGB) {
+                        unsigned translucent=0,leaks=0;
+                        for(size_t i=0;i<second.size();i+=4) {
+                            if(second[i+3]>6 && second[i+3]<249) {
+                                ++translucent;
+                                if(second[i]>5 || second[i+2]>5)
+                                    ++leaks;
+                            }
+                        }
+                        bool premultValid=translucent>25 && leaks==0;
+                        std::printf("N64_PREMULT_GPU_PASS=%d TRANSLUCENT=%u INVISIBLE_COLOR_LEAKS=%u\n",
+                                    premultValid,translucent,leaks);
+                        valid=premultValid;
+                    } else if(windHiddenRGB) {
+                        unsigned nonzero=0;
+                        for(size_t i=0;i<second.size();i++)nonzero+=second[i]!=0;
+                        valid=nonzero==0;
+                        std::printf("WIND_TRANSPARENT_GPU_PASS=%d NONZERO_COMPONENTS=%u\n",valid,nonzero);
+                    } else {
+                        valid=true;
+                    }
                 } else std::fprintf(stderr,"NO_PIXEL_READBACK\n");
                 gs_texture_destroy(texture);
             }

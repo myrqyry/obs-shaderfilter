@@ -30,6 +30,21 @@ class ExampleLayoutTests(unittest.TestCase):
                     'printmaking/ink_hatching.shader',
                     'mpv-anime-ports/anime_bilateral_mean.shader',
                     'potatofx-ports/palette_harmony.shader']
+        expected += [
+            'composite_signal.shader',
+            'soft_register.shader',
+            'wind-drift-events.shader',
+            'psx/psx_dither_quantize.shader',
+            'psx/psx_color_grade.shader',
+            'psx/psx_instability.shader',
+            'psx/psx_analog_hybrid.shader',
+            'retro_ursc/ursc_n64_three_point.shader',
+            'retro_ursc/ursc_shiny_glimmer.shader',
+            'shader_effects/se_engraving.shader',
+            'shader_effects/se_watercolor.shader',
+            'retro_capture/retrocapture_cmyk_print.shader',
+            'imweb-ports/motion_matte.shader',
+        ]
         for path in expected:
             with self.subTest(path=path):
                 self.assertTrue((myrqyry / path).is_file(), path)

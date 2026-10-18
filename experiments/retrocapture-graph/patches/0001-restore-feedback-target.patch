@@ -1,0 +1,16 @@
+diff --git a/src/shader/ShaderEngine.cpp b/src/shader/ShaderEngine.cpp
+index 317748d..6e15fb7 100644
+--- a/src/shader/ShaderEngine.cpp
++++ b/src/shader/ShaderEngine.cpp
+@@ -1328,0 +1329,11 @@ void ShaderEngine::renderMultipassPass(size_t i, GLuint &currentTexture, uint32_
++            // An allocated feedback texture must be deterministic on frame 0.
++            // createFramebuffer unbinds GL_FRAMEBUFFER, so without restoring
++            // the current pass target our first feedback-enabled draw lands
++            // in the default framebuffer and returns an empty pass texture.
++            if (fbTarget.feedbackFramebuffer && fbTarget.feedbackTexture) {
++                glBindFramebuffer(GL_FRAMEBUFFER, fbTarget.feedbackFramebuffer);
++                glClearColor(0.f, 0.f, 0.f, 0.f);
++                glClear(GL_COLOR_BUFFER_BIT);
++            }
++            glBindFramebuffer(GL_FRAMEBUFFER, pass.framebuffer);
++            glViewport(0, 0, outputWidth, outputHeight);

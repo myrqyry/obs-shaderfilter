@@ -25,8 +25,8 @@ uniform float colorMode<
     string label = "Color mode";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 20.0;
-    float step = 0.01;
+    float maximum = 1.0;
+    float step = 1.0;
 > = 1.0;
 float normalized_sine(float value) {
     return (sin(value) + 1.0) * 0.5;

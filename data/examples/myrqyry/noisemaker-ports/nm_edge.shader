@@ -15,38 +15,38 @@ float4 nmSample(float2 uv) {
 uniform float kernel<
     string label = "Kernel";
     string widget_type = "slider";
-    float minimum = -1.0;
-    float maximum = 1.0;
-    float step = 0.01;
+    float minimum = 0.0;
+    float maximum = 2.0;
+    float step = 1.0;
 > = 1.0;
 uniform float size<
     string label = "Size";
     string widget_type = "slider";
     float minimum = -1.0;
     float maximum = 1.0;
-    float step = 0.01;
+    float step = 1.0;
 > = 1.0;
 // OBS native 1.0 is fixed at unity.
 uniform float blend<
     string label = "Blend";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 100.0;
-    float step = 0.01;
+    float maximum = 8.0;
+    float step = 1.0;
 > = 6.0;
 uniform float invert<
     string label = "Invert";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 500.0;
-    float step = 0.01;
+    float maximum = 1.0;
+    float step = 1.0;
 > = 0.0;
 uniform float channel<
     string label = "Channel";
     string widget_type = "slider";
-    float minimum = -1.0;
+    float minimum = 0.0;
     float maximum = 1.0;
-    float step = 0.01;
+    float step = 1.0;
 > = 0.0;
 uniform float threshold<
     string label = "Threshold";
@@ -80,8 +80,8 @@ uniform float contourSide<
     string label = "Contour side";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 100.0;
-    float step = 0.01;
+    float maximum = 1.0;
+    float step = 1.0;
 > = 0.0;
 #define LUMA float3(0.2126, 0.7152, 0.0722)
 

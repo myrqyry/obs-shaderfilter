@@ -152,7 +152,7 @@ uniform float Flame_Tongue_Size<
     string label = "Flame Tongue Size";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 2.0;
+    float maximum = 10.0;
     float step = 0.01;
 > = 8.5;
 

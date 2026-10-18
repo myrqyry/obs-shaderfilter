@@ -20,7 +20,7 @@ uniform int displacement_curve<
   string option_1_label = "Quadratic";
   int    option_2_value = 3;
   string option_2_label = "Cubic";
-> = 0;
+> = 1;
 
 uniform string blur_info<
   string label = "Blur";

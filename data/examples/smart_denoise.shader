@@ -8,7 +8,7 @@ uniform float uSigma<
     string label = "Sigma";
     string widget_type = "slider";
     float minimum = 0.01;
-    float maximum = 3;  // max based on the webgl sample, which is 3 
+    float maximum = 5.0;  // include the existing Sigma default without changing its output
     float step = 0.01;
 > = 5.0;  // default value based on shadertoy
 uniform float uKSigma<

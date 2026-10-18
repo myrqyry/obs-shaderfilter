@@ -22,7 +22,7 @@ uniform float sobelMetric<
     string widget_type = "slider";
     float minimum = 0.0;
     float maximum = 3.0;
-    float step = 0.01;
+    float step = 1.0;
 > = 0.0;
 uniform float width<
     string label = "Width";

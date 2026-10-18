@@ -2,7 +2,7 @@
 from pathlib import Path
 import unittest
 
-SHADERS = Path(__file__).resolve().parents[1] / 'data/examples/mpv-anime-ports'
+SHADERS = Path(__file__).resolve().parents[1] / 'data/examples/myrqyry/mpv-anime-ports'
 
 
 class MpvDisabledFilterTests(unittest.TestCase):

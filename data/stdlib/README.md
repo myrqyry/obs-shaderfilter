@@ -62,7 +62,7 @@ including third-party shader libraries with their own helpers.
   or source shaders that explicitly bind a source image. Its loops are
   sampled per pixel; use conservative radii on streaming resolutions.
 
-See `data/examples/printmaking/README.md` for two single-pass printmaking filter examples and attribution.
+See `data/examples/myrqyry/printmaking/README.md` for two single-pass printmaking filter examples and attribution.
 
 ## Reproducible validation
 
@@ -82,5 +82,5 @@ The standard library does not by itself introduce automatic Source→Filter
 opacity/compositing or reorganize `.shader` filenames. Those remain separate
 plugin/API decisions.
 
-See `data/examples/potatofx-ports/README.md` for the SDR palette port,
+See `data/examples/myrqyry/potatofx-ports/README.md` for the SDR palette port,
 color-space caveats, and real GPU test coverage.

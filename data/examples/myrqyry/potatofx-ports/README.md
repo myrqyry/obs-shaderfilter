@@ -15,7 +15,7 @@ complementary, triadic (three bounded Oklch hue families), and full spectrum. Co
 highlight desaturation and effect mix. A 0 mix returns source pixels.
 
 The self-contained single-pass effect lives at
-`data/examples/potatofx-ports/palette_harmony.shader`; the limited
+`data/examples/myrqyry/potatofx-ports/palette_harmony.shader`; the limited
 sRGB/Oklab helper is `data/stdlib/oklab.glsl`. Both are installed with
 the existing plugin data directory. Source alpha is unchanged,
 including partially and fully transparent texels.

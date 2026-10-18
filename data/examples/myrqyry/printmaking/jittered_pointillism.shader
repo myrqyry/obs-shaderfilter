@@ -2,7 +2,7 @@
 // Adapted from the Stipple technique in Noisemaker by Noise Factor LLC.
 // MIT notice: printmaking/NOISEMAKER-LICENSE.txt
 // Uses the source image sampled at each dot's own center (one color/dot).
-#include "../../stdlib/printmaking.glsl"
+#include "../../../stdlib/printmaking.glsl"
 
 uniform float cell_size<
     string label = "Dot spacing (pixels)";

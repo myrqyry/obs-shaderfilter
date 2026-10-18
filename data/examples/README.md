@@ -30,8 +30,8 @@ under `myrqyry/`.
 
 ### Updating an existing Linux user installation
 
-The CMake **`install-user`** target archives **only the 62 known former
-example paths** from earlier myrqyry ports into
+The CMake **`install-user`** target archives **only the 78 known former
+example paths** from earlier myrqyry ports and local fork additions into
 `~/.config/obs-studio/plugins/obs-shaderfilter/data/legacy-shaderfilter-examples-backup/`
 *before* installing the new `data/examples/myrqyry/` layout. The original bytes,
 including any edits to those old example files, are preserved in the archive.

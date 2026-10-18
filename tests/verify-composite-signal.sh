@@ -5,7 +5,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 module="${1:-$HOME/.config/obs-studio/plugins/obs-shaderfilter/bin/64bit/obs-shaderfilter.so}"
 data="${2:-$HOME/.config/obs-studio/plugins/obs-shaderfilter/data}"
-shader="$repo/data/examples/composite_signal.shader"
+shader="$repo/data/examples/myrqyry/composite_signal.shader"
 test -r "$module" && test -r "$shader"
 work="$(mktemp -d /tmp/shaderfilter-signal-XXXXXX)"
 trap 'rm -rf "$work"' EXIT

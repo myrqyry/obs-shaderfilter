@@ -15,8 +15,8 @@ class MigratedUserInstall(unittest.TestCase):
         entries=[s for s in MANIFEST.read_text().splitlines()
                  if s and not s.startswith('#')]
         manifest=set(entries)
-        self.assertEqual(len(entries),62)
-        self.assertEqual(len(manifest),62)
+        self.assertEqual(len(entries),78)
+        self.assertEqual(len(manifest),78)
         for rel in manifest:
             self.assertFalse((ROOT/'data/examples'/rel).exists(),rel)
             self.assertTrue((ROOT/'data/examples/myrqyry'/rel).is_file(),rel)

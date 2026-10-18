@@ -99,6 +99,7 @@ float4 mainImage(VertData v_in):TARGET {
   float paper=saturate(Paper_Grain);
   painted*=lerp(1.0,grain,paper);
   painted=lerp(painted,painted*Paper_Color.rgb,paper*0.4);
-  float3 color=lerp(source.rgb,painted,saturate(Effect_Mix));
-  return float4(saturate(color),source.a);
+  float3 color=lerp(src.rgb,painted,saturate(Effect_Mix));
+  // Bleed affects pigment placement, not the input source transparency.
+  return float4(saturate(color),src.a);
 }

@@ -5,7 +5,7 @@ Inspected commit: 81fd4ece5d493ca6c424a2af41f0e2c361ec8258 (2026-10-13).
 Copyright © 2026 Shader Effects Inc. Source engine/components: MIT.
 Commercial design editor, premium presets, and platform features have separate terms; none were copied.
 
-These .shader files are **file-backed, standard-wrapper ShaderFilter filters** for existing video/image sources. Disable "Full Vertex Shader (.effect)" in OBS. They need the input image texture and are not no-input standalone generators. Install into the plugin's data/examples/shader_effects directory, attach a ShaderFilter filter to a video/image source, select the file and Reload Effect.
+These .shader files are **file-backed, standard-wrapper ShaderFilter filters** for existing video/image sources. Disable "Full Vertex Shader (.effect)" in OBS. They need the input image texture and are not no-input standalone generators. Install into the plugin's data/examples/myrqyry/shader_effects directory, attach a ShaderFilter filter to a video/image source, select the file and Reload Effect.
 
 ## Conversion ledger
 

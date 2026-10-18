@@ -19,7 +19,7 @@ Both shaders offer user controls and a true `Effect_Mix = 0` bypass; neither req
 - All six runs compiled and rendered with 36,864 visible pixels; output differed when the relevant control changed. No black/empty frames in this harness.
 - Missing: real installed-plugin Source/Filter UI smoke tests, alpha-perfect pixel-level comparison to a Godot reference, performance on target GPU, Windows/macOS backend tests. ShaderFilter Source mode has no input image: these are **filters to attach to existing video/image sources**, not generators.
 
-The `data/examples/psx` directory contained **preexisting concurrent work** when these ports were added. Nothing in that directory was modified as part of these two conversions.
+The `data/examples/myrqyry/psx` directory contained **preexisting concurrent work** when these ports were added. Nothing in that directory was modified as part of these two conversions.
 
 ## Original license and attribution
 

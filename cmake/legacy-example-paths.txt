@@ -62,3 +62,20 @@ printmaking/NOISEMAKER-LICENSE.txt
 printmaking/README.md
 printmaking/ink_hatching.shader
 printmaking/jittered_pointillism.shader
+# Earlier local-only fork example paths, preserved during cleanup.
+composite_signal.shader
+flow_field_tearing.shader
+psx/README.md
+psx/psx_analog_hybrid.shader
+psx/psx_color_grade.shader
+psx/psx_dither_quantize.shader
+psx/psx_instability.shader
+psx/verify_psx.cpp
+psx/verify_psx.sh
+retro_capture/retrocapture_cmyk_print.shader
+retro_ursc/RETRO-URSC-PORTS.md
+retro_ursc/ursc_n64_three_point.shader
+retro_ursc/ursc_shiny_glimmer.shader
+shader_effects/SHADER-EFFECTS-PORTS.md
+shader_effects/se_engraving.shader
+shader_effects/se_watercolor.shader

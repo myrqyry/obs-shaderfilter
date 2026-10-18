@@ -12,7 +12,7 @@ Four independently authored, **source-preserving** OBS Shaderfilter shaders base
 6. You can stack filters, but consider the GPU and order. Start with **one** filter. No extra pixels/expansion are required for normal use.
 
 Paths on this Linux computer:
-`~/loam/obs-shaderfilter/data/examples/psx/`.
+`~/loam/obs-shaderfilter/data/examples/myrqyry/psx/`.
 
 | File | Purpose | Default look |
 | --- | --- | --- |

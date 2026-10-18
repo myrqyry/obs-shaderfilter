@@ -46,6 +46,11 @@ sampler_state URSC_PointSampler {
 float4 ursc_nearest_cell(float2 cell,float2 size) {
     return image.Sample(URSC_PointSampler,saturate((cell+0.5)/size));
 }
+// Work in associated-alpha space during three-point filtering. This avoids
+// invisible RGB from fully transparent taps contaminating visible edges.
+float4 urscPremultiply(float4 c) {
+    return float4(c.rgb*c.a,c.a);
+}
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv=v_in.uv;
     float4 src=image.Sample(textureSampler,uv);
@@ -54,15 +59,20 @@ float4 mainImage(VertData v_in) : TARGET {
                        max(float(Virtual_Height),2.0));
     float2 pixel=uv*size-0.5+float2(Phase_X,Phase_Y);
     float2 cell=floor(pixel),f=frac(pixel);
-    float4 right=ursc_nearest_cell(cell+float2(1.0,0.0),size);
-    float4 down=ursc_nearest_cell(cell+float2(0.0,1.0),size);
+    float4 right=urscPremultiply(ursc_nearest_cell(cell+float2(1.0,0.0),size));
+    float4 down=urscPremultiply(ursc_nearest_cell(cell+float2(0.0,1.0),size));
     float4 filtered;
     if(f.x+f.y<1.0) {
-        float4 low=ursc_nearest_cell(cell,size);
+        float4 low=urscPremultiply(ursc_nearest_cell(cell,size));
         filtered=low*(1.0-f.x-f.y)+right*f.x+down*f.y;
     } else {
-        float4 diagonal=ursc_nearest_cell(cell+float2(1.0,1.0),size);
+        float4 diagonal=urscPremultiply(ursc_nearest_cell(cell+float2(1.0,1.0),size));
         filtered=diagonal*(f.x+f.y-1.0)+right*(1.0-f.y)+down*(1.0-f.x);
     }
-    return lerp(src,saturate(filtered),saturate(Effect_Mix));
+    // Blend input and filtered colors in associated-alpha space as well.
+    // Return straight-alpha color because the Shaderfilter wrapper expects it.
+    float4 mixed=lerp(urscPremultiply(src),filtered,saturate(Effect_Mix));
+    float3 rgb = mixed.a > 0.00001 ?
+                 mixed.rgb/mixed.a : float3(0.0,0.0,0.0);
+    return float4(saturate(rgb),saturate(mixed.a));
 }

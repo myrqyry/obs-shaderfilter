@@ -30,3 +30,10 @@ data/examples/myrqyry/
 data/stdlib/
 templates/
 tools/
+
+# The project-level agent entry point is shared repository guidance.
+!AGENTS.md
+
+# meristem:local-ignore:start
+.meristem/local/
+# meristem:local-ignore:end

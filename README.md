@@ -23,7 +23,7 @@ necessary files should look like this:
     |               |---blink.shader
     |               |---border.shader
     |               |---drop_shadow.shader
-    |               |---filter-template.effect
+    |               |---filter_template.effect
     |               |---multiply.shader
     |               |---pulse.effect
     |               |---rectangular_drop_shadow.shader
@@ -40,7 +40,8 @@ necessary files should look like this:
 ## Usage
 
 The filter can be added to any source through the "Filters" option when right-clicking on a source. The name
-of the filter is "User-defined shader." 
+of the filter is "Shaderfilter Filter". The plugin also registers a transition ("Shaderfilter Transition") and a
+standalone source ("Shaderfilter Source") that renders a shader without an input image.
 
 Shaders load from a file by default, or they can be entered directly in a text box in the filter properties. To enter
 shader text directly, enable the "Raw Shader Text" toggle. If you are entering your shader text directly, note that you
@@ -55,8 +56,10 @@ standard template to add a basic vertex shader and other boilerplate. If you wis
 or other parts of the effect for some reason, you can check the "Full Vertex Shader (.effect)" option. 
 
 Any parameters you add to your shader (defined as `uniform` variables) will be detected by the plugin and exposed
-in the properties window to have their values set. Currently, only `int`, `float`, `bool`, `string`, `texture2d`, and `float4`
-parameters are supported. (`float4` parameters will be interpreted by the properties window as colors.) `string` is used for 
+in the properties window to have their values set. Currently, `int`, `float`, `bool`, `string`, `texture2d`, `float2`, `float3`,
+and `float4` parameters are supported. (`float3` and `float4` parameters will be interpreted by the properties window as
+colors; `float2` becomes two separate float controls. `int3` parameters are shown as a read-only note rather than an
+editable control.) `string` is used for 
 notes and instructions, but could be used in an effect or shader. Variable names are displayed in the GUI with underscore replaced with space `uniform float Variable_Name` becomes `Variable Name`.
 
 Version 2.0 and up support setting label, widget_type, minimum, maximum, step using annotations.
@@ -203,12 +206,12 @@ I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as p
 | hard_blink.shader               | Blinks the source on and off at configurable intervals.                                                                                                                                                                                                                                                                                                                                                 |                                                                                                           |
 | intensity-scope.shader          |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/c4fd64ab-64d1-42b0-9929-ba1e3d7a6466) |
 | gaussian-simple.shader          | A simple gaussian shader for bluring. Really implements closer to a box shader.                                                                                                                                                                                                                                                                                                                         |                                                                                                           |
-| luminance.shader                | A shader that adds an alpha layer based on brightness instead of color. Extremely useful for making live video special effects, like replacing backgrounds or foregrounds.                                                                                                                                                                                                                              |                                                                                                           |
+| Luminance.shader                | A shader that adds an alpha layer based on brightness instead of color. Extremely useful for making live video special effects, like replacing backgrounds or foregrounds.                                                                                                                                                                                                                              |                                                                                                           |
 | matrix.effect                   | The cat is a glitch conversion from shadertoy. Updated with several configurable options.(1.2)                                                                                                                                                                                                                                                                                                          | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/79d2b028-4ea8-405d-a560-846f3ea78357) |
 | multiply.shader                 | A shader that multiplies the input by another image specified in the parameters. Demonstrates the use of user-defined `texture2d` parameters.                                                                                                                                                                                                                                                           |                                                                                                           |
 | night_sky.shader                | Animated moon, clouds, stars background(1.2)                                                                                                                                                                                                                                                                                                                                                            | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/8202deaa-7b60-417f-abd6-30c97b617b14) |
 | page-peel.shader                |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/9ebb8c1a-4a6d-4425-a344-36dd05533db2) |
-| perlin_noise.effect             | An effect generates perlin_noise, used to make water, clouds and glitch effects.                                                                                                                                                                                                                                                                                                                        | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/62f3c4eb-74b5-4dbf-9e6e-e726c8734861) |
+| perlin_noise.shader             | A shader that generates perlin noise, used to make water, clouds and glitch effects.                                                                                                                                                                                                                                                                                                                        | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/62f3c4eb-74b5-4dbf-9e6e-e726c8734861) |
 | pie-chart.shader                |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/bf44b9aa-23e5-4261-a0f8-b287d3012db7) |
 | pixelation.shader               |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/88b9db62-9fc7-4a1a-b7a2-cf22355be390) |
 | pulse.effect                    | An effect that varies the size of the output over time. This demonstrates a custom vertex shader that manipulates the position of the rendered vertices based on user data. Note that moving the vertices in the vertex shader will not affect the logical size of the source in OBS, and this may mean that pixels outside the source's  bounds will get cut off by later filters in the filter chain. |                                                                                                           |
@@ -241,6 +244,11 @@ I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as p
 | voronoi-pixelation.shader       |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/102317d5-ba5f-48bf-8666-c1d2b5850813) |
 | ZigZag.shader                   |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/3e3006cd-9f2a-4a7e-905c-50d80173e861) |
 | zoom_blur.shader                | A shader that creates a zoom with blur effect based on a number of samples and magnitude of each sample. It also includes an animation with or without easing and a glitch option. Set speed to zero to not use animation. Suggested values are 15 samples and 30-50 magnitude.                                                                                                                         |                                                                                                           |
+
+This table is a subset of the bundled examples. The shader families ported by this fork live in their own subfolders
+of *data/examples* and are documented separately: `data/examples/shader_effects/SHADER-EFFECTS-PORTS.md`,
+`data/examples/retro_capture/` (see `docs/shaders/retrocapture/README.md`),
+`data/examples/retro_ursc/RETRO-URSC-PORTS.md`, and `data/examples/psx/README.md`.
 
 
 ## Fork Changes
@@ -292,6 +300,17 @@ and the OBS Studio libraries and headers.
 1. Stand-alone build (Linux only)
     - Verify that you have package with development files for OBS
     - Check out this repository and run `cmake -S . -B build -DBUILD_OUT_OF_TREE=On && cmake --build build`
+    - The module is written to `build/obs-shaderfilter.so`; install it into your OBS user plugin directory with
+      `cmake --build build --target install-user`
+
+This fork builds and verifies against libobs 32.0.1, while `.github/workflows/build.yml` builds it against
+OBS 28.0.0-rc1. A successful compile only proves that the effect compiles — the rendered result still has to be
+checked in OBS.
+
+`tests/verify-composite-signal.sh` renders a bundled shader through a headless libobs session and compares the
+resulting pixels against the unfiltered source. It takes the module and the plugin data directory as arguments:
+
+    tests/verify-composite-signal.sh build/obs-shaderfilter.so data
 
 ## Donations
 https://www.paypal.me/exeldro

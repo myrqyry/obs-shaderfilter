@@ -1,7 +1,13 @@
 # SESSION-STATE.md
 **Project:** myrqyry-shaderfilter (fork of exeldro's obs-shaderfilter)
-**Status:** Active development
+**Status:** Historical record — not the current-work authority
 **Last Updated:** 2026-05-30
+
+> **Status note (2026-10-21):** This file is a preserved historical session log. It was last updated on 2026-05-30 and
+> its "Active development" status no longer applies. Current project state lives in `ACTIVE_WORK.md` and
+> `.meristem/PROJECT.md`; read those instead. Entries below that mention paths such as
+> `src/filter-hypershader.c`, `src/mediapipe/mp_wrapper.cpp`, or `~/MQR/hyperShaderFX/` refer to a different project
+> and do not describe this repository.
 
 ## Key Context
 - Fork of exeldro's shaderfilter OBS plugin

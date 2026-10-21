@@ -29,10 +29,11 @@ This port does not overwrite or change that file.
 
 ### Use
 
-Install/select `retrocapture_cmyk_print.shader` under the standard
-ShaderFilter user-shader wrapper as a **file-backed filter on an existing
-video/image source**. Keep Full/Entire Effect mode OFF. A standalone
-ShaderFilter Source has no input `image`, so it isn't suitable.
+Install/select `retrocapture_cmyk_print.shader` (in this repository:
+`data/examples/retro_capture/retrocapture_cmyk_print.shader`) under the
+standard ShaderFilter user-shader wrapper as a **file-backed filter on an
+existing video/image source**. Keep **Full Vertex Shader (.effect)** off. A
+standalone Shaderfilter Source has no input `image`, so it isn't suitable.
 Start with Dot Density 52 and Effect Mix 1. For very dense screens,
 the anti-aliasing control helps avoid moiré, but can blur dots.
 Use Reload Effect after choosing the file.

@@ -17,12 +17,16 @@ An OBS Studio plugin that lets users author and load OBS-compatible HLSL shaders
 
 ## Known-good workflows
 
-Build using the CMake workflow described in `README.md` and the platform automation under `.github/`. The maintained CMake target is `obs-shaderfilter`; on POSIX out-of-tree builds, `install-user` copies the plugin and data into the user's OBS plugin directory. No repository-wide test target or locally available shader lint command was established during initialization.
+Build using the CMake workflow described in `README.md` and the platform automation under `.github/`. The maintained CMake target is `obs-shaderfilter`; on POSIX out-of-tree builds, `install-user` copies the plugin and data into the user's OBS plugin directory. Standalone builds are verified with `cmake -S . -B build -DBUILD_OUT_OF_TREE=On && cmake --build build` (confirmed against libobs 32.0.1 on 2026-10-21). There is no repository-wide CMake test target and no shader lint command; the closest executable checks are `tests/verify-composite-signal.sh` (headless libobs render of `data/examples/composite_signal.shader`) and `data/examples/psx/verify_psx.sh`.
 
 ## Verification
 
-Use the configured CMake build against the intended libobs/OBS version to verify native changes. Shader behavior ultimately requires loading the effect in OBS; compilation alone does not verify visual output. CI build workflows live in `.github/workflows/build.yml`.
+Use the configured CMake build against the intended libobs/OBS version to verify native changes. Shader behavior ultimately requires loading the effect in OBS; compilation alone does not verify visual output. CI build workflows live in `.github/workflows/build.yml` and build against OBS 28.0.0-rc1.
 
 ## Open structural uncertainty
 
-`CHANGELOG.md` describes a 2026-06-28 library modernization and refers to `tools/lint.py`, `tools/autofix.py`, shader catalog files, and templates; those paths were not present in the current root listing, and `python3 tools/lint.py --help` fails because the file is absent. Reconcile the changelog against the current tree before relying on those workflows. `SESSION-STATE.md` contains an old, mixed-project chronology and claims active development, but the current checkout is clean and aligned with `origin/master`; it is preserved as historical context, not adopted as the current-work authority. No `ACTIVE_WORK.md` is warranted from current Git state.
+Resolved on 2026-10-21. `CHANGELOG.md` describes a 2026-06-28 library modernization and refers to `tools/lint.py`, `tools/autofix.py`, shader catalog files, and templates; those paths are deliberately gitignored local-only directories (`.gitignore` lists `tools/`, `templates/`, `data/examples/myrqyry/`, `data/stdlib/`) that never appeared in any commit, so they cannot exist in a fresh clone. `CHANGELOG.md` now carries an explicit scope note saying so; the changelog records that local sweep, not tracked repository content.
+
+`SESSION-STATE.md` contains an old, mixed-project chronology and previously claimed active development; it now carries a status banner marking it a historical record superseded by `ACTIVE_WORK.md` and this file.
+
+The checkout is no longer aligned with `origin/master`: local `master` and the remote history have diverged (26 remote-only commits behind, with the local-only commits and the current counts recorded in `ACTIVE_WORK.md`). `ACTIVE_WORK.md` is warranted and is the current-work authority; it describes the divergence, the isolated verification runs, and the integration boundary.

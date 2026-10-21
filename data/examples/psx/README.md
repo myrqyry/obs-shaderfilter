@@ -5,7 +5,7 @@ Four independently authored, **source-preserving** OBS Shaderfilter shaders base
 ## Install and use
 
 1. In OBS, select a **video source** (a game, image, camera, capture or scene). Right-click > **Filters**.
-2. In **Effect Filters**, add **User-defined shader** from **obs-shaderfilter**.
+2. In **Effect Filters**, add **Shaderfilter Filter** from **obs-shaderfilter**.
 3. Leave **Raw Shader Text** disabled and **Full Vertex Shader (.effect)** disabled.
 4. In **Shader File**, browse to one of the four `.shader` files in this folder.
 5. Hit **Reload effect** whenever you change the source file; adjust controls in the filter panel.

@@ -10,7 +10,7 @@ Before non-trivial work:
 1. Treat current repository/runtime evidence as the authority for what exists now.
 2. Read `.meristem/PROJECT.md` for durable project purpose, invariants, and architecture boundaries when relevant.
 3. If `ACTIVE_WORK.md` exists, read it for the current objective, locked decisions, constraints, verification state, and unresolved uncertainty.
-4. Consult `.meristem/DECISIONS.md`, `LEARNINGS.md`, `ERRORS.md`, or `FEATURE_REQUESTS.md` only when they can materially change the current task.
+4. Consult `.meristem/DECISIONS.md`, `.meristem/LEARNINGS.md`, `.meristem/ERRORS.md`, or `.meristem/FEATURE_REQUESTS.md` only when they can materially change the current task.
 5. Do not promote session detail into durable files merely because it is recent. Persist consequential state before dependent continuation when losing it would make later work expensive or misleading.
 6. Preserve existing project conventions and working state. Do not broadly rewrite configuration or clean up unrelated code for convenience.
 7. Verify user-visible outcomes before claiming completion.

@@ -9,8 +9,8 @@ Preserve the per-file attribution and accompanying license notices.
 
 - [Bitmap Glyph Motion](../../../docs/shaders/bitmap-glyph-motion/README.md)
   — rebuilt `bitmap25` 5x5 character mosaic, with 35 preserved glyph
-  masks, intact-cell animation, corrected HSL Color/Hue blend modes and
-  native libobs pixel/alpha regression tests
+  masks, intact-cell animation, self-contained HSL Color/Hue blend
+  modes and native libobs real-plugin/pixel/alpha regression tests
 - `bloom-karis.shader` — Karis-weighted bloom adaptation
 - `mixwell-fluid-glass.shader` — fluid glass adaptation; license and detailed
   provenance under `docs/shaders/mixwell-fluid-glass/`

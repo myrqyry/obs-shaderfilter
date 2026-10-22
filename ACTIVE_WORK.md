@@ -1,5 +1,37 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-10-21 — Critical Bitmap Glyph deployment fix (real user failure)
+
+**Observation:** The user downloaded `bitmap-glyph-motion.shader` to
+`/home/myrqyry/Downloads/` and loaded that exact file in OBS.
+The 2026-10-21 live OBS log showed `failed to resolve #include
+'/home/myrqyry/Downloads/../../stdlib/colors.glsl'` and
+`undefined variable "blendMultiply"`. The original 20/20 native
+test falsely passed because it used `wrapper.expand_text` on the file
+**while still in the repository**, hiding the broken deployment path.
+
+**Real RED:** `tests/verify-bitmap-glyph-plugin.sh`, built around a
+real disposable libobs session and the actually installed
+`obs-shaderfilter.so`, reproduced the user's original:
+`EFFECT_COMPILED=0 CONTROLS=0 BITMAP_GLYPH_PLUGIN_GPU_PASS=0`.
+
+**GREEN:** The shader now embeds the small reviewed blend helper subset,
+and the native test copies the standalone file into a temporary
+Downloads-like directory without any adjacent libraries before
+compiling the raw contents. All 20/20 GPU tests pass. The actual
+ShaderFilter plugin loader then showed
+`EFFECT_COMPILED=1 CONTROLS=1 BITMAP_PIXELS_DIFF=98616
+MIX_ZERO_DIFF=0 ALPHA_DIFF=0 BITMAP_GLYPH_PLUGIN_GPU_PASS=1`
+on that detached file.
+
+**Process correction:** Don't mark user-downloadable ShaderFilter
+examples ready based solely on `gs_effect_create` with in-repo
+expanded includes. Test the **actual selected file path** through
+`obs_source_create("shader_filter")` and `from_file` settings.
+Standalone advertised downloads must be genuinely standalone or
+shipped with a tested relative-path package.
+
+
 
 ## 2026-10-21 — Bitmap25 revival: Bitmap Glyph Motion
 

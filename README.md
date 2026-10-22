@@ -360,7 +360,8 @@ for evidence and remaining limitations.
   upstream renderers.
 - **Bitmap Glyph Motion:** An opt-in revival of the maintainer's
   original `bitmap25` effect: seven unchanged 5×5 bitmask glyph sets,
-  intact-cell animation and corrected HSL Hue/Color blend modes.
+  intact-cell animation and self-contained HSL Hue/Color blend modes
+  so the single shader file loads from any directory.
   [Source and GPU test details](docs/shaders/bitmap-glyph-motion/README.md).
 - **Reusable shader helpers:** Bundles `data/stdlib/` with math,
   noise, color/Oklab, animation, blur, and printmaking functions,

@@ -9,7 +9,78 @@
 // OBS supplies image, textureSampler, uv_size, elapsed_time, VertData,
 // mainTransform and technique Draw when loading a normal .shader file.
 // Do not enable "Override Entire Effect" for this file.
-#include "../../stdlib/colors.glsl"
+// Local subset of data/stdlib/colors.glsl. Intentionally standalone:
+// users can load this .shader from Downloads without adjacent assets.
+#define blend_min3(a, b, c) min(min(a, b), c)
+#define blend_max3(a, b, c) max(max(a, b), c)
+
+float blendLuminance(float3 c) {
+    return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b;
+}
+
+float3 blendSetLum(float3 c, float l) {
+    // ClipColor from the non-separable blend specification. Black and white
+    // targets are fixed points; never divide by l or 1-l at those endpoints.
+    if (l <= 0.0) return float3(0.0, 0.0, 0.0);
+    if (l >= 1.0) return float3(1.0, 1.0, 1.0);
+    float3 r = c + (l - blendLuminance(c));
+    float mn = blend_min3(r.r, r.g, r.b);
+    if (mn < 0.0) r = l + (r - l) * (l / (l - mn));
+    float mx = blend_max3(r.r, r.g, r.b);
+    if (mx > 1.0) r = l + (r - l) * ((1.0 - l) / (mx - l));
+    return saturate(r);
+}
+
+float blendSaturation(float3 c) {
+    return blend_max3(c.r, c.g, c.b) - blend_min3(c.r, c.g, c.b);
+}
+
+float3 blendSetSat(float3 c, float s) {
+    float mn = blend_min3(c.r, c.g, c.b);
+    float mx = blend_max3(c.r, c.g, c.b);
+    return (mx > mn) ? (c - mn) * s / (mx - mn) : float3(0.0, 0.0, 0.0);
+}
+
+float3 blendMultiply(float3 base, float3 blend) {
+    return base * blend;
+}
+
+float3 blendScreen(float3 base, float3 blend) {
+    return 1.0 - (1.0 - base) * (1.0 - blend);
+}
+
+float3 blendOverlay(float3 base, float3 blend) {
+    float3 r;
+    r.r = (base.r < 0.5) ? 2.0 * base.r * blend.r : 1.0 - 2.0 * (1.0 - base.r) * (1.0 - blend.r);
+    r.g = (base.g < 0.5) ? 2.0 * base.g * blend.g : 1.0 - 2.0 * (1.0 - base.g) * (1.0 - blend.g);
+    r.b = (base.b < 0.5) ? 2.0 * base.b * blend.b : 1.0 - 2.0 * (1.0 - base.b) * (1.0 - blend.b);
+    return r;
+}
+
+float sqrtSafe(float x) { return sqrt(max(x, 0.0)); }
+
+float3 blendSoftLight(float3 base, float3 blend) {
+    float3 r;
+    r.r = (blend.r < 0.5)
+        ? base.r - (1.0 - 2.0 * blend.r) * base.r * (1.0 - base.r)
+        : base.r + (2.0 * blend.r - 1.0) * (sqrtSafe(base.r) - base.r);
+    r.g = (blend.g < 0.5)
+        ? base.g - (1.0 - 2.0 * blend.g) * base.g * (1.0 - base.g)
+        : base.g + (2.0 * blend.g - 1.0) * (sqrtSafe(base.g) - base.g);
+    r.b = (blend.b < 0.5)
+        ? base.b - (1.0 - 2.0 * blend.b) * base.b * (1.0 - base.b)
+        : base.b + (2.0 * blend.b - 1.0) * (sqrtSafe(base.b) - base.b);
+    return r;
+}
+
+float3 blendHue(float3 base, float3 blend) {
+    return blendSetLum(blendSetSat(blend, blendSaturation(base)), blendLuminance(base));
+}
+
+float3 blendColor(float3 base, float3 blend) {
+    return blendSetLum(blend, blendLuminance(base));
+}
+
 
 uniform string BitmapGlyphInfo<
     string widget_type = "info";

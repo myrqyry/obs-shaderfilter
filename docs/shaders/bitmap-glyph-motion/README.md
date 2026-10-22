@@ -20,10 +20,12 @@ implementation of every setting in the old 1,061-line shader.
   for image sampling and drawing. `Motion_Mode` selects flow or
   circular/orbital translation of the entire grid; `Animate` is
   off by default.
-- **Proper Hue and Color blending:** Includes the maintained
-  `data/stdlib/colors.glsl` and calls `blendHue` and `blendColor`
-  rather than the old shader's direct RGB-channel swapping. Normal,
-  Multiply, Screen, Overlay and Soft Light are also available.
+- **Proper Hue and Color blending:** Embeds only the necessary
+  formulas from our maintained `data/stdlib/colors.glsl` **inside this
+  one file**, including `blendHue` and `blendColor`, rather than the
+  original's direct RGB-channel swapping. There are **no external
+  `#include` dependencies**. Normal, Multiply, Screen, Overlay and
+  Soft Light are also available.
 - **Alpha preservation:** Applies the stylization in RGB only and
   restores the input's **exact source alpha**. `Mix=0` is direct
   passthrough, including semi-transparent sources.
@@ -38,6 +40,23 @@ implementation of every setting in the old 1,061-line shader.
   orbit-per-glyph simulation and complex easing presets for now.
 
 ## Use in OBS
+
+**Portable download:** You can place only the
+`bitmap-glyph-motion.shader` file in `~/Downloads/` or any other
+directory. You do not need the adjacent `data/stdlib` folder.
+This is important because ShaderFilter resolves each included path
+relative to the file the user selected, **not** relative to the Git
+repository, the installed module, or the repository test fixture.
+
+**2026-10-21 user-reproduced failure and fix:** The initial version
+included `../../stdlib/colors.glsl`. A saved OBS log explicitly showed
+`failed to resolve #include` from `~/Downloads/` and undefined
+`blendMultiply`. Our old unit/native tests silently expanded that
+dependency in the checked-out repo, concealing the real problem.
+We reproduced the failure with the actual installed plugin and its
+file-loader path, then removed the dependency. The corrected file
+compiled and rendered through the same plugin from an isolated
+Downloads-like directory.
 
 Add **Shaderfilter Filter** to a source and select the **file**
 `data/examples/myrqyry/bitmap-glyph-motion.shader`, then keep the
@@ -56,14 +75,31 @@ image-processing filter, not an independent procedural generator.
 
 ## Verification and boundaries
 
-Test with:
+Test both the external-file portability contract and the **actual
+ShaderFilter plugin path** with:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 tests/verify_bitmap_glyph_motion.py
+bash tests/verify-bitmap-glyph-plugin.sh
 ```
 
-The repeatable suite uses the real project `.shader` wrapper and
-reads **actual pixels** through native libobs/OpenGL (NVIDIA
+The first suite copies just the shader to a temporary Downloads-like
+directory, explicitly **does not** expand repository includes and tests
+twenty GPU render/control cases. The second dynamically loads the real
+ShaderFilter plugin and opens a `.shader` using its actual
+`from_file` / `shader_file_name` settings, verifies the controls and
+the rendered effect, then checks `Mix=0` returns exactly to source.
+It uses an isolated libobs context; it does not alter OBS scenes.
+
+The failure was reproduced on the user's *real original downloaded*
+file first: `EFFECT_COMPILED=0`, `CONTROLS=0`,
+`BITMAP_GLYPH_PLUGIN_GPU_PASS=0`. The corrected standalone file
+then passed: `EFFECT_COMPILED=1`, `CONTROLS=1`,
+`BITMAP_PIXELS_DIFF=98616`, `MIX_ZERO_DIFF=0`,
+`ALPHA_DIFF=0`, `BITMAP_GLYPH_PLUGIN_GPU_PASS=1`.
+
+The repeatable suites use the real `.shader` template and
+read **actual pixels** through native libobs/OpenGL (NVIDIA
 RTX 2070 Super, libobs 32.0.1). It checks ten control transitions
 against both opaque and partial-alpha input (20 cases), including
 distinct Hue-vs-Color blend output, animation time and motion mode.

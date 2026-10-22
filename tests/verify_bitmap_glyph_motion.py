@@ -6,6 +6,7 @@ import hashlib
 import shlex
 import subprocess
 import tempfile
+import shutil
 import verify_stdlib as wrapper
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,13 @@ REPORT = re.compile(
 def main():
     assert SHADER.is_file(), "RED: bitmap-glyph-motion shader is absent"
     text = SHADER.read_text()
-    assert '#include "../../stdlib/colors.glsl"' in text, "Use reviewed HSL blend helpers"
+    # Exercise the actual user delivery boundary: ONE .shader file copied
+    # to an arbitrary Downloads-like directory outside the repository.
+    # The previous test expanded a repo-local #include and therefore
+    # succeeded even though OBS failed to load the downloaded file.
+    assert "#include" not in text, (
+        "Single-file shader must not depend on paths relative to the repository"
+    )
     assert "blendColor(" in text and "blendHue(" in text
     assert "GlyphMask(" in text and "BitmaskFor(" in text
     # Immutable fingerprint of all seven original five-step bitmask sequences.
@@ -33,11 +40,21 @@ def main():
     ), "Original bitmap25 5x5 glyph art unexpectedly changed"
     with tempfile.TemporaryDirectory(prefix="obs-bitmap-glyph-") as t:
         tmp = Path(t)
+        loose_dir = tmp / "Downloads"
+        loose_dir.mkdir()
+        loose_shader = loose_dir / SHADER.name
+        shutil.copyfile(SHADER, loose_shader)
+        assert loose_shader.read_bytes() == SHADER.read_bytes()
         effect = tmp / "filter.effect"
+        # Faithful plugin load path: ShaderFilter prepends/appends its
+        # compiled effect template to the raw bytes of the selected file;
+        # the plugin's include resolver is relative to *this file*, not
+        # to the repo. With no includes, no preprocessing can conceal
+        # missing runtime dependencies.
         effect.write_text(
             "#define OPENGL 1\n"
             + wrapper.template("begin")
-            + wrapper.expand_text(text, SHADER).replace("[loop]", "")
+            + loose_shader.read_text().replace("[loop]", "")
             + "\n"
             + wrapper.template("end")
         )

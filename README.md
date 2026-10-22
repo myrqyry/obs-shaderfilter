@@ -265,7 +265,7 @@ This fork (`myrqyry/obs-shaderfilter`) includes the following changes over upstr
 - **Generative Source Mode**: Added a new `shader_source` OBS source type alongside the existing filter and transition. This allows shaders to run as standalone video sources with configurable width/height, enabling fully procedural visuals without requiring an input source.
 - **Debounced raw-text reload**: Raw shader text recompiles 300ms after edits, with a debounce timer to avoid repeated reloads during rapid changes.
 - **Source Picker Parameter**: `texture2d` parameters can use `widget_type = "source"` to pick an OBS source directly from the properties UI.
-- **UI Overhaul**: Filter properties are now organized into collapsible groups — "Shader Source" for file/text/reload controls and "Shader Parameters" for shader uniforms. Added "Input Source Padding (px)" group with descriptive tooltip.
+- **Property organization**: Filter controls are separated into standard, non-collapsible OBS property groups: "Shader Source" (file/text/reload controls), "Shader Parameters" (shader uniforms, including optional shader-defined subgroups), and "Input Source Padding (px)" (per-edge padding controls with descriptive tooltips). These are visual sections, not expandable/collapsible panels.
 - **Raw Shader Text toggle**: Switched from "Load shader text from file" to a positive "Raw Shader Text" toggle (loading from file is now the default).
 - **Expand Pixels tooltip**: Added descriptive tooltip explaining the padding purpose and memory implications.
 - **Locale files**: Added translations for de-DE, es-ES, fr-FR, ja-JP, pt-BR, and zh-CN.

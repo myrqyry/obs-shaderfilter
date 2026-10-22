@@ -68,8 +68,8 @@ if(BUILD_OUT_OF_TREE)
         set(OBS_USER_PLUGIN_DIR $ENV{HOME}/.config/obs-studio/plugins/${PROJECT_NAME})
         add_custom_target(install-user
             # Relocated examples must not remain as misleading stale duplicates.
-            # Preserve only the 62 known old paths outside examples, including
-            # user-edited contents; keep all unrelated custom shaders in place.
+            # Archive only the 81 explicitly manifested old example paths,
+            # including user-edited contents; leave unrelated custom files alone.
             COMMAND ${CMAKE_COMMAND} "-DPLUGIN_DATA_DIR=${OBS_USER_PLUGIN_DIR}/data"
                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MigrateLegacyExamples.cmake
             COMMAND ${CMAKE_COMMAND} -E make_directory ${OBS_USER_PLUGIN_DIR}/bin/64bit

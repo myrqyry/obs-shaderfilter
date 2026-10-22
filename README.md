@@ -43,10 +43,10 @@ The filter can be added to any source through the "Filters" option when right-cl
 of the filter is "Shaderfilter Filter". The plugin also registers a transition ("Shaderfilter Transition") and a
 standalone source ("Shaderfilter Source") that renders a shader without an input image.
 
-Shaders load from a file by default, or they can be entered directly in a text box in the filter properties. To enter
-shader text directly, enable the "Raw Shader Text" toggle. If you are entering your shader text directly, note that you
-will need to use the "Reload effect" button to apply your changes. This can also be used to reload an external file if changes have been made.
-OBS shaders are written in OBS version of HLSL.
+Shaders load from a file by default, or they can be entered directly in the filter properties. To enter raw
+shader text, enable the "Raw Shader Text" toggle. Inline edits schedule recompilation approximately 300 ms
+after editing stops, processed on the next video tick. Use "Reload effect" to reload an externally edited
+shader file or to request a manual retry. OBS shaders use OBS-compatible HLSL.
 
 The option is provided to render extra pixels on each side of the source. This is useful for effects like shadows
 that need to render outside the bounds of the original source. 
@@ -108,9 +108,9 @@ uniform texture2d mySource <
 You set default values as a normal assignment ```uniform string notes = 'my note';```, except for `float4` 
 which requires bracket \{\} notation like ```uniform float4 mycolor = { 0.75, 0.75, 0.75, 1.0};``` 
 
-Note that if your shader has syntax errors and fails to compile, OBS does not provide any error messages; you will
-simply see your source render nothing at all. In many cases the output of the effect parser will be written to the
-OBS log file, which you can view with the Help -> Log Files menu in OBS. 
+If a shader fails to load or compile, the plugin stores an error message and can display it in the Shader Source
+properties section when OBS refreshes that properties view. Compile failures are also written to the OBS log
+(Help -> Log Files). A failed effect may not render; property display is not guaranteed to refresh immediately.
 
 ### Standard parameters
 
@@ -250,50 +250,138 @@ I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as p
 | ZigZag.shader                   |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/3e3006cd-9f2a-4a7e-905c-50d80173e861) |
 | zoom_blur.shader                | A shader that creates a zoom with blur effect based on a number of samples and magnitude of each sample. It also includes an animation with or without easing and a glitch option. Set speed to zero to not use animation. Suggested values are 15 samples and 30-50 magnitude.                                                                                                                         |                                                                                                           |
 
-This table is a subset of the bundled examples. The shader families ported by this fork live in their own subfolders
-of *data/examples* and are documented separately: `data/examples/shader_effects/SHADER-EFFECTS-PORTS.md`,
-`data/examples/retro_capture/` (see `docs/shaders/retrocapture/README.md`),
-`data/examples/retro_ursc/RETRO-URSC-PORTS.md`, and `data/examples/psx/README.md`.
+This table is a subset of upstream examples. Our separately attributed adaptations and authored effects live under
+[`data/examples/myrqyry/`](data/examples/myrqyry/README.md), including
+[`shader_effects/`](data/examples/myrqyry/shader_effects/SHADER-EFFECTS-PORTS.md),
+[`retro_capture/`](data/examples/myrqyry/retro_capture/),
+[`retro_ursc/`](data/examples/myrqyry/retro_ursc/RETRO-URSC-PORTS.md), and
+[`psx/`](data/examples/myrqyry/psx/README.md).
 
 
 ## Fork Changes
 
-This fork (`myrqyry/obs-shaderfilter`) includes the following changes over upstream [`exeldro/obs-shaderfilter`](https://github.com/exeldro/obs-shaderfilter).
+This fork (`myrqyry/obs-shaderfilter`) extends
+[Exeldro's OBS Shaderfilter](https://github.com/exeldro/obs-shaderfilter).
+The capabilities below were checked against the current source and tests on
+October 21, 2026. **Source inspection establishes implementation, not necessarily
+an interactive OBS UI test.** See [the claim audit](docs/FORK_CLAIMS_AUDIT.md)
+for evidence and remaining limitations.
 
-### New Features
+### Plugin and property features
 
-- **Generative Source Mode**: Added a new `shader_source` OBS source type alongside the existing filter and transition. This allows shaders to run as standalone video sources with configurable width/height, enabling fully procedural visuals without requiring an input source.
-- **Debounced raw-text reload**: Raw shader text recompiles 300ms after edits, with a debounce timer to avoid repeated reloads during rapid changes.
-- **Source Picker Parameter**: `texture2d` parameters can use `widget_type = "source"` to pick an OBS source directly from the properties UI.
-- **Property organization**: Filter controls are separated into standard, non-collapsible OBS property groups: "Shader Source" (file/text/reload controls), "Shader Parameters" (shader uniforms, including optional shader-defined subgroups), and "Input Source Padding (px)" (per-edge padding controls with descriptive tooltips). These are visual sections, not expandable/collapsible panels.
-- **Raw Shader Text toggle**: Switched from "Load shader text from file" to a positive "Raw Shader Text" toggle (loading from file is now the default).
-- **Expand Pixels tooltip**: Added descriptive tooltip explaining the padding purpose and memory implications.
-- **Locale files**: Added translations for de-DE, es-ES, fr-FR, ja-JP, pt-BR, and zh-CN.
-- **`install-user` target**: Added a Linux-only CMake target to install the plugin into the user's OBS directory (`~/.config/obs-studio/plugins/`).
+- **Generative source:** Registers `shader_source` alongside the existing
+  filter and transition. It can draw procedural shaders without an input
+  image; its width and height are configurable (1920×1080 defaults). Shaders
+  that sample an input image still need an appropriate texture.
+- **File-first editing and debounced raw text:** New instances default to
+  loading a shader file; the **Raw Shader Text** toggle switches to an
+  inline editor. Edits schedule recompilation after approximately 300 ms
+  without further text changes, processed on a subsequent video tick.
+  **Reload effect** remains available for manually reloading external files.
+- **Texture/source selectors:** Texture uniforms with
+  `widget_type = "source"` expose an OBS source/scene selector. File
+  texture controls and the default combined file/source widgets are also
+  supported. This describes property creation, not a separate end-to-end
+  UI acceptance test.
+- **Property organization:** Shader Source, Shader Parameters, optional
+  shader-defined parameter subgroups, and Input Source Padding use ordinary
+  `OBS_GROUP_NORMAL` sections. **They are not collapsible.** Source
+  padding is offered on filters, not generative sources/transitions;
+  individual edge controls explain their visual and memory cost.
+- **Shader parameter annotations:** Supports labels, per-shader parameter
+  groups, tooltips, range/step metadata, and specific slider/select/info
+  widgets. The parser does not guarantee correct control behavior for
+  every arbitrary shader annotation.
+- **Errors and missing files:** A load or effect-compile error is stored
+  in `last_error`, surfaced as an error information property when OBS
+  builds that properties view, and logged for compile failures. The plugin
+  also registers OBS missing-file callbacks for shader and texture paths.
+- **Locales:** In addition to `en-US`, bundles `de-DE`, `es-ES`,
+  `fr-FR`, `ja-JP`, `pt-BR` and `zh-CN`. The six additional locale
+  files each currently lack two English tooltip keys; don't treat them
+  as complete translations.
+- **Linux user install:** The `install-user` CMake target copies the
+  module and resources under `~/.config/obs-studio/plugins/obs-shaderfilter/`.
+  Before copying it runs an archive-first migration for **81 specifically
+  enumerated legacy example paths**; custom neighbors remain untouched and
+  a conflicting backup aborts the migration.
 
-### Bug Fixes
+### Correctness and compatibility changes
 
-- **Circular includes**: `#include` paths are now tracked to detect and warn on circular include chains, preventing infinite recursion.
-- **Thread-safe audio**: Audio callback now uses a mutex to prevent data races when reading peak/magnitude values from `video_tick`.
-- **dstr ownership**: Fixed double-free in `load_shader_from_file` by explicitly transferring dstr buffer ownership via NULL-set before `dstr_free`.
-- **Bounds checks**: Fixed out-of-bounds reads in `convert_atan`, `convert_mat_mul_var`, `convert_mat_mul`, `convert_return`, and `shader_filter_convert` when the match pointer is at the start of the buffer.
-- **Include parsing**: `#include` lines now guard against malformed quotes and use both `/` and `\` path separators. Invented-path warnings are emitted.
-- **Properties scroll**: Auto-reload no longer triggers `obs_source_update_properties`, preventing the properties panel from jumping on every edit.
-- **Color defaults**: Color parameters without a default annotation now consistently fall back to opaque white.
-- **String parameters**: Fixed memory leak by properly `bfree`-ing string parameter values on clear and update.
-- **Macro stripping**: Function-like `#define` macros are now detected and warned; `convert_define` is temporarily disabled because it produces broken HLSL without call-site substitution.
-- **Audio clamp**: `convert_db_to_linear` now correctly clamps to 1.0 without the previous division-by-negative-threshold artifact.
+- **Include handling:** Recognizes relative `#include "…"` paths,
+  checks malformed quoting, logs unresolved files, and stops recursively
+  re-entering a previously visited file. **Limitation:** it currently
+  tracks all visited paths, not only the active recursion stack, so a
+  repeated non-circular include may also be skipped.
+- **Memory and audio:** Transfers ownership correctly when returning the
+  shader-file buffer, releases replaced string values/defaults, and
+  protects shared audio meter values with a mutex. Audio dB mapping is
+  bounded to 0–1, using -60 dB as the lower cutoff.
+- **Shader conversion guards:** Adds bounds checks to selected GLSL/HLSL
+  text-conversion passes. The unsafe `convert_define` rewrite is
+  **disabled**, not a working function-like-macro converter; conversion
+  is not a guarantee that all GLSL will compile as OBS HLSL.
+- **Property refresh:** Automatic text reload avoids an unnecessary
+  `obs_source_update_properties` request. Other property changes may still
+  rebuild the UI; no claim of preserving every scroll position.
+- **Default values and controls:** Non-slider RGB/RGBA color controls
+  without annotations default to opaque white. Later fixes align
+  selectable ranges and discrete modes with actual shader values and
+  repair float/bool conditions in Advanced Displacement effects.
+- **Animated image compatibility:** Resolves the OBS 28–32
+  `gs_image_file4` and OBS 33+ `gs_image_file_ex` APIs at runtime.
+  Missing tick/update symbols disable animation updates rather than
+  calling a null function pointer; unavailable image helpers are
+  reported in the log. Compatibility builds are not proof that every
+  GIF or OBS environment has been exercised.
+- **Graphics fixes recovered from experimental branches:** Mixwell Fluid
+  Glass's OpenGL π constant now passes a **real offscreen GPU pixel test**,
+  including a direction-response regression. The native PSX test harness
+  also passes a strict Clang missing-braces check previously failing
+  macOS builds.
 
-### Build
+### Shader library and verification
 
-The fork also fixes a `da_push_back` macro incompatibility with OBS 28 headers and removes the bundled `nullptr` macro.
+- **Organized, attributed shader additions:** Fork-authored and
+  adapted effects are under [`data/examples/myrqyry/`](data/examples/myrqyry/README.md),
+  separate from canonical upstream examples. Packs include **38 Noisemaker
+  ports, two printmaking effects, five MPV anime adaptations, one
+  potatoFX palette effect, four PSX image-space shaders**, plus ORPHIC,
+  Mixwell, Soft Register, Composite Signal, Wind Drift Events,
+  Motion Matte, RetroCapture CMYK, URSC/N64, Shader Effects, and three
+  preserved locally authored examples. Read the individual license and
+  attribution notes; these ports are not drop-in replicas of their
+  upstream renderers.
+- **Reusable shader helpers:** Bundles `data/stdlib/` with math,
+  noise, color/Oklab, animation, blur, and printmaking functions,
+  compiled in native libobs tests.
+- **GPU and regression coverage:** The consolidated source passed a
+  native plugin build against libobs 32.0.1, **26 Python tests**,
+  libobs Composite Signal/Soft Register/PSX checks, **40 Noisemaker and
+  printmaking cases, five MPV cases, 14 potatoFX cases, 24 additional
+  effect cases**, and focused Mixwell, motion, wind, control-mode and
+  legacy-compile tests. These are scoped render/compile checks,
+  **not** a full interactive OBS scene acceptance or a 1080p60 benchmark.
+- **Build compatibility:** The fork removes a bundled `nullptr` macro
+  and adapts `da_push_back` usage for its supported OBS headers.
+  GitHub's plugin-build and OBS compatibility workflows test supported
+  CI configurations separately; see [Actions](https://github.com/myrqyry/obs-shaderfilter/actions) for the
+  current results.
+
+The `experiments/retrocapture-graph/` and `experiments/vgpu-graph/`
+directories contain **standalone** research/proof programs. They do
+not mean GLSLP or WebGPU graph rendering has been integrated into the
+OBS plugin. Read [the worktree handoff](docs/WORKTREE_HANDOFF.md) for
+the consolidation history and known remaining acceptance boundaries.
+
 
 ## Building
 
 If you wish to build the obs-shaderfilter plugin from source, you should just need [CMake](https://cmake.org/) 
 and the OBS Studio libraries and headers.
 
-* [obs-shaderfilter source repository](https://github.com/exeldro/obs-shaderfilter)
+* [This fork's source repository](https://github.com/myrqyry/obs-shaderfilter)
+* [Upstream obs-shaderfilter source repository](https://github.com/exeldro/obs-shaderfilter)
 * [OBS Studio source repository](https://github.com/obsproject/obs-studio)
 
 1. In-tree build
@@ -308,12 +396,13 @@ and the OBS Studio libraries and headers.
     - The module is written to `build/obs-shaderfilter.so`; install it into your OBS user plugin directory with
       `cmake --build build --target install-user`
 
-This fork builds and verifies against libobs 32.0.1, while `.github/workflows/build.yml` builds it against
-OBS 28.0.0-rc1. A successful compile only proves that the effect compiles — the rendered result still has to be
-checked in OBS.
+The consolidated source has been built against libobs 32.0.1; GitHub's plugin-build workflow also exercises its
+pinned build dependencies, and the compatibility workflow covers distinct OBS versions. **A module build proves
+compilation, not shader output.** Individual effects have native libobs pixel-readback tests, but an interactive
+installed OBS scene remains a separate acceptance step.
 
-`tests/verify-composite-signal.sh` renders a bundled shader through a headless libobs session and compares the
-resulting pixels against the unfiltered source. It takes the module and the plugin data directory as arguments:
+`tests/verify-composite-signal.sh` renders a bundled shader through an isolated libobs session and compares
+resulting pixels against the unfiltered source. It takes the module and plugin data directory as arguments:
 
     tests/verify-composite-signal.sh build/obs-shaderfilter.so data
 

@@ -17,15 +17,15 @@ An OBS Studio plugin that lets users author and load OBS-compatible HLSL shaders
 
 ## Known-good workflows
 
-Build using the CMake workflow described in `README.md` and the platform automation under `.github/`. The maintained CMake target is `obs-shaderfilter`; on POSIX out-of-tree builds, `install-user` copies the plugin and data into the user's OBS plugin directory. Standalone builds are verified with `cmake -S . -B build -DBUILD_OUT_OF_TREE=On && cmake --build build` (confirmed against libobs 32.0.1 on 2026-10-21). There is no repository-wide CMake test target and no shader lint command; the closest executable checks are `tests/verify-composite-signal.sh` (headless libobs render of `data/examples/composite_signal.shader`) and `data/examples/psx/verify_psx.sh`.
+Build using the CMake workflow described in `README.md` and the platform automation under `.github/`. The maintained CMake target is `obs-shaderfilter`; on POSIX out-of-tree builds, `install-user` copies the plugin and data into the user's OBS plugin directory. Standalone builds are verified with `cmake -S . -B build -DBUILD_OUT_OF_TREE=On && cmake --build build` (confirmed against libobs 32.0.1 on 2026-10-21). There is no repository-wide CMake test target and no shader lint command; executable checks include `tests/verify-composite-signal.sh` (native libobs rendering of `data/examples/myrqyry/composite_signal.shader`), `tests/verify-soft-register.sh`, `data/examples/myrqyry/psx/verify_psx.sh`, 26 Python unit tests, and the scoped native GPU checks under `tests/verify_*.py`.
 
 ## Verification
 
-Use the configured CMake build against the intended libobs/OBS version to verify native changes. Shader behavior ultimately requires loading the effect in OBS; compilation alone does not verify visual output. CI build workflows live in `.github/workflows/build.yml` and build against OBS 28.0.0-rc1.
+Use the configured CMake build against the intended libobs/OBS version to verify native changes. Shader behavior ultimately requires loading the effect in OBS; compilation alone does not verify visual output. CI build and OBS-version compatibility workflows live in `.github/workflows/build.yml` and `compatibility.yml`. Plugin compilation, native GPU effect readback, and interactive installed OBS acceptance are distinct checks.
 
 ## Open structural uncertainty
 
-Resolved on 2026-10-21. `CHANGELOG.md` describes a 2026-06-28 library modernization and refers to `tools/lint.py`, `tools/autofix.py`, shader catalog files, and templates; those paths are deliberately gitignored local-only directories (`.gitignore` lists `tools/`, `templates/`, `data/examples/myrqyry/`, `data/stdlib/`) that never appeared in any commit, so they cannot exist in a fresh clone. `CHANGELOG.md` now carries an explicit scope note saying so; the changelog records that local sweep, not tracked repository content.
+The 2026-06-28 `CHANGELOG.md` entry describes a historical local-only sweep of `tools/lint.py`, `tools/autofix.py`, catalogs and templates; those `tools/` and `templates/` paths are still not committed in the current repository. **Later work changed the situation for `data/examples/myrqyry/` and `data/stdlib/`: both are now explicitly tracked and included in fresh clones despite ignore patterns.** Do not repeat the old claim that those shader-library paths are absent from Git. The changelog scope note describes only the earlier snapshot.
 
 `SESSION-STATE.md` contains an old, mixed-project chronology and previously claimed active development; it now carries a status banner marking it a historical record superseded by `ACTIVE_WORK.md` and this file.
 
@@ -35,3 +35,13 @@ are recorded in `docs/WORKTREE_HANDOFF.md` and at the top of
 myrqyry example library and follow-up Mixwell GPU fix were incorporated
 into the integrated source on Oct 21. A tested source merge must not be
 mistaken for a newly installed OBS module or for deleting branches.
+
+
+## Source-backed feature claims
+
+The 2026-10-21 audit of the fork's README feature/bug-fix list is
+`docs/FORK_CLAIMS_AUDIT.md`. It distinguishes actual source behavior
+(including non-collapsible UI groups and the globally visited include
+limitation) from native GPU proof and from unverified interactive OBS UI
+behavior. Changes to claims should update this ledger rather than
+guessing from a feature name.

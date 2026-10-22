@@ -1,6 +1,39 @@
 # Active Work — OBS Shaderfilter fork
 
 
+## 2026-10-21 — Fork Changes claim-by-claim documentation audit
+
+**Scope:** `README.md` feature, bug-fix and build claims, with nearby
+usage/build passages checked for contradictory guidance. Source of
+truth: `obs-shaderfilter.c`, tracked localized resources, the real
+migration manifest and tests. Evidence ledger:
+[`docs/FORK_CLAIMS_AUDIT.md`](docs/FORK_CLAIMS_AUDIT.md).
+
+**Corrected overstatements:** groups are not collapsible; the include
+guard retains every visited file, possibly rejecting repeated non-circular
+includes; function-like macro rewriting is disabled (no general runtime
+warning); auto-reload suppresses an unnecessary properties rebuild but
+cannot guarantee scroll persistence; compile errors can surface in the
+properties error field; raw text auto-reloads after the video-tick
+debounce; six additional languages have two untranslated tooltip keys
+each. Fixed obsolete paths in the README's example links and the
+Meristem project reference to pre-migration test paths.
+
+**Added source-backed omissions:** real missing-file callbacks; file/source
+texture pickers and shader annotations; safe 81-path install migration;
+OBS 28–33 dynamic image ABI with safe animation-helper fallbacks;
+repaired selector defaults/legacy effects; attributed example families;
+shader stdlib; Mixwell pixel regression, PSX strict Clang repair,
+and actual native GPU suite scopes. The standalone RetroCapture/vGPU
+experiments remain explicitly outside OBS integration.
+
+**Validation boundary:** this pass changes Markdown and the explanatory
+install-target CMake comment only. Source inspection and pre-existing native
+test receipts support the claims, but this documentation update does not
+assert a new installed-OBS UI acceptance. No scene data, installed module,
+or experimental worktree was touched.
+
+
 ## Current checkpoint — Experimental worktree consolidation (2026-10-21)
 
 **User correction:** Do not merely leave experimental worktrees untouched

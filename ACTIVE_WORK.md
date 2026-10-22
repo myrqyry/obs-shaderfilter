@@ -1,5 +1,57 @@
 # Active Work — OBS Shaderfilter fork
 
+
+## 2026-10-21 — Master history reconciliation: both shader collections integrated
+
+**Goal:** Resolve the fork's two diverged `master` histories rather than
+maintain two competing variants. The user explicitly requested integration.
+
+**History:** pre-merge local tip `3cefa68` (13 local-only commits) and
+pre-merge `origin/master` `7dbc211` (26 remote-only commits) have a
+normal, conflict-free two-parent merge `93cccf0`. Both parents remain
+reachable. Local recovery refs are:
+`refs/backup/meristem-obs-local-master-20261021` and
+`refs/backup/meristem-obs-origin-master-20261021`. The old local
+`31afcfe` backup also remains on GitHub at
+`origin/backup/loam-master-20261019`. No force push, reset, rebase or
+history rewriting was required.
+
+**Verified on merged source** in an isolated Git worktree, never by
+installing over OBS:
+
+- Native out-of-tree **CMake/Ninja RelWithDebInfo build passed** against
+  libobs **32.0.1**, producing `obs-shaderfilter.so`.
+- **9/9** Python regressions passed.
+- Actual libobs composite-signal enabled/disabled pixel comparison passed
+  against the freshly built plugin, and all **4** original PSX cases
+  compiled and rendered with native graphics.
+- Native OBS shader stdlib compile passed including edge expressions and
+  the 2 printmaking effects. Mixwell compiled 28 parameters. **5/5 MPV
+  anime**, **14/14 PotatoFX palette**, and **40/40 Noisemaker +
+  printmaking** real pixel-test cases passed.
+- The **staged runtime data** contains both collections: original PSX and
+  composite-signal examples plus the newer MPV, Noisemaker, PotatoFX,
+  printmaking, Mixwell and `data/stdlib/` resources. The linked plugin
+  does not directly import versioned `gs_image_file*` symbols.
+
+These checks establish buildability and independent shader effects running
+in libobs in the tested environment. They do **not** establish UI ergonomics
+inside a normal OBS session, end-to-end installed-plugin behavior,
+subjective appearance of every shader, CI compatibility with OBS 33, or
+standalone RetroCapture/vGPU experiments (not rerun). The user-installed
+plugin and user's live OBS scenes/settings were not modified. No broad
+feature refactor was needed.
+
+**Boundary:** This reconciles the two `master` histories only. Existing
+independent experimental feature worktrees remain untouched; they are not
+competing canonical `master` versions. A normal fast-forward promotion and
+non-force GitHub sync are the next publication actions for this verified
+merge. Test details and temporary build paths live in
+`.meristem/local/reconciliation-2026-10-21.md` (private and gitignored).
+The older divergence entries below remain as historical evidence rather
+than as current instructions.
+
+
 ## 2026-10-21 — Documentation reconciliation pass
 
 **Objective:** align developer-facing documentation with the repository's current executable reality, without changing runtime behavior and without touching the diverged integration boundary recorded in the 2026-10-17 entry below.

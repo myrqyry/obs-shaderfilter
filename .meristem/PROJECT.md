@@ -29,4 +29,9 @@ Resolved on 2026-10-21. `CHANGELOG.md` describes a 2026-06-28 library modernizat
 
 `SESSION-STATE.md` contains an old, mixed-project chronology and previously claimed active development; it now carries a status banner marking it a historical record superseded by `ACTIVE_WORK.md` and this file.
 
-The two former `master` histories were reconciled on 2026-10-21 by the conflict-free two-parent merge `93cccf0`, with both parents and separate recovery refs preserved. The merged tree built successfully against libobs 32.0.1 and passed real GPU/native shader regression gates across both example collections. The relevant checkpoint and remaining normal OBS UI/installation uncertainty are in `ACTIVE_WORK.md`. Prior divergence entries are historical, not a requirement to keep two `master` versions. Independent experimental worktrees are not part of this merge.
+The two former `master` histories were reconciled on 2026-10-21 by the conflict-free two-parent merge `93cccf0`, with both parents and separate recovery refs preserved. The merged tree built successfully against libobs 32.0.1 and passed real GPU/native shader regression gates across both example collections. The relevant checkpoint and remaining normal OBS UI/installation uncertainty are in `ACTIVE_WORK.md`. Prior divergence entries are historical, not a requirement to keep two `master` versions. The subsequent experimental worktree integration and complete branch ledger
+are recorded in `docs/WORKTREE_HANDOFF.md` and at the top of
+`ACTIVE_WORK.md`. The Oct 17 installed-union feature work, relocated
+myrqyry example library and follow-up Mixwell GPU fix were incorporated
+into the integrated source on Oct 21. A tested source merge must not be
+mistaken for a newly installed OBS module or for deleting branches.

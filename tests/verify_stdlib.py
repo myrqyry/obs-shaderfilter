@@ -171,7 +171,7 @@ def checks():
     # Compile the complete shipped shader files with their UI annotations
     # and nested relative include paths, not just synthetic calls.
     for name in ('ink_hatching', 'jittered_pointillism'):
-        shader=ROOT/'data/examples/printmaking'/f'{name}.shader'
+        shader=ROOT/'data/examples/myrqyry/printmaking'/f'{name}.shader'
         compile_case('printmaking/'+name,shader.read_text(),shader)
     print('STDLIB_NATIVE_OBS_PASS=1')
 

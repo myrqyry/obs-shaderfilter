@@ -1,6 +1,49 @@
 # Active Work — OBS Shaderfilter fork
 
 
+## Current checkpoint — Experimental worktree consolidation (2026-10-21)
+
+**User correction:** Do not merely leave experimental worktrees untouched
+and assume somebody else will remember them. Audit every worktree,
+understand unique features and verification, incorporate qualified work
+into canonical `master`, and preserve enough context for future agents.
+The full ten-worktree source/branch/status ledger is
+[`docs/WORKTREE_HANDOFF.md`](docs/WORKTREE_HANDOFF.md).
+
+**Integration:** Brought in the historical `aster/installed-union-20261017`
+merge preserving its provenance/migration scheme, extra effects, numeric
+UI/control repairs, and documented installed OBS verification. Merged
+conflicting ACTIVE_WORK chronology without discarding either account.
+The three authored shaders inherited from the later `master` were
+moved byte-for-byte to `data/examples/myrqyry/local-unpublished/`;
+the archive-first migration now enumerates 81 exactly known paths.
+No installed plugin or real OBS scenes were modified.
+
+**Real bug recovered:** Standalone Mixwell branch `ba47bf6` included a
+real rendering assertion missing from our consolidated source. RED:
+render test failed, rotation=0 despite native compile success. GREEN:
+changed OpenGL-emitted PI constant to `#define`, native render
+passed, rotation=22076; this test now prevents the earlier false
+confidence. PSX harness's five macOS strict-Clang aggregate initializer
+warnings were also reproduced and corrected; strict compilation
+and all four native GPU PSX cases passed.
+
+**Qualification:** Clean out-of-tree CMake/Ninja build, 26 Python
+regressions, actual libobs Composite Signal and Soft Register, 4 PSX,
+native stdlib, Mixwell render, 5 MPV, 14 PotatoFX, 40 Noisemaker/
+printmaking, 24 extra effects, Motion Matte, Wind Drift, 8 repaired
+control modes, 5 legacy effect compile cases. Packaged path inventory
+and plugin ABI check also passed. This proves these tested paths,
+**not** a fresh installed interactive OBS UI or macOS GitHub CI.
+
+**Continuity:** The separate branch commits for Soft Register,
+Wind Drift, and Mixwell need not be ancestors to have their qualified
+implementation incorporated; see exact distinctions in the handoff
+table. No experimental branch ref, original worktree or OBS user
+data was deleted. Use this note rather than the old historical
+"leave worktrees unchanged" instruction below.
+
+
 ## 2026-10-21 — Master history reconciliation: both shader collections integrated
 
 **Goal:** Resolve the fork's two diverged `master` histories rather than
@@ -82,6 +125,26 @@ than as current instructions.
 ### Still open
 
 - The 2026-10-17 integration boundary is unchanged. Local `master` was 12 commits ahead of `origin/master` `7dbc211` and 26 remote-only commits behind before this documentation commit. No merge, reset, rebase, force-push, or public push was performed, and the installed OBS plugin was not touched.
+
+## 2026-10-17 — Numeric controls and legacy effect compile repairs (source-only)
+
+**Working revision:** integrated local feature branch `aster/installed-union-20261017`, with two separately committed fixes `c6799f1` (parameter defaults/ranges and Noisemaker controls) and `a61438e` (Advanced Displacement native float-to-bool compile errors). The original dirty `~/loam/obs-shaderfilter/master` is unchanged; GitHub was **not pushed**. The **installed user-local plugin and shader library were not updated during this pass**; the installed on-disk binary remains the previously verified SHA `9e68b88d79dc35618ec7722f0dfde97dbe14c7c075d3c010cda1ee2d4b7799b2`. Existing OBS scenes and other apps were not touched.
+
+- Audited **285 installed shader/effect files**, **2,228** uniform declarations, cross-checked shader property generation in `obs-shaderfilter.c` and corrected scalar/vector scanner false positives. Full review in the private `.meristem/local/parameter-audit-2026-10-17.md` under the original checkout.
+- **Source fixes:** widen three legal numeric ranges to admit **unchanged** defaults (emboss color amp=12, fire tongue=8.5, denoise sigma=5); advanced displacement dropdowns default to the existing selectable Linear value `1` rather than invalid `0`. Both 0 and 1 used the same pre-existing linear iteration behavior.
+- **Noisemaker controls:** `nm_edge` kernel now reaches mode `2` (Contour); size, blend and three threshold-controlled binary inputs use meaningful integral steps/bounds. `nm_sine` RGB/grayscale switch uses 0/1 and `nm_glowingEdge` Sobel metric uses four discrete values. The shader uniforms remain **float**, not switched to int/bool, to minimize saved-profile type churn; these are stepped numeric sliders, **not named dropdowns/checkboxes**. Meaningful labels and persisted out-of-range legacy scene values should be checked separately before any UI migration.
+- **Unexpected real native compile defect:** Advanced Displacement normal and inverted versions used float `chromatic_aberration` as an implicit bool twice; actual libobs/NVIDIA shader compiler rejected both with C7011. Two `!= 0.0` checks per shader removed the compile errors without changing the arithmetic or defaults.
+- **Tests:** RED first (**13** source-contract subcase failures), then GREEN. **26/26** full Python unit regressions, a clean CMake/native module build, **40/40** complete Noisemaker GPU effects, **8/8** real control-mode pixel differences (all alpha preserved), **5/5** formerly affected legacy shaders compiled in actual NVIDIA libobs. Distinct tests: `tests/test_shader_control_ranges.py`, `tests/verify_shader_control_modes.py`, `tests/verify_repaired_shader_compilation.py`. No claim that all artistic defaults or arbitrary profile-migration paths have been visually qualified.
+- **Open P2:** 18 off-step author defaults (15 fork-authored) and broad percentage slider granularity remain documented but **not changed** without visual comparison and user UX priorities. Numeric controls updated in source should be installed only with a fresh backup/manifest parity check and a conscious OBS activation decision. Keep the prior full installation/scene backup.
+
+## 2026-10-17 — Consolidated local install (after divergence audit)
+
+- **Installed on disk:** latest GitHub `master` (`7dbc211`), nine local shader-feature commits and the already-stacked provenance/extra-shader branches were merged in an isolated `aster/installed-union-20261017` worktree. The resulting native Shaderfilter 2.6.0 module was built and installed into the existing **user-local OBS plugin directory**. No GitHub publication, repository `master` merge, OBS process restart, system-plugin install, or other project mutation.
+- **Consolidated source tests:** 23 Python unit/provenance/migration tests; CMake native module compilation; seven native stdlib headers; 40 Noisemaker/printmaking pixel cases, five MPV, 14 PotatoFX, 24 additional effect cases, motion matte and wind drift; native PSX x4 and Composite Signal with true zero-strength bypass; soft-register check. These ran before the on-disk swap. The actual newly installed plugin binary then passed a fresh isolated libobs/OpenGL Composite Signal check with unchanged alpha and correct strength-zero bypass.
+- **Shader reconciliation:** the branch's CMake migration manifest covers 78 *known* old paths. On this actual user installation 15 were present and archived under the installed data's `legacy-shaderfilter-examples-backup/`. A 276-file complete previous installation and OBS scene snapshot were also preserved in a private local backup, with 365 files in the final active on-disk installation. All 286 merged-source data files match their installed copies; any old changed standard-library files remain recoverable in the full backup. The three separate unpublished local shaders were copied byte-for-byte to `data/examples/myrqyry/local-unpublished/`; their Loam originals remain untouched.
+- **Scene compatibility:** all four previously resolving scene references inside this plugin directory still resolve after the installation. Three old `data/examples/mqy/` references were already missing; no genuine original files could be found in nearby worktrees/history. Their associated scene-embedded shader text is saved privately as **candidates only**, not installed under misleading original filenames (two paths contained identical unrelated PSX text).
+- **OBS activated after user-side restart:** a new OBS process loaded the **exact user-local installed module**. The `/proc/2643257/maps` entry points to the plugin directory; SHA-256 of the mapped library and installed file both equal `9e68b88d79dc35618ec7722f0dfde97dbe14c7c075d3c010cda1ee2d4b7799b2`. The OBS startup log on October 17 at 21:22 reports `[obs-shaderfilter] loaded version 2.6.0` and created Shaderfilter filter instances in real scenes. **The assistant did not restart or stop OBS.** This proves correct real OBS module loading, not every effect, scene or interactive configuration.
+- **Rollback and evidence:** backup path, file reconciliation JSON, source SHA and private scene texts are in the private local verification receipt `obs-shaderfilter/.meristem/local/verification-2026-10-17.md`. The full previous plugin tree remains in the local Meristem backups area. Preserve the clean integration branch and the user's dirty original `master` separately; do not push or merge into public `master` without an explicit publication decision.
 
 ## 2026-10-17 — Diverged-history verification checkpoint
 

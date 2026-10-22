@@ -19,7 +19,7 @@ uniform float ampFactor<
     string label = "amp Factor";
     string widget_type = "slider";
     float minimum = 0.0;
-    float maximum = 10.0;
+    float maximum = 12.0;
     float step = 0.01;
 > = 12.0;
 uniform int Up_Down_Percent<

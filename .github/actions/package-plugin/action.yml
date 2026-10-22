@@ -59,7 +59,7 @@ runs:
 
         if [[ '${{ inputs.codesign }}' == 'true' ]] package_args+=(-s)
         if [[ '${{ inputs.notarize }}' == 'true' ]] package_args+=(-n)
-        if (( ${+CI} && ${+RUNNER_DEBUG} )) build_args+=(--debug)
+        if (( ${+CI} && ${+RUNNER_DEBUG} )) package_args+=(--debug)
 
         ${{ inputs.workingDirectory }}/.github/scripts/package-macos.zsh ${package_args}
 
@@ -72,7 +72,7 @@ runs:
           -t linux-${{ inputs.target }}
         )
         if [[ -n "${CI}" && -n "${RUNNER_DEBUG}" ]]; then
-          build_args+=(--debug)
+          package_args+=(--debug)
         fi
 
         ${{ inputs.workingDirectory }}/.github/scripts/package-linux.sh "${package_args[@]}"
@@ -91,7 +91,7 @@ runs:
         }
 
         if ( ( Test-Path env:CI ) -and ( Test-Path env:RUNNER_DEBUG ) ) {
-          $BuildArgs += @{
+          $PackageArgs += @{
             Debug = $true
           }
         }

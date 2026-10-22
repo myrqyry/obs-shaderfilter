@@ -61,7 +61,7 @@ if(BUILD_OUT_OF_TREE)
     set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
     install(TARGETS ${PROJECT_NAME}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/${LIB_OUT_DIR})
-    install(DIRECTORY data/examples data/internal data/locale data/textures
+    install(DIRECTORY data/examples data/internal data/locale data/textures data/stdlib
         DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_OUT_DIR})
     setup_plugin_target(${PROJECT_NAME})
     if(OS_POSIX AND NOT OS_MACOS)

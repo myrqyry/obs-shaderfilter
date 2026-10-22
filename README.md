@@ -358,6 +358,10 @@ for evidence and remaining limitations.
   preserved locally authored examples. Read the individual license and
   attribution notes; these ports are not drop-in replicas of their
   upstream renderers.
+- **Bitmap Glyph Motion:** An opt-in revival of the maintainer's
+  original `bitmap25` effect: seven unchanged 5×5 bitmask glyph sets,
+  intact-cell animation and corrected HSL Hue/Color blend modes.
+  [Source and GPU test details](docs/shaders/bitmap-glyph-motion/README.md).
 - **Reusable shader helpers:** Bundles `data/stdlib/` with math,
   noise, color/Oklab, animation, blur, and printmaking functions,
   compiled in native libobs tests.

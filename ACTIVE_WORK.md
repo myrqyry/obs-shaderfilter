@@ -1,6 +1,36 @@
 # Active Work — OBS Shaderfilter fork
 
 
+## 2026-10-21 — Bitmap25 revival: Bitmap Glyph Motion
+
+After reviewing 179 loose, older ShaderFilter artifacts under a local
+`obs-shaders` collection, selected the user-authored `bitmap25.shader`
+for a scoped revival. **Do not overwrite the original or confuse an
+opt-in rebuild with backward-compatible replacement.**
+
+New file: `data/examples/myrqyry/bitmap-glyph-motion.shader`.
+Source-backed notes:
+[`docs/shaders/bitmap-glyph-motion/README.md`](docs/shaders/bitmap-glyph-motion/README.md).
+Exactly 35 original bitmask values preserved (7 sets × 5 tone levels),
+checksum-locked in a reproducible test. New cell-level flow/orbit
+animation keeps glyph geometry intact. Uses the existing
+`data/stdlib/colors.glsl` for true HSL Color/Hue blending rather than
+channel swaps. Keeps source alpha and `Mix=0` identity. The streamlined
+controls are **intentionally fewer** than the older shader.
+
+**RED/GREEN evidence:** `tests/verify_bitmap_glyph_motion.py`
+initially failed for absent shader; after implementation, 20/20
+real libobs/OpenGL GPU cases passed (opaque and partial-alpha
+variants of ten control transitions). Original `bitmap25.shader`
+and user's local `obs-shaders` folder were read-only; no installed
+OBS plugin/scenes modified. New `.shader` goes through the actual
+ShaderFilter wrapping contract; not an independent `.effect`.
+
+**Remaining acceptance:** interactive UI, large-resolution performance
+and Windows/D3D rendering remain unverified. Keep source and test
+in the same commit; do not claim visual parity with the original.
+
+
 ## 2026-10-21 — Older authored shader utilities and the real wrapper
 
 The user identified the five uploads as **older self-authored shader files**

@@ -9,6 +9,12 @@ truth: `obs-shaderfilter.c`, tracked localized resources, the real
 migration manifest and tests. Evidence ledger:
 [`docs/FORK_CLAIMS_AUDIT.md`](docs/FORK_CLAIMS_AUDIT.md).
 
+**Provenance follow-up:** Exeldro added the Convert Shader action in March
+2024 (upstream `36a8506`), including the converter routines and UI
+button. Our fork contributes only defensive checks and UI rearrangement
+here; upstream already had the unsafe `convert_define` call disabled.
+The README and evidence audit now explicitly credit that origin.
+
 **Corrected overstatements:** groups are not collapsible; the include
 guard retains every visited file, possibly rejecting repeated non-circular
 includes; function-like macro rewriting is disabled (no general runtime

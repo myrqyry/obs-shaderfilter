@@ -47,6 +47,9 @@ Shaders load from a file by default, or they can be entered directly in the filt
 shader text, enable the "Raw Shader Text" toggle. Inline edits schedule recompilation approximately 300 ms
 after editing stops, processed on the next video tick. Use "Reload effect" to reload an externally edited
 shader file or to request a manual retry. OBS shaders use OBS-compatible HLSL.
+The **Convert Shader** button is an upstream Exeldro feature for adapting
+supported GLSL/Shadertoy-style text to OBS HLSL; it is a best-effort text
+converter, not a general GLSL compiler. Our fork did not introduce it.
 
 The option is provided to render extra pixels on each side of the source. This is useful for effects like shadows
 that need to render outside the bounds of the original source. 
@@ -317,10 +320,13 @@ for evidence and remaining limitations.
   shader-file buffer, releases replaced string values/defaults, and
   protects shared audio meter values with a mutex. Audio dB mapping is
   bounded to 0–1, using -60 dB as the lower cutoff.
-- **Shader conversion guards:** Adds bounds checks to selected GLSL/HLSL
-  text-conversion passes. The unsafe `convert_define` rewrite is
-  **disabled**, not a working function-like-macro converter; conversion
-  is not a guarantee that all GLSL will compile as OBS HLSL.
+- **Safety fixes to Exeldro's converter:** The **Convert Shader** button
+  and its GLSL/Shadertoy-to-OBS-HLSL routines were introduced upstream by
+  Exeldro in [March 2024](https://github.com/exeldro/obs-shaderfilter/commit/36a8506).
+  Our fork adds bounds checks to several existing conversion passes;
+  it **did not create the converter**. Upstream had already commented out
+  the unsafe `convert_define` rewrite. We retain that limitation and
+  document why function-like macros are not generally converted.
 - **Property refresh:** Automatic text reload avoids an unnecessary
   `obs_source_update_properties` request. Other property changes may still
   rebuild the UI; no claim of preserving every scroll position.

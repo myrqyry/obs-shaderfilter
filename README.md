@@ -358,6 +358,10 @@ for evidence and remaining limitations.
   preserved locally authored examples. Read the individual license and
   attribution notes; these ports are not drop-in replicas of their
   upstream renderers.
+- **Glyph Garden:** A new self-contained mosaic with six hand-drawn
+  symbol families, real inter-glyph spacing, nine grid movements,
+  dual-family tone splits and palette blending.
+  [Source and plugin tests](docs/shaders/glyph-garden/README.md).
 - **Bitmap Glyph Motion:** An opt-in revival of the maintainer's
   original `bitmap25` effect: seven unchanged 5×5 bitmask glyph sets,
   intact-cell animation and self-contained HSL Hue/Color blend modes

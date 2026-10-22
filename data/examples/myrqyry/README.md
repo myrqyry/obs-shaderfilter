@@ -7,6 +7,9 @@ Preserve the per-file attribution and accompanying license notices.
 
 ## Standalone effects
 
+- [Glyph Garden](../../../docs/shaders/glyph-garden/README.md)
+  — original six-family 5×5 symbol mosaic with real tile gaps,
+  nine motion modes, dual-family tone splits, and standalone verified rendering
 - [Bitmap Glyph Motion](../../../docs/shaders/bitmap-glyph-motion/README.md)
   — rebuilt `bitmap25` 5x5 character mosaic, with 35 preserved glyph
   masks, intact-cell animation, self-contained HSL Color/Hue blend

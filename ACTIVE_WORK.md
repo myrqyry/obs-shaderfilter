@@ -1,5 +1,30 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-10-22 — Glyph Garden, new opt-in shader
+
+Created `data/examples/myrqyry/glyph-garden.shader` with 30 original
+5×5 pictographs in six families, actual pitch-based grid spacing,
+optional cell lines and quarter turns, dual-family tone transitions,
+four ink schemes, and nine animation modes. It includes its own
+necessary blend math with zero file dependencies, deliberately
+avoiding the former downloaded-file include regression.
+
+A test-first, real-plugin path verified effect creation and controls,
+source passthrough, spacing, a family-invariant empty gutter,
+both glyph families, moving rows/columns, checker and breeze modes,
+and alpha preservation. A separate detached-file OpenGL probe passed
+50 actual readback cases for all nine modes and partial alpha.
+
+The original bitmap25 and Bitmap Glyph Motion remain untouched.
+A new glyph-garden.shader data file was copied to the user's
+ShaderFilter examples directory and Downloads; its SHA-256 matches
+the exact committed repository candidate
+(`8cebbf56875ebf976fd451a484a5ab2ceae43135c1e174f73f05bb49a19500be`).
+Both real installed-plugin file-loading tests passed. The installed
+plugin binary and live OBS scenes were not modified.
+See `docs/shaders/glyph-garden/README.md` for controls and limitations.
+
+
 ## 2026-10-21 — Critical Bitmap Glyph deployment fix (real user failure)
 
 **Observation:** The user downloaded `bitmap-glyph-motion.shader` to

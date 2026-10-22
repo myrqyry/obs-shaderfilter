@@ -79,24 +79,38 @@ This shader does not synthesize extra haze or colors by itself.
 
 ## Verification
 
-- Passed **real OBS libobs 32 native shader/GLSL compilation** on the
-  user's Linux Mint system with NVIDIA RTX 2070 Super and OpenGL 3.3.
-  Reproduce using `python3 tests/verify_mixwell_fluid_glass.py` from
-  the repository root (requires a C compiler, pkg-config/libobs development
-  headers, and a working OBS OpenGL graphics backend).
-  The test constructed Shaderfilter's actual template and applied its
-  OpenGL-specific stripping of `[loop]` before `gs_effect_create`.
-- Both Fast and Detailed branches are present in the compiled shader,
-  with file-select, scalar and timing uniform parameters recognized.
-- Static contract checks verify the source has exactly the neutral and
-  final single-sample branches, plus an explicit step bound.
+- **Real libobs 32.0.1/OpenGL GPU render verification passed** on the
+  NVIDIA RTX 2070 Super. Run `python3 tests/verify_mixwell_fluid_glass.py`
+  in an authorized Linux session with libobs development headers, a C
+  compiler, pkg-config, and a working graphics backend; headless Linux may
+  use `xvfb-run -a python3 tests/verify_mixwell_fluid_glass.py`.
+- The test builds Shaderfilter's real effect template, handles its
+  OpenGL `[loop]` conversion, compiles the result, and reads back a
+  **256×144 nonuniform image** from an actual offscreen libobs render.
+  It checks neutral bypass, visible pixel variation, and responses to
+  direction, quality, and brush-count controls (not driver-specific
+  fixed checksums).
+- **Recovered GPU regression:** the old `static const float FLUID_GLASS_PI`
+  compiled but did not produce a working rotation. In the 2026-10-21
+  consolidation run, the stronger GPU test **failed** with
+  `rotation=0`. Replacing the constant with a `#define` and
+  rerunning the same test **passed**, with `rotation=22076`,
+  `changed=21628`, `quality=4313`, `strokes=19243` and
+  `varied=36863`. The test now requires
+  `NATIVE_OBS_SHADER_RENDER_PASS=1` in addition to compilation.
+- The Fast (8 midpoint steps) and Detailed (16 steps) branches,
+  single/two-stroke bounds, and single-texture-sampling contract are
+  also checked.
 
-**Not yet verified:** visible pixel output in OBS, sustained GPU time, or
-edge correctness on production input. An isolated offscreen rendering
-harness returned its clear color even with the known-good pass-through
-shader, so it was not a valid image-quality test. Native shader compilation
-is not proof that an OBS filter has actually rendered the intended pixels.
+**Not yet verified:** an interactive OBS filter UI test using this *newly
+consolidated* source/binary, full-resolution 1080p60 or 4K performance,
+source-edge appearance under production inputs, and Windows/macOS
+shader-backend parity. The native GPU test establishes offscreen rendering,
+not installed OBS filter scheduling, scene compatibility, or the complete
+user-interface lifecycle.
 
-The shader is committed on the separate
-`aster/mixwell-fluid-glass` branch/worktree to protect parallel changes
-in the normal OBS repository.
+The implementation is now incorporated into canonical `master`.
+The historical review branch `aster/mixwell-fluid-glass` remains available
+for provenance; the tested source and stronger regression are included
+in `master` under `data/examples/myrqyry/mixwell-fluid-glass.shader`.
+See `docs/WORKTREE_HANDOFF.md` for the experimental branch reconciliation.

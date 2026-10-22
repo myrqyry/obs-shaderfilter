@@ -1,6 +1,37 @@
 # Active Work — OBS Shaderfilter fork
 
 
+## 2026-10-21 — Older authored shader utilities and the real wrapper
+
+The user identified the five uploads as **older self-authored shader files**
+and clarified that normal `.shader` source always runs inside the plugin's
+built-in effect wrapper unless using a full `.effect` (or manually selecting
+Override Entire Effect). Read
+[`docs/history/legacy-shaders-20261021/README.md`](docs/history/legacy-shaders-20261021/README.md)
+before trying to merge old functions by name.
+
+**Preserved:** four original utility libraries (`blending_modes.shader`,
+`lib_color.shader`, `lib_math.shader`, `lib_spatial.shader`) copied
+byte-for-byte into a documentation-only history directory, with SHA-256
+receipts. The fifth upload `3d-panel.shader` exactly matches the
+existing `data/examples/3d-panel.shader`; no duplicate. Historic
+blend-mode selection/HSL and UV conventions must not be silently swapped
+for present stdlib functions.
+
+**Validated:** `tests/verify_legacy_author_shaders.py` compiles all four
+utilities as includes under the actual current ShaderFilter template and
+runs an isolated libobs OpenGL readback on the original panel.
+All four libraries compile; panel brightness control changed 6,803
+pixels in one native comparison. This does not validate an installed OBS
+UI session, every control/alpha composition, or numerical equivalence to
+modern `data/stdlib/`.
+
+**Scope:** Historical files are not packaged by CMake and no shipped
+shaders, stdlib functions, OBS installations or scene settings changed.
+The old dispatcher may be a future carefully specified addition, but
+porting it is not part of this archive checkpoint.
+
+
 ## 2026-10-21 — Fork Changes claim-by-claim documentation audit
 
 **Scope:** `README.md` feature, bug-fix and build claims, with nearby

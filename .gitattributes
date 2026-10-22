@@ -1,0 +1,3 @@
+# Preserve user-authored historical shader uploads byte-for-byte.
+# Whitespace-only legacy differences must not require rewriting originals.
+docs/history/legacy-shaders-20261021/*.shader -whitespace

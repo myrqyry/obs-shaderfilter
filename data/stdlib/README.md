@@ -1,5 +1,12 @@
 # HyperShader Standard Library (OBS Shaderfilter)
 
+Historical author's utility versions (including the integer-dispatched
+blend selector and UV helpers) are preserved unchanged at
+[`docs/history/legacy-shaders-20261021/`](../../docs/history/legacy-shaders-20261021/README.md).
+They are **not** added to the runtime include search path or copied by the
+plugin installer. The archival comparison describes why some names are not
+interchangeable with the newer headers.
+
 Reusable HLSL-style utility headers for OBS Shaderfilter **user shaders**.
 These are the five original user-authored headers, with small compatibility,
 Worley-coordinate and runtime-loop safety fixes. Existing function names and

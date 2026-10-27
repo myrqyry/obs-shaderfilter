@@ -90,6 +90,24 @@ size_t diff(const Frame&a,const Frame&b,int start,int end){
           n+=std::abs(int(a[i+c])-int(b[i+c]))>2;
     return n;
 }
+// Every neutral control changes its shader's geometry, noise, or color effect.
+// No generic final-output opacity mix is exposed.
+const char *neutral_parameter(const char *path) {
+    struct Entry { const char *fragment; const char *parameter; };
+    static constexpr Entry entries[] = {
+        {"rw_radial_fold.shader", "Fold_Strength"},
+        {"rw_micro_noise_displace.shader", "Distortion"},
+        {"rw_organic_melt.shader", "Displacement"},
+        {"hf_focus_noise.shader", "Noise_Strength"},
+        {"hf_focus_bulge.shader", "Strength"},
+        {"hf_interactive_rgb_shift.shader", "Shift"},
+        {"hf_optical_halation.shader", "Intensity"},
+        {"sz_liquid_warp.shader", "Amount"},
+        {"sz_chroma_mosh.shader", "Color_Mix"},
+    };
+    for (const auto &e : entries) if (std::strstr(path,e.fragment)) return e.parameter;
+    return nullptr;
+}
 Frame settle(obs_source_t *s){
     Frame out;
     for(int i=0;i<5;++i){
@@ -129,7 +147,9 @@ int main(int argc,char**argv) {
         auto *p=obs_source_properties(f);
         auto *group=p?obs_properties_get(p,"shader_params_group"):nullptr;
         auto *params=group?obs_property_group_content(group):nullptr;
-        bool controls=params&&obs_properties_get(params,"Mix");
+        const char *neutral = neutral_parameter(argv[n]);
+        bool controls=params && neutral &&
+            obs_properties_get(params,neutral) && !obs_properties_get(params,"Mix");
         if(p)obs_properties_destroy(p);
         auto *state=obs_source_get_settings(f);
         const char *error=obs_data_get_string(state,"last_error");
@@ -137,7 +157,7 @@ int main(int argc,char**argv) {
         if(!compiled)std::fprintf(stderr,"PARSE_ERROR %s: %s\n",argv[n],error);
         obs_data_release(state);
         state=obs_source_get_settings(f);
-        obs_data_set_double(state,"Mix",0.0);
+        if(neutral) obs_data_set_double(state,neutral,0.0);
         obs_source_update(f,state);
         obs_data_release(state);
         Frame bypass=settle(s);

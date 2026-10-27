@@ -4,12 +4,6 @@
 // Set "Override Entire Effect" OFF; source texture comes from Shaderfilter.
 // Source RGB is alpha-divided by Shaderfilter's standard input path;
 // pass the original source alpha through without forcing opacity.
-uniform float Mix<
-    string label = "Effect Mix";
-    string group = "Output";
-    string widget_type = "slider";
-    float minimum = 0.0; float maximum = 1.0; float step = 0.01;
-> = 1.0;
 uniform float Amount<
     string label = "Displacement";
     string group = "Warp";
@@ -33,7 +27,6 @@ uniform float Speed<
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 original = image.Sample(textureSampler, uv);
-    if (Mix <= 0.0) return original;
 
     float phase = elapsed_time * Speed;
     float frequency = max(Scale, 0.1);
@@ -43,5 +36,5 @@ float4 mainImage(VertData v_in) : TARGET {
         0.35 * sin((uv.x * frequency * 1.7 + phase) * 6.2831853);
     float2 sourceUv = saturate(uv + float2(waveX, waveY) * Amount);
     float4 warped = image.Sample(textureSampler, sourceUv);
-    return lerp(original, float4(warped.rgb, original.a), Mix);
+    return float4(warped.rgb, original.a);
 }

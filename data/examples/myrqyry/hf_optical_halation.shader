@@ -4,12 +4,6 @@
 // Set "Override Entire Effect" OFF; source texture comes from Shaderfilter.
 // Source RGB is alpha-divided by Shaderfilter's standard input path;
 // pass the original source alpha through without forcing opacity.
-uniform float Mix<
-    string label = "Effect Mix";
-    string group = "Output";
-    string widget_type = "slider";
-    float minimum = 0.0; float maximum = 1.0; float step = 0.01;
-> = 1.0;
 uniform float Intensity<
     string label = "Bloom intensity";
     string group = "Light";
@@ -70,7 +64,6 @@ float3 halationGather(float2 uv, float2 px) {
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 original = image.Sample(textureSampler, uv);
-    if (Mix <= 0.0) return original;
 
     float2 px = Radius_Pixels / max(uv_size, float2(1.0, 1.0));
     float3 nearHalo = halationGather(uv, px);
@@ -79,5 +72,5 @@ float4 mainImage(VertData v_in) : TARGET {
     float3 amber = farHalo * float3(1.0, 0.38, 0.18);
     float3 processed = original.rgb + Intensity *
         lerp(neutral, neutral * 0.6 + amber * 0.4, Warmth);
-    return lerp(original, float4(processed, original.a), Mix);
+    return float4(processed, original.a);
 }

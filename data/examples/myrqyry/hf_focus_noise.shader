@@ -4,12 +4,6 @@
 // Set "Override Entire Effect" OFF; source texture comes from Shaderfilter.
 // Source RGB is alpha-divided by Shaderfilter's standard input path;
 // pass the original source alpha through without forcing opacity.
-uniform float Mix<
-    string label = "Effect Mix";
-    string group = "Output";
-    string widget_type = "slider";
-    float minimum = 0.0; float maximum = 1.0; float step = 0.01;
-> = 1.0;
 uniform float Noise_Strength<
     string label = "Noise amount";
     string group = "Noise";
@@ -70,7 +64,6 @@ float rw_noise(float2 p) {
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 original = image.Sample(textureSampler, uv);
-    if (Mix <= 0.0) return original;
 
     float2 size = max(uv_size, float2(1.0, 1.0));
     float aspect = size.x / size.y;
@@ -82,5 +75,5 @@ float4 mainImage(VertData v_in) : TARGET {
                           rw_hash(cell + float2(13.0, tick)),
                           rw_hash(cell + float2(tick + 23.0, 17.0))) - 0.5;
     float3 processed = original.rgb + grain * Noise_Strength * outside;
-    return lerp(original, float4(processed, original.a), Mix);
+    return float4(processed, original.a);
 }

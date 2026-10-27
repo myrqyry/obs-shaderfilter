@@ -20,6 +20,20 @@ EXPECTED = {
     "sz_chroma_mosh.shader": ("Chroma", "SZION"),
 }
 
+# A slider belongs to the transformation it controls, not global output opacity.
+# These controls are expected to make their own effect neutral at zero.
+NEUTRAL_CONTROL = {
+    "rw_radial_fold.shader": "Fold_Strength",
+    "rw_micro_noise_displace.shader": "Distortion",
+    "rw_organic_melt.shader": "Displacement",
+    "hf_focus_noise.shader": "Noise_Strength",
+    "hf_focus_bulge.shader": "Strength",
+    "hf_interactive_rgb_shift.shader": "Shift",
+    "hf_optical_halation.shader": "Intensity",
+    "sz_liquid_warp.shader": "Amount",
+    "sz_chroma_mosh.shader": "Color_Mix",
+}
+
 class CuratedPorts(unittest.TestCase):
     def test_shaders_have_explicit_shaderfilter_contract(self):
         for file, (name, origin) in EXPECTED.items():
@@ -29,11 +43,21 @@ class CuratedPorts(unittest.TestCase):
                 self.assertIn(origin, text)
                 self.assertIn("float4 mainImage(VertData v_in) : TARGET", text)
                 self.assertIn("image.Sample(textureSampler,", text)
-                self.assertIn("uniform float Mix<", text)
-                self.assertRegex(text, r"if\s*\(Mix\s*<=\s*0\.0\)\s*return original;")
+                self.assertNotIn("uniform float Mix<", text)
+                self.assertNotIn("Effect Mix", text)
+                self.assertNotIn("if (Mix <=", text)
+                self.assertIn(f"uniform float {NEUTRAL_CONTROL[file]}<", text)
                 self.assertIn("original.a", text)
                 self.assertNotRegex(text, r"\b(uniform sampler2D|uniform texture2d image|technique Draw|#version)\b")
-                self.assertIn("return lerp(original,", text)
+                self.assertNotIn("return lerp(original,", text)
+
+    def test_documented_controls_are_semantic_not_global_opacity(self):
+        catalog = (BASE / "CURATED-PORTS.md").read_text()
+        self.assertNotIn(chr(96) + "Mix" + chr(96) + " bypass", catalog)
+        self.assertNotIn(chr(96) + "Mix" + chr(96) + " control", catalog)
+        for filename, param in NEUTRAL_CONTROL.items():
+            self.assertIn(chr(96) + filename + chr(96), catalog)
+            self.assertIn(chr(96) + param + " = 0" + chr(96), catalog)
 
     def test_attribution_notice_and_catalog(self):
         readme = (BASE / "CURATED-PORTS.md").read_text()

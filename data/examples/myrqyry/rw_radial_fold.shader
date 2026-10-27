@@ -4,12 +4,6 @@
 // Set "Override Entire Effect" OFF; source texture comes from Shaderfilter.
 // Source RGB is alpha-divided by Shaderfilter's standard input path;
 // pass the original source alpha through without forcing opacity.
-uniform float Mix<
-    string label = "Effect Mix";
-    string group = "Output";
-    string widget_type = "slider";
-    float minimum = 0.0; float maximum = 1.0; float step = 0.01;
-> = 1.0;
 uniform float Fold_Strength<
     string label = "Fold amount";
     string group = "Shape";
@@ -33,7 +27,6 @@ uniform float Speed<
 float4 mainImage(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 original = image.Sample(textureSampler, uv);
-    if (Mix <= 0.0) return original;
 
     float2 p = uv - 0.5;
     float radius = length(p);
@@ -42,6 +35,9 @@ float4 mainImage(VertData v_in) : TARGET {
                   (1.0 - smoothstep(0.0, max(Radius, 0.001), radius));
     float angle = fold + twist;
     float2 sourceUv = 0.5 + float2(cos(angle), sin(angle)) * radius;
+    // Fold_Strength controls UV distortion itself, not final-image opacity.
+    // At zero the input UVs remain unchanged, including in the static fold.
+    sourceUv = lerp(uv, sourceUv, Fold_Strength);
     float4 displaced = image.Sample(textureSampler, saturate(sourceUv));
-    return lerp(original, float4(displaced.rgb, original.a), Mix);
+    return float4(displaced.rgb, original.a);
 }

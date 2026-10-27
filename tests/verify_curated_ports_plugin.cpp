@@ -144,7 +144,25 @@ int main(int argc,char**argv) {
         size_t visible=diff(baseline,enabled,0,3);
         size_t noMix=diff(baseline,bypass,0,3);
         size_t alpha=diff(baseline,enabled,3,4);
-        bool pass=compiled&&controls&&visible>500&&noMix<100&&alpha<100;
+        bool keepLuma=true;
+        double meanLumaError=0.0;
+        if(std::strstr(argv[n],"sz_chroma_mosh.shader")!=nullptr
+           && baseline.size()==enabled.size() && !baseline.empty()) {
+            size_t count=0;
+            for(size_t i=0;i<baseline.size();i+=4){
+                if(baseline[i+3]<250)continue;
+                double dr=double(enabled[i])-double(baseline[i]);
+                double dg=double(enabled[i+1])-double(baseline[i+1]);
+                double db=double(enabled[i+2])-double(baseline[i+2]);
+                meanLumaError+=std::abs(0.299*dr+0.587*dg+0.114*db);
+                ++count;
+            }
+            meanLumaError/=std::max(size_t(1),count);
+            keepLuma=meanLumaError<2.0;
+            std::printf("CHROMA_MOSH_MEAN_LUMA_ERROR=%.3f KEEP_LUMA=%d\n",
+                        meanLumaError,int(keepLuma));
+        }
+        bool pass=compiled&&controls&&visible>500&&noMix<100&&alpha<100&&keepLuma;
         std::printf("PORT_%s %s visible=%zu bypass=%zu alpha=%zu controls=%d compile=%d\n",
              pass?"PASS":"FAIL",argv[n],visible,noMix,alpha,controls,compiled);
         std::fflush(stdout);

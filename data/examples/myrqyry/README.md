@@ -22,6 +22,10 @@ Preserve the per-file attribution and accompanying license notices.
 
 ## External ports and printmaking
 
+- [PixelOE Build 2 ports](pixeloe-ports/README.md) — contrast-aware outline
+  expansion followed by contrast-selected pixelization; use as two stacked
+  filters, with integrated bilateral denoising plus optional color
+  quantization and ordered dithering in the pixelizer
 - [Noisemaker ports](noisemaker-ports/README.md) — 38 effects from Noise Factor
   LLC's Noisemaker (MIT)
 - [Printmaking](printmaking/README.md) — two adapted Noisemaker-inspired effects

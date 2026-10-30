@@ -291,6 +291,11 @@ for evidence and remaining limitations.
   `OBS_GROUP_NORMAL` sections. **They are not collapsible.** Source
   padding is offered on filters, not generative sources/transitions;
   individual edge controls explain their visual and memory cost.
+- **Properties dialog layout:** Shader Source presents the file picker,
+  Full Vertex Shader and Raw Shader Text toggles, and Reload Effect. Shader
+  Parameters follow, with each control shown by its shader annotation; the
+  filter's four Input Source Padding controls appear below. Defaults and Close
+  remain at the bottom of the dialog.
 - **Shader parameter annotations:** Supports labels, per-shader parameter
   groups, tooltips, range/step metadata, and specific slider/select/info
   widgets. The parser does not guarantee correct control behavior for

@@ -1,5 +1,39 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-10-26 — PixelOE Build 2 first OBS port
+
+Added two standalone, file-backed Shaderfilter filters under
+`data/examples/myrqyry/`: `pixeloe-outline.shader` and
+`pixeloe-pixelize.shader`. Stack them in that order to retain the source
+project's same-frame two-stage structure. Both use ordinary filter input,
+expose the main PixelOE parameters, preserve source alpha, and have no
+external include dependencies. The source and upstream PixelOE repositories
+both identify Apache-2.0; the port retains attribution and includes the full
+license at `data/examples/myrqyry/pixeloe-ports/LICENSE-APACHE-2.0.txt`.
+
+`python3 tests/verify_pixeloe_ports.py` passed native libobs/OpenGL effect
+compilation and four GPU readback comparisons (opaque and partial-alpha
+inputs for each shader); parameter changes altered output and alpha remained
+unchanged. This is shader-level evidence only: actual OBS properties loading,
+stacked-filter behavior in a live scene, side-by-side visual parity, target
+GPU performance, and Windows/macOS backends remain unverified. No OBS install
+or scene was modified.
+
+Follow-up: after the user reported the separate denoise stage helped but was
+too subtle, integrated a compact cross-shaped bilateral filter into
+`pixeloe-pixelize.shader`. It denoises the pixel candidates before their
+contrast statistics and selection, with strength/color/spatial controls; the
+existing independent Anime4K bilateral shader remains available for other
+chains. The pixelizer also gained optional per-channel color quantization and
+block-stable 4×4 Bayer ordered dithering. Quantization defaults off, preserving
+the existing output unless enabled. `tests/verify_pixeloe_ports.py` exercises
+pixel size, denoise strength, quantization amount and dither strength against
+opaque/partial-alpha inputs; all ten native GPU cases pass and alpha is
+preserved. Defaults are deliberately strong for denoising (strength 1.0,
+color sigma 0.25, spatial sigma 1.25). Full-resolution GPU cost remains
+unmeasured; denoising adds four source samples for every sample in each pixel
+block.
+
 ## 2026-10-22 — Glyph Garden, new opt-in shader
 
 Created `data/examples/myrqyry/glyph-garden.shader` with 30 original

@@ -64,8 +64,9 @@ static Receipt render(ShaderEngine &engine, GLuint src, GLuint fbo,
     return r;
 }
 int main(int argc,char**argv) {
-  if(argc!=3){std::fprintf(stderr,"Usage: %s PRESET.glslp MODE[spatial|history|feedback|resize|resizestatic|reload]\n",argv[0]);return 2;}
+  if(argc!=3){std::fprintf(stderr,"Usage: %s PRESET.glslp MODE[spatial|history|rawhistory|feedback|resize|resizestatic|reload]\n",argv[0]);return 2;}
   const bool history=std::string(argv[2])=="history";
+  const bool rawHistory=std::string(argv[2])=="rawhistory";
   const bool feedback=std::string(argv[2])=="feedback";
   const bool resize=std::string(argv[2])=="resize" || std::string(argv[2])=="resizestatic";
   const bool spatialResize=std::string(argv[2])=="resizestatic";
@@ -92,12 +93,24 @@ int main(int argc,char**argv) {
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
   glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
   glGenFramebuffers(1,&readback);
-  auto first=render(engine,source,readback,w,h,history?2:0,0);
-  auto second=render(engine,source,readback,resize?192:w,resize?128:h,history?2:0,1);
-  auto third=render(engine,source,readback,w,h,history?2:0,2);
+  auto first=render(engine,source,readback,w,h,(history||rawHistory)?2:0,0);
+  auto second=render(engine,source,readback,resize?192:w,resize?128:h,(history||rawHistory)?2:0,1);
+  auto third=render(engine,source,readback,w,h,(history||rawHistory)?2:0,2);
   int result=0;
   if(engine.getPreset().getPasses().size()<1 || first.nonzero==0 || second.nonzero==0)result=10;
-  if(history) {
+  if(rawHistory) {
+    // The first processed frame is deliberately transformed. PrevTexture
+    // on frame 1 must be the RAW input from frame 0, not its rendered output.
+    // Inputs: frame0=(210,35,30), frame1=(25,185,220), spatially constant.
+    const int wanted[]={134,77,84};
+    bool matches=true;
+    for(int c=0;c<3;c++)
+      if(std::abs(int(second.center[c])-wanted[c])>5)matches=false;
+    if (!matches) result=19;
+    std::printf("RAW_ORIGINAL_HISTORY_MATCH=%d expected=%d,%d,%d got=%d,%d,%d\n",
+      matches,wanted[0],wanted[1],wanted[2],
+      second.center[0],second.center[1],second.center[2]);
+  } else if(history) {
     // Input changed at frame 1; response-time output should differ
     // on the next frame even though input is then held constant.
     if(second.rgba==third.rgba && std::memcmp(second.center,third.center,4)==0)result=11;
@@ -130,7 +143,7 @@ int main(int argc,char**argv) {
     if(first.varied<size_t(w*h/5) || first.rgba==rawChecksum
        || engine.getPreset().getPasses().size()<2)result=12;
   }
-  std::printf("GLSLP_GRAPH_RENDER_PASS=%d MODE=%s\n",result==0,history?"history":(feedback?"feedback":(resize?(spatialResize?"resizestatic":"resize"):(reload?"reload":"spatial"))));
+  std::printf("GLSLP_GRAPH_RENDER_PASS=%d MODE=%s\n",result==0,rawHistory?"rawhistory":(history?"history":(feedback?"feedback":(resize?(spatialResize?"resizestatic":"resize"):(reload?"reload":"spatial")))));
   engine.shutdown();
   glDeleteFramebuffers(1,&readback);glDeleteTextures(1,&source);
   glfwDestroyWindow(win);glfwTerminate();

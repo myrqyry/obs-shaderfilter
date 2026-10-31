@@ -1,0 +1,189 @@
+--- a/src/shader/ShaderEngine.cpp
++++ b/src/shader/ShaderEngine.cpp
+@@ -1739,139 +1739,75 @@
+         // Usar dimensões padrão razoáveis como fallback (será sobrescrito)
+         glViewport(0, 0, 1920, 1080);
+ 
+-        // IMPORTANTE: Atualizar histórico de frames para motion blur
+-        // O histórico deve conter frames JÁ PROCESSADOS (saída do shader)
+-        // IMPORTANTE: Precisamos copiar o conteúdo para texturas dedicadas, não apenas armazenar referências
+-        // As texturas dos framebuffers são reutilizadas e sobrescritas a cada frame
+-        if (currentTexture != 0 && currentWidth > 0 && currentHeight > 0)
++        // Keep source-frame history, not processed shader output.
++        // Copy from the ORIGINAL input's texture with OpenGL itself; using the
++        // first pass program here applies the shader a second time and breaks
++        // RetroArch's PrevTexture / OriginalHistory semantics.
++        if (originalTexture != 0 && width > 0 && height > 0)
+         {
+-            // Encontrar qual framebuffer contém currentTexture
+-            GLuint sourceFramebuffer = 0;
+-            for (const auto &pass : m_passes)
+-            {
+-                if (pass.texture == currentTexture)
+-                {
+-                    sourceFramebuffer = pass.framebuffer;
+-                    break;
+-                }
+-            }
+-
+-            // Criar uma nova textura para o histórico (se necessário)
+             GLuint historyTexture = 0;
++            bool needsAllocation = true;
+             if (m_frameHistory.size() < MAX_FRAME_HISTORY)
+             {
+-                // Criar nova textura para o histórico
+                 glGenTextures(1, &historyTexture);
+-                glBindTexture(GL_TEXTURE_2D, historyTexture);
+-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, currentWidth, currentHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+-                glBindTexture(GL_TEXTURE_2D, 0);
+             }
+             else
+             {
+-                // Reutilizar a textura mais antiga (ring buffer)
+                 historyTexture = m_frameHistory.back();
++                const uint32_t oldWidth = m_frameHistoryWidths.back();
++                const uint32_t oldHeight = m_frameHistoryHeights.back();
+                 m_frameHistory.pop_back();
+                 m_frameHistoryWidths.pop_back();
+                 m_frameHistoryHeights.pop_back();
++                // Compare the recycled texture's own size, not a different
++                // surviving entry after popping the oldest frame.
++                needsAllocation = oldWidth != width || oldHeight != height;
++            }
+ 
+-                // Verificar se precisa redimensionar
+-                if (m_frameHistoryWidths.empty() || m_frameHistoryHeights.empty() ||
+-                    m_frameHistoryWidths.back() != currentWidth || m_frameHistoryHeights.back() != currentHeight)
++            if (historyTexture != 0)
++            {
++                glActiveTexture(GL_TEXTURE0);
++                glBindTexture(GL_TEXTURE_2D, historyTexture);
++                if (needsAllocation)
+                 {
+-                    glBindTexture(GL_TEXTURE_2D, historyTexture);
+-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, currentWidth, currentHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+-                    glBindTexture(GL_TEXTURE_2D, 0);
++                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
++                                 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                 }
+-            }
++                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++                glBindTexture(GL_TEXTURE_2D, 0);
+ 
+-            // Copiar conteúdo do framebuffer para a textura do histórico
+-            // Usar renderização simples: renderizar a textura atual para um framebuffer temporário
+-            // vinculado à textura do histórico usando o VAO e shader program existente
+-            if (sourceFramebuffer != 0 && historyTexture != 0)
+-            {
+-                // Criar framebuffer temporário reutilizável se ainda não existe
+                 if (m_copyFramebuffer == 0)
+-                {
+                     glGenFramebuffers(1, &m_copyFramebuffer);
+-                }
+-                
+-                // Reutilizar framebuffer existente
+-                glBindFramebuffer(GL_FRAMEBUFFER, m_copyFramebuffer);
+-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, historyTexture, 0);
+ 
+-                // Verificar se o framebuffer está completo
+-                GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+-                if (status == GL_FRAMEBUFFER_COMPLETE)
++                // The engine already loads glBlitFramebuffer. Keep shader
++                // programs out of the copy and blit between complete FBOs.
++                GLuint originalFramebuffer = 0;
++                glGenFramebuffers(1, &originalFramebuffer);
++                glBindFramebuffer(GL_READ_FRAMEBUFFER, originalFramebuffer);
++                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                       GL_TEXTURE_2D, originalTexture, 0);
++                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_copyFramebuffer);
++                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                       GL_TEXTURE_2D, historyTexture, 0);
++                if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE &&
++                    glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
+                 {
+-                    glViewport(0, 0, currentWidth, currentHeight);
+-                    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+-                    glClear(GL_COLOR_BUFFER_BIT);
+-
+-                    // Renderizar a textura atual para o framebuffer temporário usando o VAO
+-                    // Usar o shader program do primeiro pass para copiar a textura
+-                    if (!m_passes.empty() && m_passes[0].program != 0)
+-                    {
+-                        // Usar o shader program do primeiro pass temporariamente
+-                        glUseProgram(m_passes[0].program);
+-                        glBindVertexArray(m_VAO);
+-
+-                        // Bind da textura atual
+-                        glActiveTexture(GL_TEXTURE0);
+-                        glBindTexture(GL_TEXTURE_2D, currentTexture);
+-
+-                        // Configurar uniform Texture se existir
+-                        GLint texLoc = getUniformLocation(m_passes[0].program, "Texture");
+-                        if (texLoc < 0)
+-                        {
+-                            texLoc = getUniformLocation(m_passes[0].program, "Source");
+-                        }
+-                        if (texLoc >= 0)
+-                        {
+-                            glUniform1i(texLoc, 0);
+-                        }
+-
+-                        // Renderizar
+-                        glEnableVertexAttribArray(0);
+-                        glEnableVertexAttribArray(1);
+-                        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+-
+-                        glBindVertexArray(0);
+-                        glBindTexture(GL_TEXTURE_2D, 0);
+-                        glUseProgram(0);
+-                    }
+-                    else
+-                    {
+-                        // Se não há shader program disponível, a textura ficará vazia
+-                        // Mas pelo menos não crasha
+-                        LOG_WARN("Could not copy frame to history (no shader program)");
+-                    }
++                    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
++                                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
++                    m_frameHistory.insert(m_frameHistory.begin(), historyTexture);
++                    m_frameHistoryWidths.insert(m_frameHistoryWidths.begin(), width);
++                    m_frameHistoryHeights.insert(m_frameHistoryHeights.begin(), height);
++                }
++                else
++                {
++                    LOG_WARN("Original input texture cannot be copied to history");
++                    glDeleteTextures(1, &historyTexture);
+                 }
+-
+                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
+-                // Não deletar o framebuffer - reutilizar no próximo frame
+-            }
+-
+-            // IMPORTANTE: Por enquanto, vamos apenas armazenar a referência da textura
+-            // Isso não é ideal, mas permite que o código compile e funcione
+-            // O problema é que as texturas dos framebuffers são reutilizadas, então
+-            // o histórico pode conter texturas sobrescritas
+-            // Uma implementação completa precisaria copiar o conteúdo usando renderização
+-
+-            // Adicionar ao histórico
+-            m_frameHistory.insert(m_frameHistory.begin(), historyTexture);
+-            m_frameHistoryWidths.insert(m_frameHistoryWidths.begin(), currentWidth);
+-            m_frameHistoryHeights.insert(m_frameHistoryHeights.begin(), currentHeight);
+-
+-            // DEBUG: Log apenas quando necessário
+-            if (m_frameHistory.size() == 1)
+-            {
+-            }
+-            else if (m_frameHistory.size() == MAX_FRAME_HISTORY)
+-            {
++                glDeleteFramebuffers(1, &originalFramebuffer);
+             }
+         }
+ 

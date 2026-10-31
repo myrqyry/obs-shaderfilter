@@ -12,7 +12,7 @@ Dependencies: git, C++17 compiler, pkg-config, GLFW3/OpenGL, libpng and xvfb-run
 
     bash experiments/retrocapture-graph/run.sh
 
-The runner clones the pinned RetroCapture source into a temporary sparse checkout, applies one reviewed experimental patch, builds the actual ShaderEngine, and runs 12 positive GPU scenarios plus
+The runner clones the pinned RetroCapture source into a temporary sparse checkout, applies two reviewed experimental patches, builds the actual ShaderEngine, and runs 13 positive GPU scenarios plus
 one explicitly expected-failing reproduction (Hyllian black output). It redirects its app config/log directory to a temporary XDG directory and cleans up afterward.
 
 Offline reuse of a preexisting *matching pinned-revision* source checkout:
@@ -21,7 +21,7 @@ Offline reuse of a preexisting *matching pinned-revision* source checkout:
 
 Offline mode copies the necessary files into a temp directory and extracts the original committed ShaderEngine.cpp via git show. It cannot accidentally include working-tree source edits from the provided checkout.
 
-## Verified receipts (October 13, 2026)
+## Verified receipts (October 13 and October 30, 2026)
 
 Mesa OpenGL llvmpipe, 160 × 120 synthetic input texture. Checksums are sums of GPU-read-back RGBA bytes.
 
@@ -31,6 +31,7 @@ Mesa OpenGL llvmpipe, 160 × 120 synthetic input texture. Checksums are sums of 
 | Vector Glow (presets/vector-glow.glslp) | 9 | 12,353,239 | Real multi-Kawase glow chain |
 | LCD response-time (motionblur/response-time.glslp) | 1 + history | 5,280,000 → 7,430,400 → 7,545,600 | Changed input after frame zero, then held fixed; history response evolves |
 | Synthetic PassFeedback0Texture fixture | 1 + self-feedback | 8,400,890 → 10,157,236 → 11,036,831 | Source input unchanged all three frames, genuine feedback growth |
+| Raw original-input history (added Oct 30) | 1 + original history | frame 1: **134,76,84** (expected 134,77,84) | Previously **110,73,80**; catches processed-output copy and verifies the correct raw previous frame |
 | CRT Lottes multipass | 2 | 10,917,762 | Different spatial output, nonempty GPU pixels |
 | CRT Guest SM | 2 | 11,929,547 | Different spatial output, nonempty GPU pixels |
 | Kawase Blur | 7 | 12,228,219 | Original seven-pass blur graph |
@@ -54,10 +55,37 @@ Our source patch, at patches/0001-restore-feedback-target.patch, initializes tha
 
 The same fixture now produces a varied, nonempty first frame and continues accumulating thereafter. This precisely distinguishes the fixed behavior from the original failure.
 
+## Raw original-frame history repair (October 30, 2026)
+
+The pinned engine previously copied each processed output into its `PrevTexture`
+frame-history ring by re-rendering through pass 0. This changed the image
+*again* before it became the next frame's history. On a controlled 1-pass
+preset with known flat-color inputs, frame 1 should be (134,77,84), but the
+unmodified engine produced (110,73,80). Our **second** independent source
+patch uses the engine's loaded OpenGL `glBlitFramebuffer` API to copy the
+original input texture into the history ring, with no shader program involved.
+It now renders (134,76,84), within expected 8-bit rounding tolerance.
+
+Patch: `patches/0002-store-original-input-history.patch`. As with patch 1,
+it is applied **only to an isolated temporary copy** of the pinned upstream
+source during the GPU test. A fresh source checkout is not modified in place.
+The patch also corrects the historical ring-reuse dimension comparison; a
+stress case spanning more than seven alternately sized inputs remains to be
+implemented before claiming mixed-resolution history parity.
+
+For a targeted, offline raw-history regression:
+
+    RETROCAPTURE_SOURCE_DIR=/path/to/pinned/RetroCapture RETROCAPTURE_ONLY_CASE=rawhistory bash experiments/retrocapture-graph/run.sh
+
+The full suite passes 13 positive cases, including 12-pass NTSC, genuine
+feedback and existing resize/reload tests, and preserves the known blank
+Hyllian multipass negative case. That is standalone Mesa/OpenGL evidence,
+not OBS integration or a RetroArch reference-image comparison.
+
 ## Limitations that still matter
 
-- The source engine's m_frameHistory path stores **processed output** instead of raw original input and performs its history copy using **pass 0's shader**, potentially applying it again rather than doing a neutral texture copy. Therefore the observed LCD response-time evolution does not establish precise RetroArch history parity. This needs separate correction and explicit input-history regression tests.
-- The history ring-buffer resize check uses the remaining buffer's dimensions after popping the recycled element. That needs a resize test before relying on mixed resolutions.
+- Patched source-frame history now stores the **original input** rather than reprocessing the shader output. The three-frame raw-history probe proves that for one input size and one pass; original-history bindings for every supported shader family are not fully qualified.
+- The history ring-buffer reuse decision now compares the **recycled buffer's own previous dimensions** rather than a different surviving buffer's dimensions. Alternating input sizes across a fully populated history ring have **not** yet been independently pixel-tested; mixed-resolution history parity remains open.
 - We have **not** proven output against native RetroArch reference images, actual OBS UI integration, live camera input, Windows Direct3D/Metal behavior, hardware GPU cost, frame-history resize/reconnect handling, or color-space/alpha fidelity. We have tested feedback and multistage graph resize/reload only in the standalone OpenGL harness.
 - A GLSLP preset is a graph: shaders plus intermediate buffers, pass sizes, aliases, float/sRGB flags and temporal inputs. It is not equivalent to a single ShaderFilter .shader or OBS .effect.
 - RetroCapture runs GLSL on its own OpenGL context; ShaderFilter and HyperShaderFX use OBS's libobs graphics abstraction. Directly injecting foreign GL texture IDs into a normal OBS filter is neither generally portable nor safe.
@@ -70,4 +98,4 @@ The same fixture now produces a varied, nonempty first frame and continues accum
 
 ShaderFilter already offers previous_image/previous_output textures for one filter; HyperShaderFX offers iPreviousFrame for one effect; OBS Retro Effects has dedicated native multipass CRT/NTSC/bloom. None currently constitutes general RetroArch GLSLP import.
 
-**Licensing:** RetroCapture engine is MIT but its bundled RetroArch shaders are not all MIT. The LCD response-time shader specifically declares GPL-2.0-or-later. We vendor only an independently authored tiny GLSL feedback fixture, test driver and minimal third-party engine repair patch, not the RetroArch shader library.
+**Licensing:** RetroCapture engine is MIT but its bundled RetroArch shaders are not all MIT. The LCD response-time shader specifically declares GPL-2.0-or-later. We vendor only an independently authored GLSL feedback/history fixtures, test driver and two minimal third-party engine repair patches, not the RetroArch shader library.

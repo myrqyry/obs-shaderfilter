@@ -40,6 +40,8 @@ else
 fi
 (cd "$TEMP/repo" && patch --silent --dry-run -p1 < "$ROOT/patches/0001-restore-feedback-target.patch")
 (cd "$TEMP/repo" && patch --silent -p1 < "$ROOT/patches/0001-restore-feedback-target.patch")
+(cd "$TEMP/repo" && patch --silent --dry-run -p1 < "$ROOT/patches/0002-store-original-input-history.patch")
+(cd "$TEMP/repo" && patch --silent -p1 < "$ROOT/patches/0002-store-original-input-history.patch")
 
 src="$TEMP/repo/src"
 c++ -std=c++17 -O1 -pthread -I"$src" "$ROOT/verify_preset_pipeline.cpp" \
@@ -51,6 +53,10 @@ c++ -std=c++17 -O1 -pthread -I"$src" "$ROOT/verify_preset_pipeline.cpp" \
 # Redirect the library's logger and config away from user settings.
 export XDG_CONFIG_HOME="$TEMP/config"
 export XDG_DATA_HOME="$TEMP/data"
+if [[ "${RETROCAPTURE_ONLY_CASE:-}" == "rawhistory" ]]; then
+  xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/raw-history.glslp" rawhistory
+  exit 0
+fi
 printf '\n[2-pass original CRT preset]\n'
 xvfb-run -a "$TEMP/verify-preset" \
  "$TEMP/repo/shaders/shaders_glsl/crt/crt-blurPi.glslp" spatial
@@ -60,6 +66,8 @@ xvfb-run -a "$TEMP/verify-preset" \
 printf '\n[seven-frame LCD response-time shader: history behavior]\n'
 xvfb-run -a "$TEMP/verify-preset" \
  "$TEMP/repo/shaders/shaders_glsl/motionblur/response-time.glslp" history
+printf '\n[raw input history vs previously processed output]\n'
+xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/raw-history.glslp" rawhistory
 printf '\n[synthetic PassFeedback0Texture ping-pong: first-frame and temporal behavior]\n'
 xvfb-run -a "$TEMP/verify-preset" "$ROOT/fixtures/feedback.glslp" feedback
 

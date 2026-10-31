@@ -1,5 +1,35 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-10-30 — CrossTL OBS material bridge incorporated
+
+Recovered the pre-existing, independently committed `aster/crosstl-obs-bridge`
+prototype (`87f94ba`) into the current main source as seven additive files.
+Its CrossTL 3.4 converter deliberately supports only the normalized Glyphfield
+Soft Register material. It generates one OBS Shaderfilter procedural source,
+not a general GLSL/RetroArch preset translator or multipass executor.
+See `docs/CROSSTL_OBS_BRIDGE.md` for exact source, commands and limits.
+
+**Verified against the integrated current tree:** CrossTL generation was
+byte-for-byte deterministic and rejected an unsupported variant; native
+libobs/OpenGL GPU test passed (10,987 changed pixels); existing installed
+Shaderfilter source test passed (30,186 changed pixels). A tracked-files-only
+temporary checkout passed 29/29 Python unit tests and built the plugin with
+CMake/Ninja; its newly built module also passed real Shaderfilter source
+loading/controls/rendering (30,308 changed pixels). The ordinary working-tree
+unit suite separately failed only the tracked-example inventory assertion:
+dozens of unrelated user shaders remain untracked and must not be deleted or
+blindly added to make that test green. The clean-checkout test isolates this
+repository-state constraint.
+
+**Boundary:** No installed OBS plugin, scenes, profiles or custom shader files
+were modified. CrossTL integration is limited to one verified source profile;
+no generalized import or `.slangp` support is claimed. Naga is a complementary
+WGSL/SPIR-V candidate, not yet installed or runtime-validated on this machine
+(the Rust Cargo toolchain was unavailable at inspection). Naga's GLSL input
+expects Vulkan-style GLSL 440+, so it should not silently replace the
+existing GLSL ES material pipeline. The original worktree and branch remain preserved;
+no remote push or release was performed.
+
 ## 2026-10-26 — PixelOE Build 2 first OBS port
 
 Added two standalone, file-backed Shaderfilter filters under

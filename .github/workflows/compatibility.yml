@@ -47,12 +47,15 @@ jobs:
           ref: ${{ matrix.obs_ref }}
           path: obs-studio
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Checkout shaderfilter
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: obs-studio/plugins/obs-shaderfilter
+
+      - name: Verify OBS 33 readiness contract
+        run: python3 obs-studio/plugins/obs-shaderfilter/scripts/test-obs33-readiness.py
 
       - name: Keep the compatibility build focused
         shell: bash

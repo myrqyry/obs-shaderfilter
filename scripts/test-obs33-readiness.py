@@ -25,3 +25,8 @@ installer = (root / "installer.iss.in").read_text()
 assert "{commonappdata}\\obs-studio\\plugins\\obs-shaderfilter" in installer
 assert 'DestDir: "{app}\\obs-plugins"' in installer
 print("PASS: shaderfilter has stable OBS33 coverage, runtime ABI bridge, and modern+legacy Windows install paths")
+
+assert "fetch-depth: 0" in compat, "OBS master canary needs version tags/history for git describe"
+assert "python3 obs-studio/plugins/obs-shaderfilter/scripts/test-obs33-readiness.py" in compat, (
+    "readiness contract must execute in compatibility CI"
+)

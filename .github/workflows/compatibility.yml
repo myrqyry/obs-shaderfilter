@@ -29,11 +29,15 @@ jobs:
           - name: OBS 32.2.2 stable
             os: ubuntu-24.04
             obs_ref: 32.2.2
-            obs_version: 32.2.2
+            obs_version_arg: -DOBS_VERSION_OVERRIDE=32.2.2
+          - name: OBS 33.0.1 stable
+            os: ubuntu-26.04
+            obs_ref: 33.0.1
+            obs_version_arg: -DOBS_VERSION_OVERRIDE=33.0.1
           - name: OBS next (master)
             os: ubuntu-26.04
             obs_ref: master
-            obs_version: 33.0.0-dev
+            obs_version_arg: ''
 
     steps:
       - name: Checkout OBS
@@ -53,8 +57,6 @@ jobs:
       - name: Keep the compatibility build focused
         shell: bash
         run: |
-          # Build libobs + this plugin only. This avoids unrelated OBS core
-          # modules turning a shaderfilter ABI check into a full OBS distro build.
           printf '%s\n' 'add_subdirectory(obs-shaderfilter)' 'if(COMMAND set_obs_core_modules)' '  set_obs_core_modules()' 'endif()' > obs-studio/plugins/CMakeLists.txt
 
       - name: Install compile dependencies
@@ -90,7 +92,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DOBS_VERSION_OVERRIDE=${{ matrix.obs_version }} \
+            ${{ matrix.obs_version_arg }} \
             -DENABLE_FRONTEND=OFF \
             -DENABLE_HEVC=OFF \
             -DENABLE_PULSEAUDIO=OFF \
@@ -107,8 +109,8 @@ jobs:
         shell: bash
         run: |
           plugin="$(find build -type f -name 'obs-shaderfilter.so' -print -quit)"
-          test -n "${plugin}"
-          if nm -D "${plugin}" | grep -E ' U gs_image_file(4|_ex)?_'; then
+          test -n "$plugin"
+          if nm -D "$plugin" | grep -E ' U gs_image_file(4|_ex)?_'; then
             echo '::error::Shaderfilter directly imports versioned gs_image_file symbols; OBS 28/32/33 runtime compatibility would be brittle.'
             exit 1
           fi

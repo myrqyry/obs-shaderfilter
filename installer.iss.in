@@ -39,7 +39,11 @@ SetupIconFile="media/icon.ico"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "package/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; OBS 33+ modern third-party layout. OBS 33 loads this before legacy paths.
+Source: "package\obs-shaderfilter\*"; DestDir: "{commonappdata}\obs-studio\plugins\obs-shaderfilter"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Keep legacy copies for OBS 32 and older. OBS 33 deduplicates by module name.
+Source: "package\obs-plugins\*"; DestDir: "{app}\obs-plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "package\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

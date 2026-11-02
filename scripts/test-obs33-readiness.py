@@ -6,6 +6,7 @@ compat = (root / ".github/workflows/compatibility.yml").read_text()
 assert "OBS 33.0.1 stable" in compat
 assert "obs_ref: 33.0.1" in compat
 assert "ubuntu-26.04" in compat
+assert "libopengl-dev" in compat
 
 source = (root / "obs-shaderfilter.c").read_text()
 for symbol in ("gs_image_file_ex_init", "gs_image_file4_init", "obs_get_version()"):

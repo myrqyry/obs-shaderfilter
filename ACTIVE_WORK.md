@@ -1,5 +1,12 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-03 — OBS 33 readiness branch consolidated
+
+Recovered the still-missing pieces of `obs33/readiness` onto current `master`: an explicit OBS 33.0.1 stable compatibility lane, full-history checkout for the master canary, OpenGL development dependency, a self-verifying readiness contract, and modern+legacy plugin install/package layouts. The runtime ABI bridge was already present on current master and was not replaced.
+
+Verification on the integrated current tree: `python3 scripts/test-obs33-readiness.py` passed; `python3 -m unittest discover -s tests -p 'test_*.py'` passed 29/29; and a fresh `cmake -S . -B /tmp/obs-shaderfilter-obs33-build -G Ninja -DBUILD_OUT_OF_TREE=On && cmake --build ...` completed successfully. No installed OBS plugin, scene/profile, or user shader file was modified.
+
+
 ## 2026-10-30 — CrossTL OBS material bridge incorporated
 
 Recovered the pre-existing, independently committed `aster/crosstl-obs-bridge`

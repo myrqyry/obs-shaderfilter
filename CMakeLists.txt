@@ -73,6 +73,8 @@ if(BUILD_OUT_OF_TREE)
             COMMAND ${CMAKE_COMMAND} "-DPLUGIN_DATA_DIR=${OBS_USER_PLUGIN_DIR}/data"
                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MigrateLegacyExamples.cmake
             COMMAND ${CMAKE_COMMAND} -E make_directory ${OBS_USER_PLUGIN_DIR}/bin/64bit
+            # OBS 33+ loads the modern root copy first; keep bin/64bit for OBS 32 and older.
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${OBS_USER_PLUGIN_DIR}/${PROJECT_NAME}.so
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${OBS_USER_PLUGIN_DIR}/bin/64bit/${PROJECT_NAME}.so
             COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data ${OBS_USER_PLUGIN_DIR}/data
             COMMENT "Installing to OBS user plugin directory: ${OBS_USER_PLUGIN_DIR}"

@@ -246,6 +246,11 @@ jobs:
           echo "FILE_NAME=${env:FILE_NAME}" >> ${env:GITHUB_ENV}
           robocopy .\build\rundir\RelWithDebInfo\obs-plugins\${{ matrix.deps_ext }}bit\ .\package\obs-plugins\${{ matrix.deps_ext }}bit ${{ env.PLUGIN_NAME }}.* /E /XF .gitignore
           robocopy .\build\rundir\RelWithDebInfo\data\obs-plugins\${{ env.PLUGIN_NAME }}\ .\package\data\obs-plugins\${{ env.PLUGIN_NAME }}\ /E /XF .gitignore
+          if ("${{ matrix.target }}" -eq "x64") {
+            New-Item -ItemType Directory -Force .\package\obs-shaderfilter\data | Out-Null
+            Copy-Item .\build\rundir\RelWithDebInfo\obs-plugins\64bit\obs-shaderfilter.dll .\package\obs-shaderfilter\obs-shaderfilter.dll
+            robocopy .\build\rundir\RelWithDebInfo\data\obs-plugins\obs-shaderfilter\ .\package\obs-shaderfilter\data\ /E /XF .gitignore
+          }
           copy .\build\plugins\${{ env.PLUGIN_NAME }}\installer.iss .\installer\installer.iss
           robocopy .\plugins\${{ env.PLUGIN_NAME}}\media\ .\installer\media\ /E /XF .gitignore
           exit 0

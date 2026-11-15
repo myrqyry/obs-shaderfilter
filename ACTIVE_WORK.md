@@ -1,5 +1,23 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-15 — Standalone vGPU image feedback graph
+
+Extended the existing vGPU experiment (not the native plugin) with an
+actual reusable two-pass spatial/temporal image graph and a local-only
+browser preview. Pinned vGPU 0.6.0 remains isolated; Vite and
+puppeteer-core are experiment-only tooling. Real Dawn tests passed
+on Radeon and NVIDIA (2/2 each, all-channel error at most 1/255,
+exact alpha, real tracked PNG and odd-sized fixtures); actual Chrome
+Vulkan production preview passed file import, GPU canvas changes,
+reset and PNG export with no errors/external requests. Existing native
+experiment render/resize/compute probes and frozen install/build passed.
+See experiments/vgpu-graph/README.md for use, receipts and ownership.
+
+This is manual image feedback, not continuous video, OBS integration,
+or a speedup claim. No native OBS code, installed plugin, scenes,
+profiles or untracked shader examples changed. Video throughput,
+device loss recovery and interop remain open. Local commit only.
+
 ## 2026-11-03 — OBS 33 readiness branch consolidated
 
 Recovered the still-missing pieces of `obs33/readiness` onto current `master`: an explicit OBS 33.0.1 stable compatibility lane, full-history checkout for the master canary, OpenGL development dependency, a self-verifying readiness contract, and modern+legacy plugin install/package layouts. The runtime ABI bridge was already present on current master and was not replaced.

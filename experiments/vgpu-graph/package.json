@@ -5,5 +5,16 @@
   "dependencies": {
     "@vgpu/wgsl": "0.6.0",
     "vgpu": "0.6.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "24.25.0",
+    "vite": "7.3.6"
+  },
+  "scripts": {
+    "test": "node --test image-feedback.node-test.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:preview": "node preview-smoke.mjs"
   }
 }

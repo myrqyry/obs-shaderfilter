@@ -70,3 +70,67 @@ The CLI was independently checked: help, docs find effect, doctor with actual of
 ## Next meaningful gate
 
 Implement a separate browser/Node preview from a real image/video source with two effects and a bounded ping-pong history. Verify visual output, full-resolution performance and device loss/resize/reset, then compare the cost of presenting it in OBS. Do not patch the working OBS plugin based on standalone WebGPU tests alone.
+
+## 2026-11-15 — Local image feedback preview and numerical parity
+
+The next gate above now has an image-only implementation. The same
+`image-feedback.mjs` runs on Node/Dawn and browser WebGPU:
+upload straight RGBA8, apply a horizontal 1:2:1 spatial RGB filter,
+and use a bounded two-target history for the temporal pass. The seed
+frame copies the spatial result; subsequent frames mix 0.5 of the new
+spatial color with 0.375 of the previous output. Source alpha is preserved.
+Explicit reset and dimension changes reseed history. No third-party
+shader is translated or loaded by this graph.
+
+    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm dev
+
+Open the loopback URL printed by Vite and select a local PNG, JPEG or
+WebP image (up to 2048 x 2048). Advance Frame, Reset History, and Export
+PNG are explicit controls. Preview presentation samples the graph's
+output directly on a vGPU canvas surface; CPU readback is requested only
+for PNG export. The canvas uses premultiplied display alpha; the graph
+stores straight RGBA. No upload or service connection. The preview is
+a manual image experiment, not a continuous video renderer.
+
+Build and test:
+
+    pnpm build
+    pnpm test
+    xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:preview
+
+Node tests require ImageMagick's convert command for the existing
+tracked PNG fixture. The browser smoke uses an installed Chrome Beta
+by default (set BROWSER_BIN to override); it launches a short-lived
+loopback production preview server and removes temporary downloads.
+Vite 7.3.6 and puppeteer-core 24.25.0 are pinned experiment-only
+development dependencies; no browser download is required. The browser
+smoke flags are Linux/Vulkan oriented, not portable qualification.
+
+Verified on Node 24.20.0 and vGPU 0.6.0, Radeon RADV Mesa 25.2.8
+and NVIDIA 595.99.02, with both native suites passing 2/2. Independent
+CPU reference checks cover all channels of odd-width asymmetric images,
+feedback, reset, portrait/landscape resize, invalid upload and overlap
+rejection, and every pixel of the existing 306x322 giraffe PNG. Maximum
+absolute RGBA8 channel error was one; alpha exact. Browser production
+smoke on NVIDIA Turing passed actual file selection, visible canvas
+changes, feedback, PNG download and bit-identical reset export with
+zero console/page/HTTP errors and external requests. Browser bundle
+218.21 kB JavaScript (69.48 kB gzip). Existing synthetic render/resize
+and compute probes still pass. The first browser run reported a missing
+favicon (fixed by a local data favicon).
+
+The graph borrows the caller's GPU and owns its textures, effect
+instances, and render targets. A render completes before returning its
+borrowed target. Consume that target before another render; do not retain
+it through resize/disposal. Consecutive calls are serialized; overlap,
+reset or disposal during a render is rejected. Validation errors prevent
+history swap. Do not concurrently manipulate the same native error-scope
+stack from another caller. GPU device-loss recovery requires recreation;
+the preview reports loss rather than silently falling back.
+
+Unverified: sustained video throughput, performance at 1080p/4K,
+multi-frame asynchronous pipelining, cross-device/browser portability,
+device-loss recovery, OBS transfer and native plugin integration. This
+experiment does not change the C/C++ plugin, installed OBS, scenes,
+profiles or user shader files.

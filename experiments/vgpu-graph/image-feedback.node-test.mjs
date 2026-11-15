@@ -76,3 +76,57 @@ test('real tracked PNG, all pixels compared',()=>withGraph(async graph=>{
   graph.dispose();
   await assert.rejects(graph.render(input,w,h),/disposed/);
 }));
+
+test('two queued submissions preserve recurrence and enforce a bounded queue',async()=>{
+  const gpu=await init();
+  const graph=createImageFeedbackGraph(gpu,{maxInFlight:2});
+  const serial=createImageFeedbackGraph(gpu);
+  const a=fixture(17,9),b=fixture(17,9,47),c=fixture(17,9,111);
+  const pending=[];
+  try{
+    const first=graph.render(a,17,9);pending.push(first);
+    const second=graph.render(b,17,9);pending.push(second);
+    const completed=Promise.allSettled(pending);
+    await assert.rejects(graph.render(c,17,9),/in progress|capacity/);
+    assert.throws(()=>graph.reset(),/in progress/);
+    assert.throws(()=>graph.dispose(),/in progress/);
+    const results=await completed;
+    assert.deepEqual(results.map(r=>r.status),["fulfilled","fulfilled"]);
+    const [one,two]=results.map(r=>r.value);
+    const ref1=await pixels(await serial.render(a,17,9));
+    const ref2=await pixels(await serial.render(b,17,9));
+    assert.deepEqual(await pixels(one),ref1);
+    assert.deepEqual(await pixels(two),ref2);
+    const third=await graph.render(c,17,9);
+    assert.deepEqual(await pixels(third),await pixels(await serial.render(c,17,9)));
+    graph.reset();
+    assert.deepEqual(await pixels(await graph.render(b,17,9)),reference(b,17,9));
+  }finally{await Promise.allSettled(pending);graph.dispose();serial.dispose();gpu.dispose();}
+});
+
+test('native validation failure invalidates dependent queued history until reset',async()=>{
+  const gpu=await init(),graph=createImageFeedbackGraph(gpu,{maxInFlight:2});
+  const a=fixture(17,9),b=fixture(17,9,47);
+  const queue=gpu.gpu.queue,write=queue.writeTexture;
+  const pending=[];
+  try{
+    queue.writeTexture=function(dst,data,layout,size){
+      // Actual native validation: a row stride too small for this image.
+      return write.call(this,dst,data,{...layout,bytesPerRow:4},size);
+    };
+    pending.push(graph.render(a,17,9));
+    queue.writeTexture=write;
+    pending.push(graph.render(b,17,9));
+    const results=await Promise.allSettled(pending);
+    assert.deepEqual(results.map(x=>x.status),['rejected','rejected']);
+    assert.match(String(results[1].reason),/history invalid/);
+    assert.equal(graph.pending,0);
+    await assert.rejects(graph.render(a,17,9),/history invalid/);
+    graph.reset();
+    compare(await pixels(await graph.render(b,17,9)),reference(b,17,9),'recovered seed');
+  }finally{
+    queue.writeTexture=write;
+    await Promise.allSettled(pending);
+    graph.dispose();gpu.dispose();
+  }
+});

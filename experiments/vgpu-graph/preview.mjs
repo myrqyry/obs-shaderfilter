@@ -3,11 +3,11 @@ import { prepareShader } from '@vgpu/wgsl/prepare';
 import { createImageFeedbackGraph } from './image-feedback.mjs';
 
 const input=document.querySelector('#image'),videoFile=document.querySelector('#video-file');
-const videoInput=document.querySelector('#video-input');
+const videoInput=document.querySelector('#video-input'),videoQueue=document.querySelector('#video-queue');
 const video=document.querySelector('#video'),canvas=document.querySelector('#output'),status=document.querySelector('#status');
 const step=document.querySelector('#step'),reset=document.querySelector('#reset'),download=document.querySelector('#export');
 let gpu,graph,videoGraph,screen,present,image,output,mode='image',videoUrl,ticks=0,total=0,busy=false,failed=false;
-let callback=null,needsSeed=true,needsFrame=false,epoch=0;
+let callback=null,needsSeed=true,needsFrame=false,epoch=0,inFlight=0,sourceSize='',pausedSeek=false,fallbackEpoch=null;
 const displayShader=prepareShader(`
 @group(0) @binding(0) var source: texture_2d<f32>;
 @fragment fn fs_main(@builtin(position) pixel: vec4f) -> @location(0) vec4f {
@@ -15,10 +15,10 @@ const displayShader=prepareShader(`
   return vec4f(rgba.rgb*rgba.a,rgba.a);
 }`);
 function controls(){
-  input.disabled=videoFile.disabled=videoInput.disabled=busy||failed;
+  input.disabled=videoFile.disabled=videoInput.disabled=videoQueue.disabled=busy||inFlight>0||failed;
   const playing=mode==='video'&&!video.paused&&!video.ended;
-  step.disabled=busy||failed||!output||mode==='video';
-  reset.disabled=download.disabled=busy||failed||!output||playing||video.seeking;
+  step.disabled=busy||inFlight>0||failed||!output||mode==='video';
+  reset.disabled=download.disabled=busy||inFlight>0||failed||!output||playing||video.seeking;
 }
 async function initialize(){
   if(gpu)return;
@@ -38,18 +38,44 @@ function clearVideo(){
   cancel();video.pause();video.removeAttribute('src');video.load();video.hidden=true;
   if(videoUrl)URL.revokeObjectURL(videoUrl);
   videoGraph?.dispose();videoGraph=undefined;
-  videoUrl=undefined;epoch++;needsFrame=false;needsSeed=true;mode='image';
+  videoUrl=undefined;epoch++;needsFrame=false;needsSeed=true;sourceSize='';pausedSeek=false;mode='image';
 }
 function invalidate(){epoch++;needsSeed=true;needsFrame=true;output=null;cancel();controls()}
+function submitVideo(){
+  if(mode!=='video'||failed||busy||video.seeking||video.readyState<2||inFlight>=videoGraph.maxInFlight)return;
+  const dimensions=video.videoWidth+'x'+video.videoHeight;
+  if(video.videoWidth>2048||video.videoHeight>2048){
+    invalidate();needsFrame=false;video.pause();status.textContent='Video exceeds 2048 × 2048';return;
+  }
+  if(sourceSize!==dimensions){if(inFlight){invalidate();return;}sourceSize=dimensions;needsSeed=true;}
+  if(needsSeed&&inFlight)return;
+  needsFrame=false;pausedSeek=false;
+  const e=epoch;
+  inFlight++;canvas.dataset.pending=String(inFlight);controls();
+  void paint(needsSeed).catch(error=>{
+    if(e===epoch){invalidate();needsFrame=false;video.pause();status.textContent=String(error);}
+  }).finally(()=>{
+    inFlight--;canvas.dataset.pending=String(inFlight);controls();schedule();
+  });
+  schedule();
+}
 function schedule(){
-  if(mode!=='video'||failed||busy||callback!==null)return;
+  if(mode!=='video'||!videoGraph||failed||busy||inFlight>=videoGraph.maxInFlight||(needsSeed&&inFlight))return;
   if(!needsFrame&&(video.paused||video.ended))return;
-  callback=video.requestVideoFrameCallback(()=>{
+  if(callback===null)callback=video.requestVideoFrameCallback(()=>{
     callback=null;
     if(video.seeking||video.readyState<2){schedule();return;}
-    if(video.videoWidth>2048||video.videoHeight>2048){clearVideo();output=null;status.textContent='Video exceeds 2048 × 2048';controls();return;}
-    needsFrame=false;void perform(()=>paint(needsSeed));
+    submitVideo();
   });
+  if(pausedSeek&&needsFrame&&!inFlight&&video.paused&&!video.seeking&&video.readyState>=2&&fallbackEpoch!==epoch){
+    const e=epoch;fallbackEpoch=e;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(fallbackEpoch===e)fallbackEpoch=null;
+      if(mode==='video'&&epoch===e&&pausedSeek&&needsFrame&&!busy&&!inFlight&&!video.seeking&&video.paused){
+        cancel();submitVideo();
+      }
+    }));
+  }
 }
 async function paint(reseed=false){
   const currentEpoch=epoch;
@@ -77,7 +103,7 @@ async function paint(reseed=false){
   status.textContent=`${w} × ${h} · WebGPU${isVideo?' · '+videoGraph.videoInput:''} · frame ${ticks}`;
 }
 async function perform(action){
-  if(busy||failed)return;
+  if(busy||inFlight||failed)return;
   busy=true;controls();
   try{await action()}catch(error){
     if(mode==='video'){video.pause();needsFrame=false;needsSeed=true;}
@@ -102,7 +128,7 @@ videoFile.addEventListener('change',()=>perform(async()=>{
   const file=videoFile.files?.[0];if(!file)return;
   if(typeof video.requestVideoFrameCallback!=='function')throw Error('Decoded video frame callbacks unavailable');
   await ensureGPU();clearVideo();
-  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value});
+  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value,maxInFlight:Number(videoQueue.value)});
   mode='video';invalidate();
   videoUrl=URL.createObjectURL(file);video.src=videoUrl;video.hidden=false;video.load();
   status.textContent='Loading local video…';
@@ -113,20 +139,8 @@ video.addEventListener('loadeddata',()=>{
 video.addEventListener('play',()=>{controls();schedule()});
 video.addEventListener('pause',()=>{cancel();controls();if(needsFrame)schedule()});
 video.addEventListener('ended',()=>{cancel();controls()});
-video.addEventListener('seeking',()=>{if(mode==='video'){invalidate();schedule()}});
-video.addEventListener('seeked',()=>{
-  if(mode!=='video')return;
-  schedule();
-  const seekEpoch=epoch;
-  // A paused seek can deliver its compositor frame before the callback
-  // is registered. Allow two animation turns, then consume the ready frame
-  // if the presented-frame callback hasn't already done so.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    if(mode==='video'&&epoch===seekEpoch&&needsFrame&&!busy&&!video.seeking&&video.paused){
-      cancel();needsFrame=false;void perform(()=>paint(needsSeed));
-    }
-  }));
-});
+video.addEventListener('seeking',()=>{if(mode==='video'){pausedSeek=false;invalidate();schedule()}});
+video.addEventListener('seeked',()=>{if(mode==='video'){pausedSeek=true;schedule()}});
 video.addEventListener('error',()=>{if(mode==='video'){invalidate();needsFrame=false;video.pause();status.textContent='Could not decode local video';controls()}});
 step.addEventListener('click',()=>perform(()=>paint()));
 reset.addEventListener('click',()=>perform(()=>paint(true)));

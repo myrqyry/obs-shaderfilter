@@ -246,3 +246,61 @@ the video. Full frame rate, pipelining, arbitrary codec/color-space
 parity, long-duration and repeated rapid seek stress, device-loss
 recovery and OBS interop remain unqualified. No new dependency or
 native OBS change.
+
+## 2026-11-15 — Bounded two-frame video queue
+
+The next-video queue selector offers Single frame (default) and Two
+frames. It is independent of texture copy versus direct external input.
+Choose before selecting the file. The optional two-frame mode submits
+the next presented frame while the preceding GPU fence is outstanding.
+The graph uses queue-ordered uploads, spatial passes and alternating
+history targets; no additional large intermediate texture is needed.
+At most two submissions are outstanding; a full queue skips incoming
+source frames rather than accumulating work. Completion receipts are
+published in submission order, after the native scope and vGPU frame
+completion settle. This is speculative history on the GPU, not
+independent parallel feedback computation.
+
+If native asynchronous validation fails, dependent receipts reject and
+the graph must drain and reset before accepting new work. Synchronous
+pre-submission presentation failure preserves previous history.
+Reset, resize to different dimensions, disposal and preview export
+cannot race outstanding work. The preview invalidates epochs on seek,
+drains the old queue, and reseeds before processing the new source.
+Already submitted draws cannot be recalled; their stale completion
+receipts are suppressed. Pause stops new submissions but allows
+outstanding frames to finish. Consumers of the graph must drain and
+read only the latest borrowed output before another render; earlier
+receipts may identify ping-pong storage subsequently reused.
+
+Reproduce (same environment as previous tests):
+
+    pnpm build
+    VIDEO_QUEUE=1 VIDEO_INPUT=copy xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_QUEUE=2 VIDEO_INPUT=copy xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_QUEUE=2 VIDEO_INPUT=external xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    pnpm test
+
+Real NVIDIA Chrome/Vulkan 1080p30 VP9 three-second observations:
+single queue 46 and 45 completed frames; two-frame copy 76, 76, 81;
+two-frame external 76, 78. Thus approximately 25.3–27 fps versus
+15–15.3 fps, not sustained source-rate playback. Observed outstanding
+submission peak two (one for baseline), zero explicit GPU readbacks
+or Canvas2D extraction during playback, one completion fence per
+submission. The final two-frame runs also deliberately paused and
+sought twice with both slots occupied, then exported the new seed
+byte-identical to the earlier blue reference PNG. Zero browser/HTTP
+errors and external requests. Existing image and direct texture
+smokes passed, as did frozen install and build.
+
+Actual Dawn Radeon and NVIDIA tests 4/4 each: existing image numerical
+parity, two queued outputs compared bit-for-bit with serial outputs,
+third submission rejected, reset/dispose blocked while outstanding,
+and a native invalid row-stride write poisoning its dependent receipt
+until reset. Subsequent reset seed matched the CPU oracle. The first
+RED test failed and left its test process waiting due to test cleanup;
+test cleanup now drains the outstanding promises and the abandoned
+test child was stopped. No new dependency, native OBS change or
+additional worktree. Single-frame mode remains default because
+long-duration, 4K, device-loss recovery, arbitrary codec/color-space
+parity and OBS interop remain unqualified.

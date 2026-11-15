@@ -1,5 +1,23 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-15 — Bounded two-frame video queue
+
+Added an opt-in two-frame scheduler to the isolated vGPU preview.
+GPU queue order preserves the temporal recurrence; bounded
+speculative submissions publish validated completion receipts in order.
+Validation failure poisons dependent history until drain/reset.
+Seek suppresses stale receipts and drains before reseeding; export and
+source changes wait for completion. Actual Dawn Radeon/NVIDIA tests
+4/4 each. On NVIDIA Chrome/Vulkan 1080p30 VP9, single-flight runs
+45–46 completed output frames in 3s vs two-flight copy 76–81 and
+external 76–78. Full-queue rapid seeks passed both modes with
+byte-identical reset PNG, zero readbacks/pixel extraction in playback,
+no browser errors or external requests. Image/direct-mode smoke,
+frozen install/build passed. See experiment README for instructions,
+failed first test cleanup and limits. Single-flight default retained.
+Full sustained 30fps, 4K, device loss and OBS interop remain open.
+No native OBS changes, new dependencies or push.
+
 ## 2026-11-15 — Direct external video sampling and one completion fence
 
 The vGPU lab now has a selectable native external-texture input

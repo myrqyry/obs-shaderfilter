@@ -187,3 +187,62 @@ no continuous audio sync measurement, no arbitrary rapid seek or
 device loss recovery qualification, no long-duration/4K or OBS
 interop verification. History is defined over processed frames,
 not every decoded source frame.
+
+## 2026-11-15 — Direct video textures and completion-fence reduction
+
+The next-video input selector offers **Texture copy** (default) and
+**Direct external texture**. Choose the mode before selecting a video.
+The direct mode uses the native GPUDevice.importExternalTexture API
+and vGPU draw.layout()/draw.group() with a freshly created bind group.
+It samples texture_external in the spatial shader and explicitly
+quantizes the sample to the old RGBA8 boundary. No intermediate upload
+texture is allocated in that mode. The normal copy route remains
+available, and still-image processing retains the original image graph.
+
+The pinned vGPU 0.6.0 automatic set() resource normalization rejects
+external textures; the public native group-claim API works. Import,
+bind and submission happen synchronously before awaiting completion,
+rather than retaining a video external texture across browser tasks.
+This is not proof of zero-copy hardware decoding.
+
+The graph used both frame.done and gpu.settled() for every submission.
+The installed frame.done implementation already fences the device queue
+and delivers claimed-group validation. The graph now pops its native
+validation scope immediately and awaits that result and frame.done
+together before committing history. It remains single-flight. A new
+regression counted 76 completion calls for 38 completed frames before
+the fix; the final tests observed one completion fence per submitted
+video frame (with an optional one frame still in flight at measurement).
+A thrown presentation callback cancels the frame without advancing
+history; the native direct-mode retry matched the copy reference.
+
+Reproduce with the existing Node/Chrome/ffmpeg/ImageMagick setup:
+
+    pnpm build
+    xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:external
+    VIDEO_INPUT=copy xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_INPUT=external xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+
+On NVIDIA Turing, the 318x182 decoded VP9 pattern's three successive
+feedback outputs from a single paused source frame had zero absolute
+pixel error against the copy path (231,504 RGBA bytes each), including
+a fourth comparison after an injected presentation failure. These
+are same-source recurrence comparisons, not arbitrary codec parity.
+Both 1080p30 modes initially completed 38 output frames per three
+seconds; with the redundant wait removed, copy completed 46 and 47,
+direct completed 46 and 44 in two short runs each. Approximately
+14.7–15.7 output fps, not full-source-rate playback or a controlled
+benchmark. Direct mode had zero explicit texture-copy calls, copy
+mode had zero external imports; both had zero explicit GPU readbacks
+and Canvas2D pixel extraction during playback. Seek/reset byte-identical
+PNG, pause, no browser/HTTP errors and no external requests passed in
+both modes. Original image smoke, Radeon/NVIDIA 2/2 native parity,
+render/resize/compute probes, build and frozen install passed.
+
+Retain copy as default for broader compatibility: no consistent
+direct-sampling throughput advantage was measured. No automatic
+fallback on unsupported direct imports; choose copy before reloading
+the video. Full frame rate, pipelining, arbitrary codec/color-space
+parity, long-duration and repeated rapid seek stress, device-loss
+recovery and OBS interop remain unqualified. No new dependency or
+native OBS change.

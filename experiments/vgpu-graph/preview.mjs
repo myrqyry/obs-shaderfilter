@@ -3,9 +3,10 @@ import { prepareShader } from '@vgpu/wgsl/prepare';
 import { createImageFeedbackGraph } from './image-feedback.mjs';
 
 const input=document.querySelector('#image'),videoFile=document.querySelector('#video-file');
+const videoInput=document.querySelector('#video-input');
 const video=document.querySelector('#video'),canvas=document.querySelector('#output'),status=document.querySelector('#status');
 const step=document.querySelector('#step'),reset=document.querySelector('#reset'),download=document.querySelector('#export');
-let gpu,graph,screen,present,image,output,mode='image',videoUrl,ticks=0,total=0,busy=false,failed=false;
+let gpu,graph,videoGraph,screen,present,image,output,mode='image',videoUrl,ticks=0,total=0,busy=false,failed=false;
 let callback=null,needsSeed=true,needsFrame=false,epoch=0;
 const displayShader=prepareShader(`
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -14,7 +15,7 @@ const displayShader=prepareShader(`
   return vec4f(rgba.rgb*rgba.a,rgba.a);
 }`);
 function controls(){
-  input.disabled=videoFile.disabled=busy||failed;
+  input.disabled=videoFile.disabled=videoInput.disabled=busy||failed;
   const playing=mode==='video'&&!video.paused&&!video.ended;
   step.disabled=busy||failed||!output||mode==='video';
   reset.disabled=download.disabled=busy||failed||!output||playing||video.seeking;
@@ -36,6 +37,7 @@ function cancel(){
 function clearVideo(){
   cancel();video.pause();video.removeAttribute('src');video.load();video.hidden=true;
   if(videoUrl)URL.revokeObjectURL(videoUrl);
+  videoGraph?.dispose();videoGraph=undefined;
   videoUrl=undefined;epoch++;needsFrame=false;needsSeed=true;mode='image';
 }
 function invalidate(){epoch++;needsSeed=true;needsFrame=true;output=null;cancel();controls()}
@@ -51,11 +53,12 @@ function schedule(){
 }
 async function paint(reseed=false){
   const currentEpoch=epoch;
-  if(reseed){graph.reset();ticks=0;needsSeed=false;}
+  const active=mode==='video'?videoGraph:graph;
+  if(reseed){active.reset();ticks=0;needsSeed=false;}
   output=null;
   const isVideo=mode==='video';
   if(isVideo)screen.resize([video.videoWidth,video.videoHeight]);
-  const next=isVideo?await graph.renderVideo(video,(f,target)=>{
+  const next=isVideo?await active.renderVideo(video,(f,target)=>{
     present.set({source:target});
     f.pass({target:screen},present);
   }):await graph.render(image.data,image.w,image.h);
@@ -70,7 +73,8 @@ async function paint(reseed=false){
   output=next;ticks++;total++;
   canvas.dataset.frames=String(total);
   canvas.dataset.history=reseed?'seed':'feedback';
-  status.textContent=`${w} × ${h} · WebGPU · frame ${ticks}`;
+  canvas.dataset.videoInput=isVideo?videoGraph.videoInput:'image';
+  status.textContent=`${w} × ${h} · WebGPU${isVideo?' · '+videoGraph.videoInput:''} · frame ${ticks}`;
 }
 async function perform(action){
   if(busy||failed)return;
@@ -97,7 +101,9 @@ input.addEventListener('change',()=>perform(async()=>{
 videoFile.addEventListener('change',()=>perform(async()=>{
   const file=videoFile.files?.[0];if(!file)return;
   if(typeof video.requestVideoFrameCallback!=='function')throw Error('Decoded video frame callbacks unavailable');
-  await ensureGPU();clearVideo();mode='video';invalidate();
+  await ensureGPU();clearVideo();
+  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value});
+  mode='video';invalidate();
   videoUrl=URL.createObjectURL(file);video.src=videoUrl;video.hidden=false;video.load();
   status.textContent='Loading local video…';
 }));
@@ -121,7 +127,7 @@ video.addEventListener('seeked',()=>{
     }
   }));
 });
-video.addEventListener('error',()=>{if(mode==='video'){clearVideo();output=null;status.textContent='Could not decode local video';controls()}});
+video.addEventListener('error',()=>{if(mode==='video'){invalidate();needsFrame=false;video.pause();status.textContent='Could not decode local video';controls()}});
 step.addEventListener('click',()=>perform(()=>paint()));
 reset.addEventListener('click',()=>perform(()=>paint(true)));
 download.addEventListener('click',()=>perform(async()=>{

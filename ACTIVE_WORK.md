@@ -1,5 +1,23 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-15 — Direct external video sampling and one completion fence
+
+The vGPU lab now has a selectable native external-texture input
+through vGPU draw.layout()/group(), retaining texture copy as default.
+Three feedback outputs of a paused 318x182 decoded VP9 pattern matched
+the copy route byte-for-byte; injected presentation failure did not
+advance history. Removed the redundant gpu.settled() barrier after
+frame.done, preserving native and vGPU validation before commit.
+1080p video smoke counted 76 fences/38 frames before, then one fence
+per submitted frame. Two short final runs per mode yielded 44–47
+completed frames in three seconds; no consistent direct-mode speed
+advantage, but no explicit video texture copy in direct mode.
+Both video modes, image preview, actual Radeon/NVIDIA parity, legacy
+probes, frozen install and build passed. See experiment README for
+scope, commands and limits. No dependency or native OBS changes.
+Still single-flight; full 30fps, pipelining, device loss, arbitrary
+codec parity and OBS interop remain open. Local checkpoint only.
+
 ## 2026-11-15 — vGPU decoded video preview
 
 Extended the isolated image graph to local decoded video with

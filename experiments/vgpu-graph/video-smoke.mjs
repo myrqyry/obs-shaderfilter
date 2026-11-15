@@ -8,6 +8,8 @@ import { preview } from 'vite';
 
 const dir=await mkdtemp(join(os.tmpdir(),'vgpu-video-'));
 const clip=join(dir,'test.webm');
+const inputMode=process.env.VIDEO_INPUT||'copy';
+assert.ok(['copy','external'].includes(inputMode));
 let server,browser;
 try{
   execFileSync('ffmpeg',['-v','error','-f','lavfi','-i','color=red:s=1920x1080:r=30:d=4','-f','lavfi','-i','color=blue:s=1920x1080:r=30:d=2','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0','-c:v','libvpx-vp9','-deadline','realtime','-cpu-used','8','-threads','4','-y',clip]);
@@ -20,12 +22,19 @@ try{
   page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url())});
   page.on('request',r=>{if(!/^(http:\/\/127\.0\.0\.1:|blob:|data:)/.test(r.url()))external.push(r.url())});
   await page.evaluateOnNewDocument(()=>{
-    window.receipts={copies:0,readbacks:0,pixels:0};
+    window.receipts={copies:0,imports:0,readbacks:0,pixels:0,fences:0};
+    const nativeImport=GPUDevice.prototype.importExternalTexture;
+    GPUDevice.prototype.importExternalTexture=function(options){
+      if(options.source instanceof HTMLVideoElement)window.receipts.imports++;
+      return nativeImport.call(this,options);
+    };
     const copy=GPUQueue.prototype.copyExternalImageToTexture;
     GPUQueue.prototype.copyExternalImageToTexture=function(src,...args){
       if(src.source instanceof HTMLVideoElement||src.source instanceof VideoFrame)window.receipts.copies++;
       return copy.call(this,src,...args);
     };
+    const fence=GPUQueue.prototype.onSubmittedWorkDone;
+    GPUQueue.prototype.onSubmittedWorkDone=function(...args){window.receipts.fences++;return fence.apply(this,args)};
     const read=GPUBuffer.prototype.mapAsync;
     GPUBuffer.prototype.mapAsync=function(mode,...args){
       if(mode===GPUMapMode.READ)window.receipts.readbacks++;
@@ -40,6 +49,7 @@ try{
   await cdp.send('Page.setDownloadBehavior',{behavior:'allow',downloadPath:dir});
   await page.goto('http://127.0.0.1:'+server.httpServer.address().port);
   assert.ok(await page.$('#video-file'),'video source input must exist');
+  await page.select('#video-input',inputMode);
   await (await page.$('#video-file')).uploadFile(clip);
   try{await page.waitForFunction(()=>Number(document.querySelector('#output').dataset.frames)>=1,{timeout:8000});}catch(e){console.log('initial failure',await page.evaluate(()=>({status:document.querySelector('#status').textContent,ready:document.querySelector('#video').readyState,error:document.querySelector('#video').error?.message,receipts:window.receipts})),errors);throw e;}
   assert.deepEqual(await page.$eval('#output',c=>[c.width,c.height]),[1920,1080]);
@@ -47,18 +57,21 @@ try{
   await page.waitForFunction(()=>!document.querySelector('#export').disabled);
   const stats=await page.evaluate(async()=>{
     const v=document.querySelector('#video'),c=document.querySelector('#output');
-    const start=performance.now(),n=Number(c.dataset.frames);
+    const start=performance.now(),n=Number(c.dataset.frames),before={...window.receipts};
     await v.play();
     await new Promise(r=>setTimeout(r,3000));
     v.pause();
-    return {seconds:(performance.now()-start)/1000,frames:Number(c.dataset.frames)-n,mediaTime:v.currentTime,receipts:{...window.receipts}};
+    return {seconds:(performance.now()-start)/1000,frames:Number(c.dataset.frames)-n,mediaTime:v.currentTime,receipts:Object.fromEntries(Object.entries(window.receipts).map(([k,v])=>[k,v-before[k]]))};
   });
   // Correctness gate, not a guaranteed frame-rate target on arbitrary hardware.
   assert.ok(stats.frames>=10,JSON.stringify(stats));
   assert.equal(stats.receipts.readbacks,0);
   assert.equal(stats.receipts.pixels,0);
-  assert.ok(stats.receipts.copies>=stats.frames);
-  console.log('1080p video playback receipt',JSON.stringify(stats));
+  if(inputMode==='external'){assert.ok(stats.receipts.imports>=stats.frames);assert.equal(stats.receipts.copies,0);}
+  else{assert.ok(stats.receipts.copies>=stats.frames);assert.equal(stats.receipts.imports,0);}
+  assert.equal(await page.$eval('#output',c=>c.dataset.videoInput),inputMode);
+  console.log('1080p '+inputMode+' video playback receipt',JSON.stringify(stats));
+  assert.ok(stats.receipts.fences<=stats.frames+2,'one graph completion fence per frame: '+JSON.stringify(stats));
   await page.waitForFunction(()=>!document.querySelector('#export').disabled);
   const old=await page.$eval('#output',c=>Number(c.dataset.frames));
   await page.evaluate(()=>{document.querySelector('#video').currentTime=5;});

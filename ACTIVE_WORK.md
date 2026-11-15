@@ -1,5 +1,21 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-15 — vGPU decoded video preview
+
+Extended the isolated image graph to local decoded video with
+presented-frame callbacks, native video-to-texture copy, bounded
+single-flight scheduling, one GPU submission for both effects and
+display, seek reseeding, pause and PNG export. Three final production
+browser runs on NVIDIA Turing using a 1080p30 VP9 fixture completed
+37–39 output frames per three seconds (12–13fps, not source-rate
+playback), no JavaScript pixel extraction or GPU readback during
+playback. Paused seek output was byte-identical to explicit reset.
+Image browser smoke and Radeon/NVIDIA native parity passed again.
+See experiments/vgpu-graph/README.md for reproduction and failed
+import attempts. No new dependencies or native OBS changes.
+Full throughput, arbitrary seek stress, device loss and OBS interop
+remain open; local commit only.
+
 ## 2026-11-15 — Standalone vGPU image feedback graph
 
 Extended the existing vGPU experiment (not the native plugin) with an

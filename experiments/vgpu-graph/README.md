@@ -134,3 +134,56 @@ multi-frame asynchronous pipelining, cross-device/browser portability,
 device-loss recovery, OBS transfer and native plugin integration. This
 experiment does not change the C/C++ plugin, installed OBS, scenes,
 profiles or user shader files.
+
+## 2026-11-15 — Decoded local video feedback
+
+The preview now also accepts a local video, up to 2048 x 2048,
+with muted autoplay and native playback/seek controls. Decoded
+frame callbacks drive a single in-flight render. Slow GPU work can
+skip source frames rather than queueing an unbounded history.
+The video path copies the presented HTMLVideoElement into the
+existing GPU RGBA texture via copyExternalImageToTexture and submits
+spatial filtering, temporal feedback, and canvas presentation together.
+No JavaScript RGBA extraction or explicit GPU readback during playback.
+The browser/driver may still perform internal conversions or copies;
+this is not proof of zero-copy decode. PNG export is available paused.
+
+Seeking invalidates the current history and reseeds on the new source
+frame. Paused seeking has an animation-frame fallback if the compositor
+callback was missed. Epoch checks suppress stale completion receipts;
+an already submitted GPU frame cannot be recalled. A newly loaded
+video starts muted to avoid missing the initial compositor callback.
+The original image workflow remains available.
+
+    pnpm build
+    xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+
+The video smoke generates a temporary 1920x1080 30fps VP9 clip using
+ffmpeg/libvpx-vp9, plays it in Chrome Beta on NVIDIA Turing, observes
+actual video texture copy calls, GPU mapAsync readbacks and Canvas2D
+getImageData calls, and checks the actual paused seek PNG against an
+explicit reset. ImageMagick reads the exported pixel. No external
+requests or browser/HTTP errors. Three consecutive final runs each
+completed 37, 38 or 39 output frames over approximately three seconds
+(12.3–13 fps), with zero readbacks or pixel extraction during playback.
+Seek to the blue segment produced RGB [0,15,255], with no residual red,
+and the reset export was byte identical. Pause stopped frame advancement.
+
+The original two-submission experiment completed 23 frames in three
+seconds; a first single-submission run completed 36. These are short
+observations, not a controlled performance benchmark. The initial
+loadeddata-only copy failed on this driver (no backing resource);
+wrapping the early source as VideoFrame also failed. The presented
+frame callback plus muted playback resolved the observed startup
+failure. The original smoke's 10fps threshold was replaced by a
+correctness-only minimum of 10 completed frames in three seconds;
+the measured rates are reported separately. A full 30fps source rate
+is not established. Image browser smoke, both native GPU parity suites
+and original render/compute probes passed; frozen install and build
+passed. No new dependency was required.
+
+Limitations: single validated video codec/adapter/browser fixture,
+no continuous audio sync measurement, no arbitrary rapid seek or
+device loss recovery qualification, no long-duration/4K or OBS
+interop verification. History is defined over processed frames,
+not every decoded source frame.

@@ -49,7 +49,7 @@ export function createImageFeedbackGraph(gpu){
     if(resources?.w===w&&resources?.h===h)return;
     const next={w,h};
     try{
-      next.input=texture(gpu,{kind:'2d',size:[w,h],format:'rgba8unorm',usage:['copy_dst','texture_binding'],label:'image.upload'});
+      next.input=texture(gpu,{kind:'2d',size:[w,h],format:'rgba8unorm',usage:['copy_dst','texture_binding','render_attachment'],label:'image.upload'});
       next.spatial=target(gpu,{size:[w,h],format:'rgba8unorm',label:'image.spatial'});
       next.history=pingPong(gpu,w,h,{format:'rgba8unorm',label:'image.history'});
     }catch(e){release(next);throw e;}
@@ -57,13 +57,11 @@ export function createImageFeedbackGraph(gpu){
     resources=next;hasHistory=false;
     release(old);
   }
-  return {
-    async render(rgba,w,h){
+  async function renderFrame(w,h,upload,presentOutput){
       checkIdle();
       if(!Number.isSafeInteger(w)||!Number.isSafeInteger(h)||w<1||h<1||
-         w>gpu.gpu.limits.maxTextureDimension2D||h>gpu.gpu.limits.maxTextureDimension2D||
-         !(rgba instanceof Uint8Array)||rgba.byteLength!==w*h*4)
-        throw new RangeError('Invalid RGBA image dimensions or length');
+         w>gpu.gpu.limits.maxTextureDimension2D||h>gpu.gpu.limits.maxTextureDimension2D)
+        throw new RangeError('Invalid RGBA image dimensions');
       busy=true;
       const errors=[],unsubscribe=gpu.onError(e=>errors.push(e));
       const device=gpu.gpu;
@@ -72,13 +70,14 @@ export function createImageFeedbackGraph(gpu){
       try{
         size(w,h);
         const r=resources;
-        device.queue.writeTexture({texture:r.input.gpu},rgba,{bytesPerRow:w*4},[w,h]);
+        upload(device.queue,r.input.gpu);
         spatial.set({source:r.input});
         const pass=hasHistory?feedback:seed;
         pass.set(hasHistory?{source:r.spatial,previous:r.history.read}:{source:r.spatial});
         const submitted=frame(gpu,f=>{
           f.pass({target:r.spatial},spatial);
           f.pass({target:r.history.write},pass);
+          presentOutput?.(f,r.history.write);
         });
         await submitted.done;
         await gpu.settled();
@@ -94,6 +93,18 @@ export function createImageFeedbackGraph(gpu){
       resources.history.swap();
       hasHistory=true;
       return resources.history.read;
+  }
+  return {
+    async render(rgba,w,h){
+      if(!(rgba instanceof Uint8Array)||rgba.byteLength!==w*h*4)
+        throw new RangeError('Invalid RGBA image length');
+      return renderFrame(w,h,(queue,destination)=>queue.writeTexture({texture:destination},rgba,{bytesPerRow:w*4},[w,h]));
+    },
+    async renderVideo(video,presentOutput){
+      if(typeof HTMLVideoElement==='undefined'||!(video instanceof HTMLVideoElement)||video.readyState<2||video.seeking)
+        throw Error('Video frame unavailable');
+      const w=video.videoWidth,h=video.videoHeight;
+      return renderFrame(w,h,(queue,destination)=>queue.copyExternalImageToTexture({source:video},{texture:destination,premultipliedAlpha:false},[w,h]),presentOutput);
     },
     reset(){checkIdle();hasHistory=false;},
     dispose(){

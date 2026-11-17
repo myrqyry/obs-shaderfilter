@@ -394,6 +394,16 @@ not mean GLSLP or WebGPU graph rendering has been integrated into the
 OBS plugin. Read [the worktree handoff](docs/WORKTREE_HANDOFF.md) for
 the consolidation history and known remaining acceptance boundaries.
 
+The [vGPU video-feedback lab](experiments/vgpu-graph/README.md) now
+has native pixel/recurrence checks, optional direct video input and fused
+passes, bounded submission queues, GPU timestamp diagnostics, and a
+repeatable moving-video benchmark. With three submissions in flight,
+the NVIDIA Chrome/Vulkan 30-second 1080p30 tests completed 899 copy-path
+and 895 direct-input frames without new explicit texture/buffer allocations
+during the measured interval. These are standalone browser results,
+not native OBS integration, total VRAM measurements or a universal
+real-time performance guarantee.
+
 
 ## Building
 

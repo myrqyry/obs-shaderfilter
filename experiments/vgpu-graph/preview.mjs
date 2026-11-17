@@ -1,4 +1,4 @@
-import { init, effect, frame, surface } from 'vgpu';
+import { init, effect, frame, surface, timer } from 'vgpu';
 import { prepareShader } from '@vgpu/wgsl/prepare';
 import { createImageFeedbackGraph } from './image-feedback.mjs';
 
@@ -6,6 +6,8 @@ const input=document.querySelector('#image'),videoFile=document.querySelector('#
 const videoInput=document.querySelector('#video-input'),videoQueue=document.querySelector('#video-queue'),videoPasses=document.querySelector('#video-passes');
 const video=document.querySelector('#video'),canvas=document.querySelector('#output'),status=document.querySelector('#status');
 const step=document.querySelector('#step'),reset=document.querySelector('#reset'),download=document.querySelector('#export');
+const profiling=new URLSearchParams(location.search).get('profile')==='1';
+let passTimer;
 let gpu,graph,videoGraph,screen,present,image,output,mode='image',videoUrl,ticks=0,total=0,busy=false,failed=false;
 let callback=null,needsSeed=true,needsFrame=false,epoch=0,inFlight=0,sourceSize='',pausedSeek=false,fallbackEpoch=null;
 const displayShader=prepareShader(`
@@ -23,7 +25,13 @@ function controls(){
 async function initialize(){
   if(gpu)return;
   if(!navigator.gpu)throw Error('WebGPU unavailable in this browser');
-  gpu=await init();
+  gpu=await init(profiling?{requiredFeatures:['timestamp-query']}:undefined);
+  if(profiling){
+    passTimer=timer(gpu);
+    passTimer.onResults(spans=>canvas.dispatchEvent(new CustomEvent('vgpu-timing',{detail:spans})));
+    canvas.dataset.profiling='enabled';
+    canvas.dataset.adapter=JSON.stringify({vendor:gpu.gpu.adapterInfo?.vendor,architecture:gpu.gpu.adapterInfo?.architecture});
+  }
   graph=createImageFeedbackGraph(gpu);
   screen=surface(gpu,canvas,{size:[1,1],autoResize:false,alphaMode:'premultiplied',dpr:1});
   present=effect(gpu,displayShader);
@@ -86,7 +94,7 @@ async function paint(reseed=false){
   if(isVideo)screen.resize([video.videoWidth,video.videoHeight]);
   const next=isVideo?await active.renderVideo(video,(f,target)=>{
     present.set({source:target});
-    f.pass({target:screen},present);
+    f.pass({target:screen,timer:passTimer?.span("display")},present);
   }):await graph.render(image.data,image.w,image.h);
   if(currentEpoch!==epoch)return;
   const [w,h]=next.size;
@@ -129,7 +137,7 @@ videoFile.addEventListener('change',()=>perform(async()=>{
   const file=videoFile.files?.[0];if(!file)return;
   if(typeof video.requestVideoFrameCallback!=='function')throw Error('Decoded video frame callbacks unavailable');
   await ensureGPU();clearVideo();
-  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value,maxInFlight:Number(videoQueue.value),fused:videoPasses.value==="fused"});
+  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value,maxInFlight:Number(videoQueue.value),fused:videoPasses.value==="fused",passTimer});
   mode='video';invalidate();
   videoUrl=URL.createObjectURL(file);video.src=videoUrl;video.hidden=false;video.load();
   status.textContent='Loading local video…';

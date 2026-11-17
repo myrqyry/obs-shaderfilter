@@ -1,5 +1,23 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-17 — Moving-video benchmark and native timestamp instrumentation
+
+Added opt-in video pass timing via vGPU timer and a reproducible
+five-case sequential production browser benchmark (12s per case,
+moving 1080p30 VP9, queue depth two). Normal split/fused copy output
+28.49/28.75fps; profiled split/fused copy and fused external
+28.08/28.49/28.00fps. GPU render-pass sum medians
+0.177/0.137/0.201ms vs wall completion fences 43.2/43.3/45.3ms.
+The remaining limitation is likely outside measured shader passes;
+its exact cause is not isolated. No full 30fps or long-duration
+stability claim. Profile readbacks are small timestamps, not pixels;
+normal playback still zero maps. Native Radeon/NVIDIA tests 7/7
+each, all five benchmark cases and original image/external/video
+browser regression smokes passed; frozen install/build passed.
+README describes reproduction, receipt sampling/measurement
+boundaries and limitations. Default graph unchanged, no dependency
+or native OBS changes, local commit only.
+
 ## 2026-11-17 — Optional fused spatial/feedback rendering
 
 Added an opt-in fused pass to the isolated vGPU lab, independent

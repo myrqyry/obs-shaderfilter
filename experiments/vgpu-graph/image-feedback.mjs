@@ -84,7 +84,7 @@ const feedbackShader=prepareShader(`
 // Render returns a borrowed output target. With pipelining, drain the
 // queue and consume the latest output before any new render/reset/resize/
 // dispose; earlier receipts can refer to a reused ping-pong texture.
-export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1,fused=false}={}){
+export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1,fused=false,passTimer}={}){
   if(videoInput!=="copy"&&videoInput!=="external")throw Error("Invalid video input mode");
   if(maxInFlight!==1&&maxInFlight!==2)throw RangeError("maxInFlight must be 1 or 2");
   const external=videoInput==="external"?draw(gpu,{shader:externalSpatialShader,label:"video.external-spatial"}):null;
@@ -149,15 +149,15 @@ export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1,fu
           }
           if(fused){
             submitted=frame(gpu,f=>{
-              f.pass({target:r.history.write},fusedPass);
+              f.pass({target:r.history.write,timer:passTimer?.span("fused")},fusedPass);
               presentOutput?.(f,r.history.write);
             });
           }else{
             const pass=hasHistory?feedback:seed;
             pass.set(hasHistory?{source:r.spatial,previous:r.history.read}:{source:r.spatial});
             submitted=frame(gpu,f=>{
-              f.pass({target:r.spatial},spatialPass);
-              f.pass({target:r.history.write},pass);
+              f.pass({target:r.spatial,timer:passTimer?.span("spatial")},spatialPass);
+              f.pass({target:r.history.write,timer:passTimer?.span("feedback")},pass);
               presentOutput?.(f,r.history.write);
             });
           }

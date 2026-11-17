@@ -361,3 +361,67 @@ The default split/one-frame/copy behavior is unchanged. No native OBS
 integration, dependency change, or remote publication. Long-duration
 performance, other codecs/adapters, exact fused rounding, 4K and
 device-loss recovery remain open.
+
+## 2026-11-17 — Sustained moving-video benchmark and GPU timing
+
+Optional video profiling is enabled by opening the preview with
+`?profile=1`. This explicitly requests the timestamp-query feature;
+unsupported adapters fail initialization in profiling mode rather than
+silently claiming timing support. The graph borrows a caller-supplied
+vGPU timer and labels its actual spatial/feedback or fused render pass.
+The video preview labels display in the same submission. Results are
+delivered through the canvas's vgpu-timing event; no history or
+scheduler changes. Normal preview does not enable timestamp queries
+or create the timer. Profiling introduces asynchronous small timestamp
+readbacks, not pixel readbacks.
+
+    pnpm build
+    xvfb-run -a -s '-screen 0 1440x900x24' pnpm bench:video
+
+BENCH_SECONDS defaults to 12 (integer 8–60). The script generates a
+temporary moving 1920x1080 30fps testsrc2 VP9 source using FFmpeg, opens
+fresh production preview pages on one headed Chrome Beta/Vulkan
+instance, warms each up for one second and runs five measurement
+windows sequentially. No external requests. It reports completed
+output rate, source compositor presented-frame counter, video
+playback quality total/dropped frame counters, per-second completions,
+sampled pending depth, native render pass and completion-fence counts,
+map calls, and p50/p95/mean durations. Measurement boundaries may
+include or exclude one or two outstanding completions; counters
+are not exact per-source-frame disposition ledgers. Fence durations
+are wall-clock from onSubmittedWorkDone invocation to resolution,
+including queue work, waiting and notification; GPU timing is the
+sum of timestamped render passes, not total GPU workload. Timing
+receipts can lag submissions and the vGPU ring can drop samples.
+Browser feature support is required for the profiled cases.
+
+Observed on NVIDIA Turing, 12 seconds per case, same moving fixture,
+queue depth two, in the order listed:
+
+| Mode | Completed | Output fps | GPU pass sum p50/p95 (ms) | Fence p50/p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Split copy, off | 342 | 28.49 | — | 43.0 / 50.0 |
+| Fused copy, off | 345 | 28.75 | — | 42.3 / 50.2 |
+| Split copy, timed | 337 | 28.08 | 0.177 / 0.200 | 43.2 / 51.3 |
+| Fused copy, timed | 342 | 28.49 | 0.137 / 0.156 | 43.3 / 51.8 |
+| Fused external, timed | 336 | 28.00 | 0.201 / 0.213 | 45.3 / 53.0 |
+
+Profile rows provided 337, 342 and 336 timestamp result sets.
+Normal cases had zero GPU map calls; profiling had 338, 341 and 336
+timestamp staging map calls. Source video quality reported 360 total
+frames and 0/1 drops in the first two cases. All five cases completed
+normally with no browser/HTTP errors or external requests. This is
+one sequential benchmark series, not repeated randomized trials.
+The small timed render-pass sums relative to the wall-clock waits
+suggest the primary constraint is outside shader execution, but
+do not identify whether upload, video/compositor scheduling, queue
+latency or completion notification is responsible. No sustained
+30fps claim, no proof of indefinite stability or full decode zero-copy.
+
+Native suites 7/7 on Radeon and NVIDIA, including actual timestamp
+span receipts for split and fused graphs: tiny Radeon fixture returned
+zero-duration timestamps, NVIDIA nonzero. The timing test validates
+receipt shape, not timer precision or cross-adapter performance.
+Normal image and external parity browser smokes, both split-copy
+and fused-external video/rapid-seek smokes, build, and frozen install
+also passed. No dependency change or default scheduling change.

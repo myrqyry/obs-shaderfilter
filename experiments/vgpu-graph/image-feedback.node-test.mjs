@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { init } from 'vgpu/node';
+import { init, timer } from 'vgpu/node';
 import { createImageFeedbackGraph } from './image-feedback.mjs';
 
 function reference(input,w,h,previous){
@@ -164,4 +164,25 @@ test('fused feedback stays within one byte of split graph through ties, recurren
     assert.equal(fused.passCount,1);
     assert.equal(split.passCount,2);
   }finally{await Promise.allSettled(pending);fused.dispose();split.dispose();gpu.dispose();}
+});
+
+
+test('opt-in vGPU timer marks the actual split and fused passes',async()=>{
+  const gpu=await init({requiredFeatures:['timestamp-query']});
+  const timing=timer(gpu),samples=[];
+  const off=timing.onResults(sample=>samples.push(sample));
+  try{
+    for(const fused of [false,true]){
+      const graph=createImageFeedbackGraph(gpu,{fused,passTimer:timing});
+      try{
+        await graph.render(fixture(67,11),67,11);
+        await gpu.settled();
+        const sample=samples.at(-1);
+        assert.deepEqual(Object.keys(sample??{}).sort(),fused?['fused']:['feedback','spatial']);
+        assert.ok(Object.values(sample).every(v=>Number.isFinite(v)&&v>=0));
+      }finally{graph.dispose();}
+    }
+    assert.equal(samples.length,2);
+    console.log('Native GPU timer receipts',samples);
+  }finally{off();timing.dispose();gpu.dispose();}
 });

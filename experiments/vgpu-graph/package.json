@@ -17,6 +17,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test:preview": "node preview-smoke.mjs",
     "test:video": "node video-smoke.mjs",
-    "test:external": "node external-video-smoke.mjs"
+    "test:external": "node external-video-smoke.mjs",
+    "bench:video": "node video-benchmark.mjs"
   }
 }

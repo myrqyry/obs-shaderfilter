@@ -1,5 +1,20 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-17 — Thirty-second three-slot video resource soak
+
+Added BENCH_SOAK=1 (30s default, 8–60s configurable) and weak native
+texture/buffer creation/destruction instrumentation to the existing
+benchmark; renderer unchanged. NVIDIA moving 1080p30 VP9 split graph,
+three slots: texture copy 899 outputs / 29.96fps, direct external
+895 / 29.83fps. App index gaps 1/5, zero reported source drops, peak
+three outstanding, no GPU maps/errors/external requests. Explicit
+textures unchanged 4/4 and 3/3; no buffer creation or destruction
+during either window. Fence medians 35.9/45.4ms. Production build and
+both soak cases passed. Counters do not measure decoder/compositor,
+driver VRAM, bind groups or GC residency, so no general memory-leak
+or indefinite playback claim. See experiment README for commands.
+No dependency, native OBS or default-mode changes, local only.
+
 ## 2026-11-17 — Three-slot queue reaches source-rate video benchmark
 
 Extended the opt-in bounded vGPU queue to three outstanding submissions

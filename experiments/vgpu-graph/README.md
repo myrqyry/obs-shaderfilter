@@ -516,3 +516,35 @@ Deeper queueing can increase completion latency; no end-to-end display
 latency measurement yet. Keep three slots opt-in. Frozen install/build,
 image preview, direct/fused shader parity and existing two-slot
 video/seek smoke passed again. No new dependency or native OBS changes.
+
+## 2026-11-17 — Thirty-second resource-stability soak
+
+    pnpm build
+    BENCH_SOAK=1 BENCH_SECONDS=30 xvfb-run -a -s '-screen 0 1440x900x24' pnpm bench:video
+
+The soak runs the unchanged split graph with three submission slots,
+first texture copy then external input, on a moving 1080p30 VP9 fixture.
+BENCH_SECONDS accepts 8–60; soak defaults to 30. It requires at least
+27 completed output frames per second of requested measurement duration,
+no additional explicit GPU textures/buffers created or destroyed after
+warmup, no GPU map calls, and the existing diagnostics and error gates.
+A MutationObserver now also measures peak pending depth across changes
+to the canvas dataset, not just the previous once-per-second samples.
+
+| Input | Completed | Output fps | App index gaps | Fence p50/p95 ms | Explicit textures at start/end |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Copy | 899 | 29.96 | 1 | 35.9/50.9 | 4/4 |
+| External | 895 | 29.83 | 5 | 45.4/59.0 | 3/3 |
+
+Both actual NVIDIA Turing Chrome/Vulkan runs reached three outstanding
+submissions without exceeding capacity and reported zero dropped source
+video frames, GPU buffer creations, GPU maps, browser/HTTP errors and
+external requests. No new texture allocations or destruction during
+either measurement. All 30 one-second completion buckets were 28–31.
+These counts come from instrumented GPUDevice.createTexture/createBuffer
+and matching explicit destroy calls using weak tracking; canvas-owned
+textures, browser decoder, driver allocations, external texture wrappers,
+bind groups, GC and total VRAM residency are not measured. This establishes
+steady-state reuse of explicitly created textures/buffers for two
+30-second runs, not a general memory-leak proof or overnight soak.
+No change to the renderer, shaders or default queue behavior.

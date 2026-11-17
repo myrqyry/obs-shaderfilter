@@ -6,7 +6,8 @@ import {execFileSync} from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 import {preview} from 'vite';
 
-const seconds=Number(process.env.BENCH_SECONDS||12);
+const soak=process.env.BENCH_SOAK==='1';
+const seconds=Number(process.env.BENCH_SECONDS||(soak?30:12));
 assert.ok(Number.isInteger(seconds)&&seconds>=8&&seconds<=60);
 const dir=await mkdtemp(join(os.tmpdir(),'vgpu-bench-'));
 let server,browser;
@@ -17,7 +18,10 @@ try{
   browser=await puppeteer.launch({executablePath:process.env.BROWSER_BIN||'/usr/bin/google-chrome-beta',headless:false,args:['--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-webgpu','--use-angle=vulkan','--enable-features=Vulkan']});
   const diagnostics=process.env.BENCH_DIAGNOSTIC==='1';
   const queueSweep=process.env.BENCH_QUEUE_SWEEP==='1';
-  const cases=queueSweep?[
+  const cases=soak?[
+    {input:'copy',fused:false,profile:false,depth:3},
+    {input:'external',fused:false,profile:false,depth:3},
+  ]:queueSweep?[
     {input:'copy',fused:false,profile:false,depth:2},
     {input:'copy',fused:false,profile:false,depth:3},
     {input:'external',fused:false,profile:false,depth:2},
@@ -43,6 +47,27 @@ try{
       page.on('request',r=>{if(!/^(http:\/\/127\.0\.0\.1:|blob:|data:)/.test(r.url()))external.push(r.url())});
       await page.evaluateOnNewDocument(()=>{
         window.metrics=null;
+        // Count application-visible native resources, not driver/compositor
+        // allocations or GC residency. Weak tracking does not retain objects.
+        const resources={texture:{created:0,destroyed:0},buffer:{created:0,destroyed:0}};
+        window.resourceCounts=()=>JSON.parse(JSON.stringify(resources));
+        for(const [kind,create,prototype] of [
+          ['texture','createTexture',GPUTexture.prototype],
+          ['buffer','createBuffer',GPUBuffer.prototype],
+        ]){
+          const seen=new WeakSet(),released=new WeakSet();
+          const make=GPUDevice.prototype[create],destroy=prototype.destroy;
+          GPUDevice.prototype[create]=function(...args){
+            const object=make.apply(this,args);
+            seen.add(object);resources[kind].created++;
+            return object;
+          };
+          prototype.destroy=function(...args){
+            const result=destroy.apply(this,args);
+            if(seen.has(this)&&!released.has(this)){released.add(this);resources[kind].destroyed++;}
+            return result;
+          };
+        }
         // Keep the independent observer out of the application callback counts.
         const request=HTMLVideoElement.prototype.requestVideoFrameCallback;
         window.observeSource=(video,cb)=>request.call(video,cb);
@@ -102,15 +127,21 @@ try{
         c.addEventListener('vgpu-timing',listen);
         const q0=v.getVideoPlaybackQuality(),n0=Number(c.dataset.frames),t0=performance.now(),media0=v.currentTime;
         let prev=n0;
+        const resourceStart=window.resourceCounts();
+        const resourceSamples=[];
+        const pendingObserver=new MutationObserver(()=>{peakPending=Math.max(peakPending,Number(c.dataset.pending)||0)});
+        pendingObserver.observe(c,{attributes:true,attributeFilter:['data-pending']});
         window.metrics=m;
         for(let i=0;i<duration;i++){
           await new Promise(r=>setTimeout(r,1000));
           const count=Number(c.dataset.frames);
           m.buckets.push(count-prev);prev=count;
           peakPending=Math.max(peakPending,Number(c.dataset.pending));
+          resourceSamples.push(window.resourceCounts());
         }
         const elapsed=(performance.now()-t0)/1000,completed=Number(c.dataset.frames)-n0,media=v.currentTime-media0,q1=v.getVideoPlaybackQuality();
         window.metrics=null;
+        pendingObserver.disconnect();
         v.cancelVideoFrameCallback(callback);
         c.removeEventListener('vgpu-timing',listen);
         v.pause();
@@ -120,7 +151,7 @@ try{
         };
         const timings=Object.fromEntries([...new Set(m.timings.flatMap(Object.keys))].map(name=>[name,summary(m.timings.map(x=>x[name]).filter(Number.isFinite))]));
         timings.total=summary(m.timings.map(x=>Object.values(x).reduce((a,b)=>a+b,0)));
-        return {stages:Object.fromEntries(Object.entries(m.stages).map(([name,values])=>[name,summary(values.filter(Number.isFinite))])),sourceCallbacks,appCallbacks:m.appPresented.length,appGaps:m.appPresented.slice(1).reduce((sum,n,i)=>sum+Math.max(0,n-m.appPresented[i]-1),0),elapsed,media,completed,fps:completed/elapsed,presented:firstPresented===undefined?null:lastPresented-firstPresented+1,videoFrames:q1.totalVideoFrames-q0.totalVideoFrames,videoDroppedFrames:q1.droppedVideoFrames-q0.droppedVideoFrames,peakPending,buckets:m.buckets,submits:m.submits,passes:m.passes,maps:m.maps,fence:summary(m.fences),timings,adapter:c.dataset.adapter,profiling:c.dataset.profiling||'off'};
+        return {resourceStart,resourceEnd:window.resourceCounts(),resourceSamples,stages:Object.fromEntries(Object.entries(m.stages).map(([name,values])=>[name,summary(values.filter(Number.isFinite))])),sourceCallbacks,appCallbacks:m.appPresented.length,appGaps:m.appPresented.slice(1).reduce((sum,n,i)=>sum+Math.max(0,n-m.appPresented[i]-1),0),elapsed,media,completed,fps:completed/elapsed,presented:firstPresented===undefined?null:lastPresented-firstPresented+1,videoFrames:q1.totalVideoFrames-q0.totalVideoFrames,videoDroppedFrames:q1.droppedVideoFrames-q0.droppedVideoFrames,peakPending,buckets:m.buckets,submits:m.submits,passes:m.passes,maps:m.maps,fence:summary(m.fences),timings,adapter:c.dataset.adapter,profiling:c.dataset.profiling||'off'};
       },seconds);
       await page.waitForFunction(()=>document.querySelector('#output').dataset.pending==='0'&&!document.querySelector('#export').disabled,{timeout:15000});
       console.log(JSON.stringify({config,...result}));
@@ -128,7 +159,12 @@ try{
       assert.ok(result.media>=seconds*.9);
       assert.equal(result.passes,result.submits*(config.fused?2:3));
       assert.ok(result.peakPending<=(config.depth??2));
-      if(diagnostics||queueSweep){
+      if(soak){
+        assert.ok(result.completed>=seconds*27,'soak output below 90% of nominal source rate');
+        assert.deepEqual(result.resourceEnd.texture,result.resourceStart.texture,'unexpected steady-state texture allocation/destruction');
+        assert.deepEqual(result.resourceEnd.buffer,result.resourceStart.buffer,'unexpected steady-state buffer allocation/destruction');
+      }
+      if(diagnostics||queueSweep||soak){
         assert.ok(result.stages?.callback?.n>=result.completed-2,'missing actual application callback receipts');
         assert.ok(result.stages?.[config.input==='copy'?'copy':'import']?.n>=result.completed-2,'missing video ingest receipts');
         assert.ok(result.stages?.submit?.n>=result.completed-2,'missing native submit receipts');

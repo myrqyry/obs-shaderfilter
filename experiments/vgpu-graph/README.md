@@ -304,3 +304,60 @@ test child was stopped. No new dependency, native OBS change or
 additional worktree. Single-frame mode remains default because
 long-duration, 4K, device-loss recovery, arbitrary codec/color-space
 parity and OBS interop remain unqualified.
+
+## 2026-11-17 — Optional fused spatial/feedback pass
+
+The next-video passes selector offers Split (reference, default) and
+Fused (experimental), independently of queue depth and video input.
+Fusion samples the spatial neighborhood and previous history in a
+single WGSL pass. Seed frames use the existing spatial shader directly
+on the history target. The graph no longer creates its full-resolution
+spatial intermediate in fused mode (8,294,400 bytes of logical RGBA8
+storage at 1920x1080, excluding implementation allocation overhead).
+Actual browser encoder instrumentation confirmed two render passes
+per submission including presentation, versus three in split mode.
+
+The removed RGBA8 store/load is approximated with explicit WGSL
+rounding. Do not claim bit identity: at exact half-byte ties both
+tested adapters produced a one-byte difference from their native
+render-target conversion. Explicit rounding, pack/unpack, and
+bit-level conversion experiments did not establish exact equivalence.
+The simple explicit rounding variant is retained as opt-in rather than
+changing reference semantics or adding expensive emulation.
+
+Native Dawn Radeon and NVIDIA suites passed 6/6 each. Across 480
+successive fused frames per adapter (four dimension sequences,
+including 1-pixel width, asymmetric fixtures, forced rounding ties,
+two-frame submissions and resets), maximum difference from split
+was one 8-bit RGB channel value; 258 channel comparisons differed
+on each adapter, seed and alpha were exact. Native validation failure
+poisoning/recovery passed for both split and fused. Chrome's actual
+318x182 decoded VP9 source also matched within one channel value
+for both fused input modes, including a fourth recurrence comparison
+after an injected presentation failure. Exact source alpha remained.
+No shader/device errors were reported in the successful probes.
+
+Reproduce:
+
+    pnpm build
+    VIDEO_QUEUE=2 VIDEO_INPUT=copy VIDEO_FUSED=0 xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_QUEUE=2 VIDEO_INPUT=copy VIDEO_FUSED=1 xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_QUEUE=2 VIDEO_INPUT=external VIDEO_FUSED=1 xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:external
+    pnpm test
+
+Short 1080p30 VP9 browser observations on NVIDIA Turing: split-copy
+63 and 80 completed frames in 3s; fused-copy 83 and 83; fused-external
+80 and 82. Final repeat had 243 passes/81 submissions in split,
+168/84 in fused-copy, 166/83 in fused-external. The latest throughput
+was about 26.7, 27.7 and 27.3 fps respectively, so a modest gain in
+that repeat, not a controlled benchmark or sustained 30fps claim.
+All video runs passed pause, rapid seek at queue capacity, PNG reset
+equality, zero explicit GPU readbacks/pixel extraction during playback,
+no browser errors or external requests. Original image smoke,
+native render/resize/compute probes, build and frozen install passed.
+
+The default split/one-frame/copy behavior is unchanged. No native OBS
+integration, dependency change, or remote publication. Long-duration
+performance, other codecs/adapters, exact fused rounding, 4K and
+device-loss recovery remain open.

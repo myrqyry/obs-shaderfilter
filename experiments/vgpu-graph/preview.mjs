@@ -3,7 +3,7 @@ import { prepareShader } from '@vgpu/wgsl/prepare';
 import { createImageFeedbackGraph } from './image-feedback.mjs';
 
 const input=document.querySelector('#image'),videoFile=document.querySelector('#video-file');
-const videoInput=document.querySelector('#video-input'),videoQueue=document.querySelector('#video-queue');
+const videoInput=document.querySelector('#video-input'),videoQueue=document.querySelector('#video-queue'),videoPasses=document.querySelector('#video-passes');
 const video=document.querySelector('#video'),canvas=document.querySelector('#output'),status=document.querySelector('#status');
 const step=document.querySelector('#step'),reset=document.querySelector('#reset'),download=document.querySelector('#export');
 let gpu,graph,videoGraph,screen,present,image,output,mode='image',videoUrl,ticks=0,total=0,busy=false,failed=false;
@@ -15,7 +15,7 @@ const displayShader=prepareShader(`
   return vec4f(rgba.rgb*rgba.a,rgba.a);
 }`);
 function controls(){
-  input.disabled=videoFile.disabled=videoInput.disabled=videoQueue.disabled=busy||inFlight>0||failed;
+  input.disabled=videoFile.disabled=videoInput.disabled=videoQueue.disabled=videoPasses.disabled=busy||inFlight>0||failed;
   const playing=mode==='video'&&!video.paused&&!video.ended;
   step.disabled=busy||inFlight>0||failed||!output||mode==='video';
   reset.disabled=download.disabled=busy||inFlight>0||failed||!output||playing||video.seeking;
@@ -100,6 +100,7 @@ async function paint(reseed=false){
   canvas.dataset.frames=String(total);
   canvas.dataset.history=reseed?'seed':'feedback';
   canvas.dataset.videoInput=isVideo?videoGraph.videoInput:'image';
+  canvas.dataset.effectPasses=String(active.passCount);
   status.textContent=`${w} × ${h} · WebGPU${isVideo?' · '+videoGraph.videoInput:''} · frame ${ticks}`;
 }
 async function perform(action){
@@ -128,7 +129,7 @@ videoFile.addEventListener('change',()=>perform(async()=>{
   const file=videoFile.files?.[0];if(!file)return;
   if(typeof video.requestVideoFrameCallback!=='function')throw Error('Decoded video frame callbacks unavailable');
   await ensureGPU();clearVideo();
-  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value,maxInFlight:Number(videoQueue.value)});
+  videoGraph=createImageFeedbackGraph(gpu,{videoInput:videoInput.value,maxInFlight:Number(videoQueue.value),fused:videoPasses.value==="fused"});
   mode='video';invalidate();
   videoUrl=URL.createObjectURL(file);video.src=videoUrl;video.hidden=false;video.load();
   status.textContent='Loading local video…';

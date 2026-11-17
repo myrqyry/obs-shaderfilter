@@ -1,5 +1,23 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-17 — Optional fused spatial/feedback rendering
+
+Added an opt-in fused pass to the isolated vGPU lab, independent
+of two-frame scheduling and external/copy input. Actual browser
+instrumentation confirms two passes per submission (including
+presentation) instead of three; the intermediate RGBA8 spatial
+target is omitted. Native Radeon/NVIDIA tests 6/6 each, 480 fused
+frames per adapter within one RGB byte of split, exact seeds/alpha.
+Half-byte ties are not bit-identical; split remains reference/default.
+Decoded VP9 pattern, validation failure recovery, image browser
+smoke and both fused playback modes including full-queue rapid seeks
+passed. Short latest 1080p30 repeat: split 80, fused copy 83, fused
+external 82 completed frames/3s. Earlier split run 63 illustrates
+run variability. No sustained 30fps or exact rounding claim.
+Frozen install/build and original probes passed. See experiment
+README for receipts, failed exact-conversion attempts and commands.
+No dependencies, native OBS changes or push.
+
 ## 2026-11-15 — Bounded two-frame video queue
 
 Added an opt-in two-frame scheduler to the isolated vGPU preview.

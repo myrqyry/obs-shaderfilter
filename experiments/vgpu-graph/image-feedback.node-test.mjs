@@ -104,8 +104,8 @@ test('two queued submissions preserve recurrence and enforce a bounded queue',as
   }finally{await Promise.allSettled(pending);graph.dispose();serial.dispose();gpu.dispose();}
 });
 
-test('native validation failure invalidates dependent queued history until reset',async()=>{
-  const gpu=await init(),graph=createImageFeedbackGraph(gpu,{maxInFlight:2});
+for(const fused of [false,true])test('native validation failure invalidates dependent queued history until reset (fused='+fused+')',async()=>{
+  const gpu=await init(),graph=createImageFeedbackGraph(gpu,{maxInFlight:2,fused});
   const a=fixture(17,9),b=fixture(17,9,47);
   const queue=gpu.gpu.queue,write=queue.writeTexture;
   const pending=[];
@@ -129,4 +129,39 @@ test('native validation failure invalidates dependent queued history until reset
     await Promise.allSettled(pending);
     graph.dispose();gpu.dispose();
   }
+});
+
+test('fused feedback stays within one byte of split graph through ties, recurrence and resize',async()=>{
+  const gpu=await init(),split=createImageFeedbackGraph(gpu),fused=createImageFeedbackGraph(gpu,{fused:true,maxInFlight:2});
+  const pending=[];
+  try{
+    // Force half-byte spatial ties as well as varied alpha and edge pixels.
+    let maximum=0,changed=0;
+    for(const [w,h] of [[17,9],[1,3],[9,17],[67,11]]){
+      split.reset();fused.reset();
+      for(let k=0;k<120;k+=2){
+        const a=fixture(w,h,k*19),b=fixture(w,h,(k+1)*19);
+        if(w>1){a[0]=0;a[4]=1;a[8]=0;b[0]=1;b[4]=2;b[8]=1;}
+        const expectedA=await pixels(await split.render(a,w,h));
+        const expectedB=await pixels(await split.render(b,w,h));
+        const one=fused.render(a,w,h),two=fused.render(b,w,h);
+        pending.push(one,two);
+        const [x,y]=await Promise.all([one,two]);
+        const gotA=await pixels(x),gotB=await pixels(y);
+        if(k===0)assert.deepEqual(gotA,expectedA,'seed must be exact');
+        for(const [actual,expected] of [[gotA,expectedA],[gotB,expectedB]]){
+          assert.equal(actual.length,expected.length);
+          for(let i=0;i<actual.length;i++){
+            const error=Math.abs(actual[i]-expected[i]);
+            maximum=Math.max(maximum,error);changed+=Number(error>0);
+            if(i%4===3)assert.equal(error,0,'alpha');
+            assert.ok(error<=1,'recurrence error '+error+' at frame '+k+' channel '+i);
+          }
+        }
+      }
+    }
+    console.log('480 fused frames, max channel error',maximum,'changed channels',changed);
+    assert.equal(fused.passCount,1);
+    assert.equal(split.passCount,2);
+  }finally{await Promise.allSettled(pending);fused.dispose();split.dispose();gpu.dispose();}
 });

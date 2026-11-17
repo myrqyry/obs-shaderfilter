@@ -10,6 +10,7 @@ const dir=await mkdtemp(join(os.tmpdir(),'vgpu-video-'));
 const clip=join(dir,'test.webm');
 const inputMode=process.env.VIDEO_INPUT||'copy';
 const depth=Number(process.env.VIDEO_QUEUE||1);
+const fused=process.env.VIDEO_FUSED==='1';
 assert.ok([1,2].includes(depth));
 assert.ok(['copy','external'].includes(inputMode));
 let server,browser;
@@ -24,7 +25,11 @@ try{
   page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url())});
   page.on('request',r=>{if(!/^(http:\/\/127\.0\.0\.1:|blob:|data:)/.test(r.url()))external.push(r.url())});
   await page.evaluateOnNewDocument(()=>{
-    window.receipts={copies:0,imports:0,readbacks:0,pixels:0,fences:0};
+    window.receipts={copies:0,imports:0,readbacks:0,pixels:0,fences:0,passes:0,submits:0};
+    const begin=GPUCommandEncoder.prototype.beginRenderPass;
+    GPUCommandEncoder.prototype.beginRenderPass=function(...args){window.receipts.passes++;return begin.apply(this,args)};
+    const submit=GPUQueue.prototype.submit;
+    GPUQueue.prototype.submit=function(...args){window.receipts.submits++;return submit.apply(this,args)};
     const nativeImport=GPUDevice.prototype.importExternalTexture;
     GPUDevice.prototype.importExternalTexture=function(options){
       if(options.source instanceof HTMLVideoElement)window.receipts.imports++;
@@ -52,6 +57,7 @@ try{
   await page.goto('http://127.0.0.1:'+server.httpServer.address().port);
   assert.ok(await page.$('#video-file'),'video source input must exist');
   await page.select('#video-input',inputMode);
+  if(fused){assert.ok(await page.$('#video-passes'),'fusion selector missing');await page.select('#video-passes','fused');}
   if(depth===2){assert.ok(await page.$('#video-queue'),'queue selector missing');await page.select('#video-queue','2');}
   await (await page.$('#video-file')).uploadFile(clip);
   try{await page.waitForFunction(()=>Number(document.querySelector('#output').dataset.frames)>=1,{timeout:8000});}catch(e){console.log('initial failure',await page.evaluate(()=>({status:document.querySelector('#status').textContent,ready:document.querySelector('#video').readyState,error:document.querySelector('#video').error?.message,receipts:window.receipts})),errors);throw e;}
@@ -78,7 +84,9 @@ try{
   if(inputMode==='external'){assert.ok(stats.receipts.imports>=stats.frames);assert.equal(stats.receipts.copies,0);}
   else{assert.ok(stats.receipts.copies>=stats.frames);assert.equal(stats.receipts.imports,0);}
   assert.equal(await page.$eval('#output',c=>c.dataset.videoInput),inputMode);
-  console.log('1080p '+inputMode+' video playback receipt',JSON.stringify(stats));
+  assert.equal(await page.$eval('#output',c=>c.dataset.effectPasses),fused?'1':'2');
+  console.log('1080p '+inputMode+' '+(fused?'fused':'split')+' video playback receipt',JSON.stringify(stats));
+  assert.equal(stats.receipts.passes,stats.receipts.submits*(fused?2:3),'actual encoded passes including display');
   assert.ok(stats.receipts.fences<=stats.frames+depth+1,'one graph completion fence per frame: '+JSON.stringify(stats));
   await page.waitForFunction(()=>!document.querySelector('#export').disabled);
   const old=await page.$eval('#output',c=>Number(c.dataset.frames));

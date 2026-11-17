@@ -11,6 +11,21 @@ const spatialShader=prepareShader(`
   let right=textureLoad(source,min(p+vec2i(1,0),hi),0);
   return vec4f((left.rgb+2.0*center.rgb+right.rgb)*0.25,center.a);
 }`);
+const spatialFeedbackShader=prepareShader(`
+@group(0) @binding(0) var source: texture_2d<f32>;
+@group(0) @binding(1) var previous: texture_2d<f32>;
+@fragment fn fs_main(@builtin(position) pixel: vec4f) -> @location(0) vec4f {
+  let p=vec2i(pixel.xy);
+  let hi=vec2i(textureDimensions(source))-vec2i(1);
+  let center=textureLoad(source,p,0);
+  let left=textureLoad(source,max(p-vec2i(1,0),vec2i(0)),0);
+  let right=textureLoad(source,min(p+vec2i(1,0),hi),0);
+  let filtered=(left.rgb+2.0*center.rgb+right.rgb)*0.25;
+  // Approximate eliminated rgba8unorm store/load; tie rounding can differ.
+  let quantized=round(filtered*255.0)/255.0;
+  let old=textureLoad(previous,p,0);
+  return vec4f(quantized*0.5+old.rgb*0.375,center.a);
+}`);
 const externalSpatialShader=prepareShader(`
 @group(0) @binding(0) var source: texture_external;
 @vertex fn vs_main(@builtin(vertex_index) i:u32) -> @builtin(position) vec4f {
@@ -27,6 +42,28 @@ const externalSpatialShader=prepareShader(`
   let l=round(clamp(left,vec4f(0),vec4f(1))*255.0)/255.0;
   let r=round(clamp(right,vec4f(0),vec4f(1))*255.0)/255.0;
   return vec4f((l.rgb+2.0*c.rgb+r.rgb)*0.25,c.a);
+}`);
+const externalSpatialFeedbackShader=prepareShader(`
+@group(0) @binding(0) var source: texture_external;
+@vertex fn vs_main(@builtin(vertex_index) i:u32) -> @builtin(position) vec4f {
+  return vec4f(array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i],0,1);
+}
+@group(0) @binding(1) var previous: texture_2d<f32>;
+@fragment fn fs_main(@builtin(position) pixel: vec4f) -> @location(0) vec4f {
+  let p=vec2i(pixel.xy);
+  let hi=vec2i(textureDimensions(source))-vec2i(1);
+  let center=textureLoad(source,p);
+  let left=textureLoad(source,max(p-vec2i(1,0),vec2i(0)));
+  let right=textureLoad(source,min(p+vec2i(1,0),hi));
+  // Preserve the RGBA8 conversion boundary of the copy-based path.
+  let c=round(clamp(center,vec4f(0),vec4f(1))*255.0)/255.0;
+  let l=round(clamp(left,vec4f(0),vec4f(1))*255.0)/255.0;
+  let r=round(clamp(right,vec4f(0),vec4f(1))*255.0)/255.0;
+  let filtered=(l.rgb+2.0*c.rgb+r.rgb)*0.25;
+  // Approximate eliminated rgba8unorm store/load; tie rounding can differ.
+  let quantized=round(filtered*255.0)/255.0;
+  let old=textureLoad(previous,p,0);
+  return vec4f(quantized*0.5+old.rgb*0.375,c.a);
 }`);
 const seedShader=prepareShader(`
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -47,13 +84,15 @@ const feedbackShader=prepareShader(`
 // Render returns a borrowed output target. With pipelining, drain the
 // queue and consume the latest output before any new render/reset/resize/
 // dispose; earlier receipts can refer to a reused ping-pong texture.
-export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1}={}){
+export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1,fused=false}={}){
   if(videoInput!=="copy"&&videoInput!=="external")throw Error("Invalid video input mode");
   if(maxInFlight!==1&&maxInFlight!==2)throw RangeError("maxInFlight must be 1 or 2");
   const external=videoInput==="external"?draw(gpu,{shader:externalSpatialShader,label:"video.external-spatial"}):null;
   const spatial=effect(gpu,spatialShader,{label:'image.spatial'});
-  const seed=effect(gpu,seedShader,{label:'image.seed'});
-  const feedback=effect(gpu,feedbackShader,{label:'image.feedback'});
+  const fusedFeedback=fused&&!external?effect(gpu,spatialFeedbackShader,{label:'image.fused-feedback'}):null;
+  const externalFeedback=fused&&external?draw(gpu,{shader:externalSpatialFeedbackShader,label:'video.fused-feedback'}):null;
+  const seed=fused?null:effect(gpu,seedShader,{label:'image.seed'});
+  const feedback=fused?null:effect(gpu,feedbackShader,{label:'image.feedback'});
   let resources,hasHistory=false,pending=0,disposed=false,poisoned=false,tail=Promise.resolve();
   function release(r){
     if(!r)return;
@@ -71,7 +110,7 @@ export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1}={
     const next={w,h};
     try{
       if(!external)next.input=texture(gpu,{kind:'2d',size:[w,h],format:'rgba8unorm',usage:['copy_dst','texture_binding','render_attachment'],label:'image.upload'});
-      next.spatial=target(gpu,{size:[w,h],format:'rgba8unorm',label:'image.spatial'});
+      if(!fused)next.spatial=target(gpu,{size:[w,h],format:'rgba8unorm',label:'image.spatial'});
       next.history=pingPong(gpu,w,h,{format:'rgba8unorm',label:'image.history'});
     }catch(e){release(next);throw e;}
     const old=resources;
@@ -95,20 +134,33 @@ export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1}={
         try {
           size(w,h);
           const r=resources;
+          const spatialPass=video&&external?external:spatial;
+          const fusedPass=hasHistory?(external?externalFeedback:fusedFeedback):spatialPass;
           if(video&&external){
             const native=device.importExternalTexture({source:video});
-            external.group(0,device.createBindGroup({layout:external.layout(0),entries:[{binding:0,resource:native}]}));
+            const pass=fused?fusedPass:external;
+            const entries=[{binding:0,resource:native}];
+            if(fused&&hasHistory)entries.push({binding:1,resource:r.history.read.color.gpu.createView()});
+            pass.group(0,device.createBindGroup({layout:pass.layout(0),entries}));
           }else{
             upload(device.queue,r.input.gpu);
-            spatial.set({source:r.input});
+            if(fused&&hasHistory)fusedPass.set({source:r.input,previous:r.history.read});
+            else spatial.set({source:r.input});
           }
-          const pass=hasHistory?feedback:seed;
-          pass.set(hasHistory?{source:r.spatial,previous:r.history.read}:{source:r.spatial});
-          submitted=frame(gpu,f=>{
-            f.pass({target:r.spatial},video&&external?external:spatial);
-            f.pass({target:r.history.write},pass);
-            presentOutput?.(f,r.history.write);
-          });
+          if(fused){
+            submitted=frame(gpu,f=>{
+              f.pass({target:r.history.write},fusedPass);
+              presentOutput?.(f,r.history.write);
+            });
+          }else{
+            const pass=hasHistory?feedback:seed;
+            pass.set(hasHistory?{source:r.spatial,previous:r.history.read}:{source:r.spatial});
+            submitted=frame(gpu,f=>{
+              f.pass({target:r.spatial},spatialPass);
+              f.pass({target:r.history.write},pass);
+              presentOutput?.(f,r.history.write);
+            });
+          }
           result=r.history.write;
           // Queue order protects input, spatial and alternating history
           // textures. Speculative history is encoded in submission order.
@@ -136,7 +188,7 @@ export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1}={
       }finally{unsubscribe();pending--;}
   }
   return {
-    videoInput,maxInFlight,
+    videoInput,maxInFlight,passCount:fused?1:2,
     get pending(){return pending;},
     async render(rgba,w,h){
       if(external)throw Error("External video graph requires a video source");
@@ -155,7 +207,7 @@ export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1}={
       if(disposed)return;
       checkIdle();
       disposed=true;
-      external?.dispose();spatial.dispose();seed.dispose();feedback.dispose();
+      externalFeedback?.dispose();fusedFeedback?.dispose();external?.dispose();spatial.dispose();seed?.dispose();feedback?.dispose();
       release(resources);resources=undefined;
     },
   };

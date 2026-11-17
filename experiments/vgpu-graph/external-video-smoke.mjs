@@ -28,7 +28,17 @@ try{
     video.src=URL.createObjectURL(document.querySelector('#fixture').files[0]);
     const graph=createImageFeedbackGraph(gpu);
     const external=createExternalVideoGraph(gpu);
-    const receipts=[];
+    const fusedCopy=createImageFeedbackGraph(gpu,{fused:true});
+    const fusedExternal=createImageFeedbackGraph(gpu,{videoInput:'external',fused:true});
+    const receipts=[],fusion=[];
+    const compare=(a,b)=>{
+      let max=0,alpha=0;
+      for(let n=0;n<a.length;n++){
+        const diff=Math.abs(a[n]-b[n]);max=Math.max(max,diff);
+        if(n%4===3)alpha=Math.max(alpha,diff);
+      }
+      return {max,alpha,bytes:b.length};
+    };
     try{
       await video.play();
       await new Promise((resolve,reject)=>video.requestVideoFrameCallback(()=>{
@@ -55,6 +65,9 @@ try{
         let max=0,sum=0;
         for(let n=0;n<a.length;n++){const d=Math.abs(a[n]-b[n]);max=Math.max(max,d);sum+=d;}
         receipts.push({max,mean:sum/a.length,bytes:b.length});
+        const c=await (await fusedCopy.renderVideo(video)).color.read({mipLevel:0,region:'all'});
+        const d=await (await fusedExternal.renderVideo(video)).color.read({mipLevel:0,region:'all'});
+        fusion.push({copy:compare(a,c),external:compare(b,d)});
       }
       let rejected=false;
       try{await external.renderVideo(video,()=>{throw Error('injected presentation failure')});}
@@ -62,13 +75,26 @@ try{
       const a=await (await graph.renderVideo(video)).color.read({mipLevel:0,region:'all'});
       const b=await (await external.renderVideo(video)).color.read({mipLevel:0,region:'all'});
       let max=0;for(let n=0;n<a.length;n++)max=Math.max(max,Math.abs(a[n]-b[n]));
-      return {receipts,errors,rejected,retryMax:max};
-    }finally{graph.dispose();external.dispose();off();gpu.dispose();URL.revokeObjectURL(video.src);}
+      let fusedRejected=false;
+      try{await fusedExternal.renderVideo(video,()=>{throw Error('injected fused presentation failure')});}
+      catch(e){if(e.message!=='injected fused presentation failure')throw e;fusedRejected=true;}
+      const c=await (await fusedCopy.renderVideo(video)).color.read({mipLevel:0,region:'all'});
+      const d=await (await fusedExternal.renderVideo(video)).color.read({mipLevel:0,region:'all'});
+      fusion.push({copy:compare(a,c),external:compare(b,d)});
+      return {receipts,errors,rejected,retryMax:max,fusion,fusedRejected};
+    }finally{graph.dispose();external.dispose();fusedCopy.dispose();fusedExternal.dispose();off();gpu.dispose();URL.revokeObjectURL(video.src);}
   });
   console.log(JSON.stringify(results));
   assert.deepEqual(errors,[]);
   assert.deepEqual(results.errors,[]);
   assert.ok(results.receipts.slice(1).every(r=>r.bytes===318*182*4&&r.max<=1),JSON.stringify(results));
   assert.equal(results.rejected,true);
+  assert.equal(results.fusedRejected,true);
+  assert.equal(results.fusion.length,4);
+  for(const row of results.fusion)for(const r of [row.copy,row.external]){
+    assert.equal(r.bytes,318*182*4);
+    assert.equal(r.alpha,0);
+    assert.ok(r.max<=1,JSON.stringify(r));
+  }
   assert.ok(results.retryMax<=1,'failed frame must not advance history');
 }finally{await browser?.close();await server?.close();await rm(dir,{recursive:true,force:true})}

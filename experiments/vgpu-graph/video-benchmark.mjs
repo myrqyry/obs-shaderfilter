@@ -16,7 +16,13 @@ try{
   server=await preview({preview:{host:'127.0.0.1',port:0,strictPort:true}});
   browser=await puppeteer.launch({executablePath:process.env.BROWSER_BIN||'/usr/bin/google-chrome-beta',headless:false,args:['--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-webgpu','--use-angle=vulkan','--enable-features=Vulkan']});
   const diagnostics=process.env.BENCH_DIAGNOSTIC==='1';
-  const cases=diagnostics?[
+  const queueSweep=process.env.BENCH_QUEUE_SWEEP==='1';
+  const cases=queueSweep?[
+    {input:'copy',fused:false,profile:false,depth:2},
+    {input:'copy',fused:false,profile:false,depth:3},
+    {input:'external',fused:false,profile:false,depth:2},
+    {input:'external',fused:false,profile:false,depth:3},
+  ]:diagnostics?[
     {input:'copy',fused:false,profile:false,depth:1},
     {input:'copy',fused:false,profile:false,depth:2},
     {input:'external',fused:false,profile:false,depth:2},
@@ -121,7 +127,8 @@ try{
       assert.ok(result.completed>=seconds*10);
       assert.ok(result.media>=seconds*.9);
       assert.equal(result.passes,result.submits*(config.fused?2:3));
-      if(diagnostics){
+      assert.ok(result.peakPending<=(config.depth??2));
+      if(diagnostics||queueSweep){
         assert.ok(result.stages?.callback?.n>=result.completed-2,'missing actual application callback receipts');
         assert.ok(result.stages?.[config.input==='copy'?'copy':'import']?.n>=result.completed-2,'missing video ingest receipts');
         assert.ok(result.stages?.submit?.n>=result.completed-2,'missing native submit receipts');

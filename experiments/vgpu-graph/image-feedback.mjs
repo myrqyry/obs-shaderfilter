@@ -86,7 +86,7 @@ const feedbackShader=prepareShader(`
 // dispose; earlier receipts can refer to a reused ping-pong texture.
 export function createImageFeedbackGraph(gpu,{videoInput="copy",maxInFlight=1,fused=false,passTimer}={}){
   if(videoInput!=="copy"&&videoInput!=="external")throw Error("Invalid video input mode");
-  if(maxInFlight!==1&&maxInFlight!==2)throw RangeError("maxInFlight must be 1 or 2");
+  if(![1,2,3].includes(maxInFlight))throw RangeError("maxInFlight must be 1, 2 or 3");
   const external=videoInput==="external"?draw(gpu,{shader:externalSpatialShader,label:"video.external-spatial"}):null;
   const spatial=effect(gpu,spatialShader,{label:'image.spatial'});
   const fusedFeedback=fused&&!external?effect(gpu,spatialFeedbackShader,{label:'image.fused-feedback'}):null;

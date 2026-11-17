@@ -462,3 +462,57 @@ prove the cause of fence latency or isolate asynchronous GPU upload
 cost. No consistent direct-mode advantage can be claimed from one
 sequential series. The new diagnostic receipt assertions failed
 before instrumentation, then passed all three cases.
+
+## 2026-11-17 — Three-slot bounded queue reaches 1080p30
+
+The next-video queue selector now offers Three frames (experimental).
+The existing queue-ordered recurrence supports a third outstanding
+submission without allocating a third history texture. The capacity
+is strictly capped at three; previous single/two-slot options and
+default single-slot behavior are unchanged. Shader math is unchanged.
+Because first and third receipts may share the same borrowed target,
+drain and consume only the latest result before new work. Reset,
+resize, disposal and export still require a drained queue.
+
+Reproduce the four-case moving-video comparison:
+
+    pnpm build
+    BENCH_QUEUE_SWEEP=1 BENCH_SECONDS=12 xvfb-run -a -s '-screen 0 1440x900x24' pnpm bench:video
+    VIDEO_QUEUE=3 VIDEO_INPUT=copy xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    VIDEO_QUEUE=3 VIDEO_INPUT=external VIDEO_FUSED=1 xvfb-run -a -s '-screen 0 1440x900x24' pnpm test:video
+    pnpm test
+
+NVIDIA Turing, Chrome Beta/Vulkan, 12-second moving 1080p30 VP9
+windows, split shader, timestamp profiling off:
+
+| Input / capacity | Completed | Output fps | App/source callbacks | App index gaps | Fence p50/p95 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Copy / 2 | 344 | 28.66 | 344/359 | 16 | 38.9/50.5 |
+| Copy / 3 | 361 | 30.08 | 360/360 | 0 | 41.9/52.1 |
+| External / 2 | 340 | 28.33 | 341/359 | 18 | 45.1/56.8 |
+| External / 3 | 360 | 30.00 | 359/360 | 1 | 45.6/51.3 |
+
+All four reported zero source video drops, GPU map calls, browser/HTTP
+errors and external requests. The copy case's 361 completions versus
+360 callbacks reflects an outstanding completion at the measurement
+boundary; it is not processing above the source's nominal frame rate.
+Pending peak in this benchmark is sampled once per second, not the
+actual maximum. Separate three-second copy/split and external/fused
+smokes each observed all three slots occupied, 87 completed frames,
+no explicit GPU readback or Canvas2D pixel extraction during playback,
+and byte-identical seek/reset PNG after two rapid seeks at capacity.
+
+Native Radeon and NVIDIA suites passed 11/11 each. New tests cover
+36 frames per split/fused variant in batches of three, ordered receipt
+delivery, latest drained output bit-identical to serial, a rejected
+fourth submission, resize rejected below capacity, busy reset/dispose,
+and a real invalid native upload poisoning both dependent submissions
+until a successful reseed. Existing fused rounding bound remains one
+RGB byte; no new claim of exact split/fused parity.
+
+The full source-rate target was observed in this bounded 12-second
+experiment, not established for arbitrary video or indefinite playback.
+Deeper queueing can increase completion latency; no end-to-end display
+latency measurement yet. Keep three slots opt-in. Frozen install/build,
+image preview, direct/fused shader parity and existing two-slot
+video/seek smoke passed again. No new dependency or native OBS changes.

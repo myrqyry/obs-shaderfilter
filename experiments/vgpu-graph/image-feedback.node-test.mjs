@@ -104,22 +104,23 @@ test('two queued submissions preserve recurrence and enforce a bounded queue',as
   }finally{await Promise.allSettled(pending);graph.dispose();serial.dispose();gpu.dispose();}
 });
 
-for(const fused of [false,true])test('native validation failure invalidates dependent queued history until reset (fused='+fused+')',async()=>{
-  const gpu=await init(),graph=createImageFeedbackGraph(gpu,{maxInFlight:2,fused});
+for(const depth of [2,3])for(const fused of [false,true])test('native validation failure invalidates dependent queued history until reset (depth='+depth+', fused='+fused+')',async()=>{
+  const gpu=await init();let graph;
   const a=fixture(17,9),b=fixture(17,9,47);
   const queue=gpu.gpu.queue,write=queue.writeTexture;
   const pending=[];
   try{
+    graph=createImageFeedbackGraph(gpu,{maxInFlight:depth,fused});
     queue.writeTexture=function(dst,data,layout,size){
       // Actual native validation: a row stride too small for this image.
       return write.call(this,dst,data,{...layout,bytesPerRow:4},size);
     };
     pending.push(graph.render(a,17,9));
     queue.writeTexture=write;
-    pending.push(graph.render(b,17,9));
+    for(let i=1;i<depth;i++)pending.push(graph.render(b,17,9));
     const results=await Promise.allSettled(pending);
-    assert.deepEqual(results.map(x=>x.status),['rejected','rejected']);
-    assert.match(String(results[1].reason),/history invalid/);
+    assert.deepEqual(results.map(x=>x.status),Array(depth).fill('rejected'));
+    for(const r of results.slice(1))assert.match(String(r.reason),/history invalid/);
     assert.equal(graph.pending,0);
     await assert.rejects(graph.render(a,17,9),/history invalid/);
     graph.reset();
@@ -127,7 +128,7 @@ for(const fused of [false,true])test('native validation failure invalidates depe
   }finally{
     queue.writeTexture=write;
     await Promise.allSettled(pending);
-    graph.dispose();gpu.dispose();
+    graph?.dispose();gpu.dispose();
   }
 });
 
@@ -185,4 +186,41 @@ test('opt-in vGPU timer marks the actual split and fused passes',async()=>{
     assert.equal(samples.length,2);
     console.log('Native GPU timer receipts',samples);
   }finally{off();timing.dispose();gpu.dispose();}
+});
+
+for(const fused of [false,true])test('three outstanding submissions preserve latest recurrence (fused='+fused+')',async()=>{
+  const gpu=await init(),pending=[];
+  let graph,serial;
+  try{
+    graph=createImageFeedbackGraph(gpu,{maxInFlight:3,fused});
+    serial=createImageFeedbackGraph(gpu,{fused});
+    for(let batch=0;batch<12;batch++){
+      const images=Array.from({length:3},(_,i)=>fixture(17,9,19*(batch*3+i)));
+      const reference=[];
+      for(const image of images)reference.push(await pixels(await serial.render(image,17,9)));
+      const order=[];
+      const jobs=[graph.render(images[0],17,9)];
+      const resizeRejected=assert.rejects(graph.render(fixture(9,17),9,17),/Resize while image render in progress/);
+      jobs.push(...images.slice(1).map(image=>graph.render(image,17,9)));
+      pending.push(...jobs);
+      jobs.forEach((job,i)=>job.then(()=>order.push(i),()=>{}));
+      const results=Promise.allSettled(jobs);
+      await resizeRejected;
+      assert.equal(graph.pending,3);
+      await assert.rejects(graph.render(images[0],17,9),/capacity/);
+      assert.throws(()=>graph.reset(),/in progress/);
+      assert.throws(()=>graph.dispose(),/in progress/);
+      const receipts=await results;
+      assert.deepEqual(receipts.map(r=>r.status),['fulfilled','fulfilled','fulfilled']);
+      // First and third use the same borrowed storage. Only latest is safe
+      // to consume once all three submissions have drained.
+      assert.deepEqual(order,[0,1,2]);
+      assert.equal(receipts[0].value,receipts[2].value);
+      assert.deepEqual(await pixels(receipts[2].value),reference[2]);
+      assert.equal(graph.pending,0);
+    }
+    graph.reset();
+    const a=fixture(9,17,11);
+    compare(await pixels(await graph.render(a,9,17)),reference(a,9,17),'three-slot resize seed');
+  }finally{await Promise.allSettled(pending);graph?.dispose();serial?.dispose();gpu.dispose()}
 });

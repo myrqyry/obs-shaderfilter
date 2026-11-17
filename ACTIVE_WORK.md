@@ -1,5 +1,25 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-17 — Three-slot queue reaches source-rate video benchmark
+
+Extended the opt-in bounded vGPU queue to three outstanding submissions
+without changing shader math or adding a history texture. Native
+Radeon/NVIDIA tests 11/11 each, latest drained recurrence bit-identical
+to serial, ordered receipts, capacity/resize/reset/dispose guards and
+native failure poisoning/recovery. Three-slot copy/split and
+external/fused real browser smokes reached capacity and passed rapid
+seek and PNG reset equality. Four-case 12s moving 1080p30 VP9 benchmark
+on NVIDIA: copy 28.66fps/2 slots vs 30.08/3, external 28.33 vs 30.00.
+App index gaps 16/0/18/1; all reported zero source video drops,
+GPU maps, browser errors and external requests. Measurement boundary
+can contribute one outstanding completion; not above-source throughput.
+Three-slot copy fence median increased 38.9 to 41.9ms, not a direct
+display-latency measurement. Full source-rate target observed for
+this fixture/window; arbitrary codecs, longer operation and OBS
+interop remain open. Single-slot default retained. Existing image,
+parity, two-slot browser tests and build/frozen install passed.
+README records commands and borrowed-target lifetime. Local only.
+
 ## 2026-11-17 — Video scheduling and native API latency diagnostics
 
 Added BENCH_DIAGNOSTIC=1 to the existing moving-video benchmark.

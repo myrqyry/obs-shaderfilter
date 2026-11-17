@@ -1,5 +1,19 @@
 # Active Work — OBS Shaderfilter fork
 
+## 2026-11-17 — Video scheduling and native API latency diagnostics
+
+Added BENCH_DIAGNOSTIC=1 to the existing moving-video benchmark.
+Three real NVIDIA 12s runs: copy depth1 19.75fps, depth2 28.50fps,
+external depth2 29.33fps. App/source callback counts 238/360,
+341/356, 352/356; app presented-index gaps 123/18/6. Synchronous
+callback medians 0.5/0.5/0.4ms; copy/import 0.1ms; completion
+fence medians 32.6/38.3/42.6ms. No maps, browser errors or external
+requests. Queue capacity gates registration of the next app callback;
+asynchronous completion latency, not measured JS encoding, is the
+more useful target. Exact fence cause and async transfer cost remain
+unisolated. See experiment README for measurement boundaries.
+Renderer and defaults unchanged; no native OBS changes or push.
+
 ## 2026-11-17 — Moving-video benchmark and native timestamp instrumentation
 
 Added opt-in video pass timing via vGPU timer and a reproducible

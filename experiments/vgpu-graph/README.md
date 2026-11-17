@@ -425,3 +425,40 @@ receipt shape, not timer precision or cross-adapter performance.
 Normal image and external parity browser smokes, both split-copy
 and fused-external video/rapid-seek smokes, build, and frozen install
 also passed. No dependency change or default scheduling change.
+
+## 2026-11-17 — Separate source callbacks, CPU submission and completion
+
+    BENCH_DIAGNOSTIC=1 BENCH_SECONDS=12 xvfb-run -a -s '-screen 0 1440x900x24' pnpm bench:video
+
+This diagnostic keeps the renderer unchanged and runs three untimed
+split-pass cases (copy depth one, copy depth two, external depth two).
+Browser instrumentation wraps the app's own requestVideoFrameCallback,
+native video copy/import, queue.submit, bind-group creation, canvas
+acquisition/configure and completion fences. A separate observer calls
+the original video callback API so it does not inflate app counts.
+App gaps sum skipped presentedFrames indices between app callbacks.
+Counts at window boundaries can differ by one or two; callback gaps
+are not decoder drops or a precise per-frame disposition ledger.
+API call timings are synchronous JS wall time, not GPU transfer
+durations. Negative callback lead means the expected display time
+preceded callback entry; processingDuration is browser media metadata.
+
+NVIDIA Turing, moving 1080p30 VP9, 12 seconds per case:
+
+| Mode | App/source callbacks | App gaps | Output fps | Callback p50 ms | Fence p50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Copy, depth 1 | 238 / 360 | 123 | 19.75 | 0.5 | 32.6 |
+| Copy, depth 2 | 341 / 356 | 18 | 28.50 | 0.5 | 38.3 |
+| External, depth 2 | 352 / 356 | 6 | 29.33 | 0.4 | 42.6 |
+
+All three completed with no errors, external requests or GPU map
+calls. Video reported 0, 0, 2 dropped frames respectively.
+Copy/import synchronous medians were 0.1ms, queue.submit medians
+below clock resolution, no configure calls during measurement.
+The actual app waits to register the next video callback when the
+queue is full; longer fence delivery therefore explains missed app
+callbacks even when the source presents normally. This does not
+prove the cause of fence latency or isolate asynchronous GPU upload
+cost. No consistent direct-mode advantage can be claimed from one
+sequential series. The new diagnostic receipt assertions failed
+before instrumentation, then passed all three cases.

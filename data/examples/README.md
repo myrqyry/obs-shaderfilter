@@ -8,25 +8,13 @@ upstream `master` snapshot used for this split. Keeping their paths unchanged
 preserves existing upstream-based OBS presets and makes future upstream
 synchronization straightforward.
 
-**Our myrqyry additions are under [`myrqyry/`](myrqyry/README.md)**. This includes
-our own shaders, third-party adaptations, and their licenses/documentation;
-they are not represented as work by the upstream OBS Shaderfilter author.
+## Local additions — attribution review
 
-The built-in OBS file picker opens this `examples` directory. Enter `myrqyry/`
-to browse the additions. Both directories are packaged by the existing CMake
-`data/examples` installation rule.
-
-**Migration:** Previously selected fork-added shaders at e.g.
-`.../examples/noisemaker-ports/nm_polar.shader` must be reselected at
-`.../examples/myrqyry/noisemaker-ports/nm_polar.shader`. The picker uses file
-paths; it does not automatically remap old presets. Canonical upstream
-examples retain the same paths. Existing fork-added paths are not kept as
-redundant copies or aliases, so the two collections stay separate.
-
-Provenance is checked against `tests/fixtures/upstream-example-paths.txt`
-(snapshot of the upstream example tree). Update that snapshot when intentionally
-syncing new upstream examples; put any new fork-authored or adapted shader
-under `myrqyry/`.
+The fork's `myrqyry/` folder is ignored by Git and excluded from fresh
+checkouts while authorship and redistribution terms are reviewed. Existing
+local files remain available; they have not been deleted. Do not publish
+a package built from a local checkout containing these unreviewed assets.
+The original upstream examples retain their canonical paths.
 
 ### Updating an existing Linux user installation
 

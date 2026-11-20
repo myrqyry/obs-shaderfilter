@@ -171,11 +171,10 @@ The plugin provides some optional pre-processing macros.
 
 ### Example shaders
 
-Several examples are provided in the plugin's *data/examples* folder. The canonical upstream shaders
-remain at the top level, while [our fork additions](data/examples/myrqyry/README.md) live under
-`data/examples/myrqyry/` with their own licenses and port notes. This keeps original upstream
-example paths intact. OBS presets previously pointing to moved fork additions need to be
-reselected under `myrqyry/`. See [example layout](data/examples/README.md) for the migration note.
+The canonical upstream examples remain in `data/examples/`.
+The fork's additional `data/examples/myrqyry/` collection is temporarily
+local-only while authorship, attribution and redistribution terms are
+reviewed. It is not included in a fresh checkout of this branch.
 These can be used as-is for some hopefully
 useful common tasks, or used as a reference in developing your own shaders. Note that the *.shader* and *.effect* 
 extensions are for clarity only, and have no specific meaning to the plugin. Text files with any extension can be
@@ -253,13 +252,7 @@ I recommend *.shader* as they do not require `Full Vertex Shader (.effect)` as p
 | ZigZag.shader                   |                                                                                                                                                                                                                                                                                                                                                                                                         | ![image](https://github.com/exeldro/obs-shaderfilter/assets/5457024/3e3006cd-9f2a-4a7e-905c-50d80173e861) |
 | zoom_blur.shader                | A shader that creates a zoom with blur effect based on a number of samples and magnitude of each sample. It also includes an animation with or without easing and a glitch option. Set speed to zero to not use animation. Suggested values are 15 samples and 30-50 magnitude.                                                                                                                         |                                                                                                           |
 
-This table is a subset of upstream examples. Our separately attributed adaptations and authored effects live under
-[`data/examples/myrqyry/`](data/examples/myrqyry/README.md), including
-[`shader_effects/`](data/examples/myrqyry/shader_effects/SHADER-EFFECTS-PORTS.md),
-[`retro_capture/`](data/examples/myrqyry/retro_capture/),
-[`retro_ursc/`](data/examples/myrqyry/retro_ursc/RETRO-URSC-PORTS.md), and
-[`psx/`](data/examples/myrqyry/psx/README.md).
-
+This table describes upstream examples only. Fork-specific collections are pending review.
 
 ## Fork Changes
 
@@ -353,16 +346,9 @@ for evidence and remaining limitations.
 
 ### Shader library and verification
 
-- **Organized, attributed shader additions:** Fork-authored and
-  adapted effects are under [`data/examples/myrqyry/`](data/examples/myrqyry/README.md),
-  separate from canonical upstream examples. Packs include **38 Noisemaker
-  ports, two printmaking effects, five MPV anime adaptations, one
-  potatoFX palette effect, four PSX image-space shaders**, plus ORPHIC,
-  Mixwell, Soft Register, Composite Signal, Wind Drift Events,
-  Motion Matte, RetroCapture CMYK, URSC/N64, Shader Effects, and three
-  preserved locally authored examples. Read the individual license and
-  attribution notes; these ports are not drop-in replicas of their
-  upstream renderers.
+- **Local shader collection:** Fork-specific shaders and ports are held
+  outside Git tracking until their authorship and attribution have been
+  reviewed. The upstream examples are unchanged.
 - **Glyph Garden:** A new self-contained mosaic with six hand-drawn
   symbol families, real inter-glyph spacing, nine grid movements,
   dual-family tone splits and palette blending.

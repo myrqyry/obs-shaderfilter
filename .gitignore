@@ -36,3 +36,6 @@ tools/
 # meristem:local-ignore:start
 .meristem/local/
 # meristem:local-ignore:end
+
+# Local fork shader collection: attribution review pending.
+/data/examples/myrqyry/

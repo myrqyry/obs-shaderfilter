@@ -25,7 +25,7 @@ Use the configured CMake build against the intended libobs/OBS version to verify
 
 ## Open structural uncertainty
 
-The 2026-06-28 `CHANGELOG.md` entry describes a historical local-only sweep of `tools/lint.py`, `tools/autofix.py`, catalogs and templates; those `tools/` and `templates/` paths are still not committed in the current repository. **Later work changed the situation for `data/examples/myrqyry/` and `data/stdlib/`: both are now explicitly tracked and included in fresh clones despite ignore patterns.** Do not repeat the old claim that those shader-library paths are absent from Git. The changelog scope note describes only the earlier snapshot.
+The 2026-06-28 `CHANGELOG.md` entry describes a historical local-only sweep of `tools/lint.py`, `tools/autofix.py`, catalogs and templates; those `tools/` and `templates/` paths are still not committed in the current repository. **As of 2026-11-20, only data/stdlib remains tracked; data/examples/myrqyry is deliberately ignored and absent from the current branch while the 105 formerly tracked fork assets undergo authorship and licensing review.** The files remain local, and additional local shader candidates also exist. Do not mistake local availability or historical Git objects for files in the current fresh checkout. The changelog scope note describes only the earlier snapshot.
 
 `SESSION-STATE.md` contains an old, mixed-project chronology and previously claimed active development; it now carries a status banner marking it a historical record superseded by `ACTIVE_WORK.md` and this file.
 
